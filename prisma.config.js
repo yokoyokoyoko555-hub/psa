@@ -16,4 +16,10 @@ try {
 module.exports = defineConfig({
   earlyAccess: true,
   schema: path.join(__dirname, "prisma/schema.prisma"),
+  migrate: {
+    async adapter() {
+      const { PrismaPg } = require("@prisma/adapter-pg");
+      return new PrismaPg({ connectionString: process.env.DATABASE_URL });
+    },
+  },
 });
