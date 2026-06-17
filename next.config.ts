@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
   images: {
     domains: [process.env.AWS_S3_BUCKET ? `${process.env.AWS_S3_BUCKET}.s3.amazonaws.com` : ""],
   },
-  output: "standalone",
 };
 
 export default nextConfig;

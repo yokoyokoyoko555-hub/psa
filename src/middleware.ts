@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // 管理画面の保護
-  if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.redirect(new URL("/admin/login", request.url));
-    }
-  }
+export function middleware() {
+  // 管理画面の保護は各ページ/レイアウト側（admin/layout.tsx）で実施。
+  // middleware は Edge ランタイムのため Node の crypto を使う auth() は呼べない。
 
   // セキュリティヘッダー
   const response = NextResponse.next();
