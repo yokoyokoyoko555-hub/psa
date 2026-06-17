@@ -1,11 +1,14 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { createCipheriv, randomBytes } from "crypto";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 
 const ENCRYPTION_KEY = Buffer.from(
-  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  process.env.ENCRYPTION_KEY ??
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "hex"
 );
 
