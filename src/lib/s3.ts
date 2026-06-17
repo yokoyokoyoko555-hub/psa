@@ -7,15 +7,26 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "crypto";
 
-export const s3 = new S3Client({
-  region: process.env.AWS_REGION!,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  },
-});
+let _s3: S3Client | null = null;
 
-const BUCKET = process.env.AWS_S3_BUCKET!;
+export function getS3(): S3Client {
+  if (!_s3) {
+    _s3 = new S3Client({
+      region: process.env.AWS_REGION!,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
+    });
+  }
+  return _s3;
+}
+
+function getBucket(): string {
+  const bucket = process.env.AWS_S3_BUCKET;
+  if (!bucket) throw new Error("AWS_S3_BUCKET is not set");
+  return bucket;
+}
 
 export async function generateUploadUrl(params: {
   cardId: string;
@@ -25,27 +36,27 @@ export async function generateUploadUrl(params: {
   const ext = params.contentType.split("/")[1] ?? "jpg";
   const key = `cards/${params.cardId}/${params.type}/${randomUUID()}.${ext}`;
   const command = new PutObjectCommand({
-    Bucket: BUCKET,
+    Bucket: getBucket(),
     Key: key,
     ContentType: params.contentType,
   });
-  const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
+  const uploadUrl = await getSignedUrl(getS3(), command, { expiresIn: 300 });
   return { uploadUrl, key };
 }
 
 export async function generateDownloadUrl(key: string): Promise<string> {
-  const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
-  return getSignedUrl(s3, command, { expiresIn: 3600 });
+  const command = new GetObjectCommand({ Bucket: getBucket(), Key: key });
+  return getSignedUrl(getS3(), command, { expiresIn: 3600 });
 }
 
 export async function deleteObject(key: string): Promise<void> {
-  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+  await getS3().send(new DeleteObjectCommand({ Bucket: getBucket(), Key: key }));
 }
 
 export async function uploadBuffer(key: string, buffer: Buffer, contentType: string): Promise<void> {
-  await s3.send(
+  await getS3().send(
     new PutObjectCommand({
-      Bucket: BUCKET,
+      Bucket: getBucket(),
       Key: key,
       Body: buffer,
       ContentType: contentType,
