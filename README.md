@@ -12,8 +12,9 @@
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | システム構成・技術・DB・API・認証・決済 |
 | [docs/TASKS.md](docs/TASKS.md) | 実装済み/未実装機能の一覧 |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | 設計判断記録（ADR） |
-| [docs/ER_DIAGRAM.md](docs/ER_DIAGRAM.md) | ER図 |
-| [docs/API_DESIGN.md](docs/API_DESIGN.md) | API設計 |
+| [docs/DATABASE.md](docs/DATABASE.md) | DBモデル・リレーション・ER図 |
+| [docs/API.md](docs/API.md) | APIルート・Server Actions仕様 |
+| [docs/SECURITY.md](docs/SECURITY.md) | セキュリティ設計 |
 | [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) | Codex等へ渡す一枚要約 |
 
 ## 技術スタック

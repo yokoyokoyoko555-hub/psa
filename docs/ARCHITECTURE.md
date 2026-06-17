@@ -125,7 +125,7 @@ psa-system/
 ### 主なEnum
 `UserRole`(ADMIN/STAFF/ACCOUNTING/CUSTOMER), `CardStatus`(17値), `ApplicationStatus`, `ServiceLevel`(VALUE/REGULAR/EXPRESS/SUPER_EXPRESS), `ReturnMethod`(STORE_PICKUP/SHIPPING), `CardLanguage`, `PaymentStatus`, `UpchargeStatus`, `NotificationType`。
 
-> 補足: ER図は `docs/ER_DIAGRAM.md` を参照。
+> 補足: モデル詳細・リレーション・ER図は [docs/DATABASE.md](DATABASE.md) を参照。
 
 ### カードステータスフロー（17段階）
 ```

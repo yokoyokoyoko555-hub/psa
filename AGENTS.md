@@ -10,7 +10,7 @@
 ## 1. プロジェクト概要
 
 トレカビンクス（株式会社ツルプルン）向け「PSA鑑定受付代行」Webシステム。
-詳細は [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) / 実装状況は [docs/TASKS.md](docs/TASKS.md) を必ず参照。
+作業前に参照: [ARCHITECTURE](docs/ARCHITECTURE.md) / [DATABASE](docs/DATABASE.md) / [API](docs/API.md) / [SECURITY](docs/SECURITY.md) / [TASKS](docs/TASKS.md) / [DECISIONS](docs/DECISIONS.md)。
 
 - スタック: Next.js 15 (App Router) / TypeScript strict / Prisma 7 + PostgreSQL / NextAuth(管理) + 自前cookie(顧客) / Stripe / AWS S3 / Railway
 - リポジトリルート: `psa-system/`（GitHub: yokoyokoyoko555-hub/psa, master自動デプロイ）
@@ -39,7 +39,7 @@
   - 破壊的変更（列削除・型変更・必須化）は **データ損失リスク** を必ず人間に確認してから。`--accept-data-loss` が前提の運用である点に注意。
 - enum値の削除は既存データを壊しうる。**追加は可、削除は要相談**。
 - マイグレーション運用へ移行する場合は §DECISIONS に記録し、人間承認を得てから。
-- 変更したら `docs/ARCHITECTURE.md`(§4) と必要なら `docs/ER_DIAGRAM.md` を更新する。
+- 変更したら `docs/ARCHITECTURE.md`(§4) と `docs/DATABASE.md` を更新する。
 
 ---
 
