@@ -1,0 +1,77 @@
+# DECISIONS — 設計判断記録（ADR）
+
+重要な設計判断を時系列で記録する。Codex/Claude が背景を理解し、過去の決定を蒸し返さないための「決定ログ」。
+
+## 運用ルール
+- **重要な設計判断をしたら、新しいADRを末尾に追記する**（番号は連番、日付・状態・文脈・決定・影響を埋める）。
+- 「重要」の目安: スキーマ/認証/決済/料金/デプロイ/依存追加/テスト方針 など、後から覆すとコストが高いもの。
+- 過去の決定を変える場合は、新ADRを起こし、旧ADRの状態を `Superseded by ADR-XXXX` に更新（**過去ADRは消さない**）。
+- 些末な実装詳細は対象外（コード/コメントで足りるもの）。
+
+## テンプレート
+```
+## ADR-XXXX: タイトル
+- 日付: YYYY-MM-DD
+- 状態: Proposed | Accepted | Superseded by ADR-YYYY | Deprecated
+- 文脈: なぜ判断が必要か
+- 決定: 何を決めたか
+- 影響: 結果・トレードオフ・関連ファイル
+```
+
+---
+
+## ADR-0001: 認証を管理者と顧客で二系統に分離
+- 日付: 2026-06-17
+- 状態: Accepted
+- 文脈: 管理者は堅牢なRBACが必要、顧客は軽量で長期セッションが望ましい。
+- 決定: 管理者は NextAuth v5 (JWT, Credentials)。顧客は自前cookieセッション（`CustomerSession`テーブル, 30日）。
+- 影響: `lib/auth.ts` と `lib/customer-auth.ts` の2実装。middlewareでは認可しない（§ADR-0005）。
+
+## ADR-0002: PIIはAES-256-GCMでアプリ層暗号化
+- 日付: 2026-06-17
+- 状態: Accepted
+- 文脈: 氏名・住所・電話等の個人情報をDB漏洩時にも保護したい。
+- 決定: `lib/crypto.ts` で `*Encrypted` 列に暗号化保存。キーは `ENCRYPTION_KEY`(32byte hex) env。`email`/`postalCode` は検索性のため平文。
+- 影響: 顧客データ読取時は必ず `decrypt`。キーをローテーションすると既存データ復号不可。
+
+## ADR-0003: Prisma v7 + driver adapter (@prisma/adapter-pg)
+- 日付: 2026-06-17
+- 状態: Accepted
+- 文脈: Prisma v7 の client engine は driver adapter を要求。
+- 決定: `PrismaPg` アダプタで接続。`prisma.config.js` に `datasource.url`（CLI用）、`schema.prisma` には `url` を書かない（v7で不可）。Nodeは 22.12+ 必須 → `.node-version=22.15.0`。
+- 影響: `lib/prisma.ts`/`seed.ts` でアダプタ生成。CLIもconfig経由でDB接続。
+
+## ADR-0004: スキーマ同期は `prisma db push`（migrate未運用）
+- 日付: 2026-06-17
+- 状態: Accepted（将来見直し候補）
+- 文脈: 初期は迅速さ優先でマイグレーションファイルを持たなかった。`migrate deploy` は migrations 不在で no-op。
+- 決定: `npm start` を `prisma db push --accept-data-loss && next start` とし、起動時にスキーマ同期。
+- 影響: 破壊的スキーマ変更はデータ損失リスクあり。本番データが増えたら `prisma migrate` への移行を検討（その際は新ADR）。
+
+## ADR-0005: middlewareはセキュリティヘッダのみ（認可しない）
+- 日付: 2026-06-17
+- 状態: Accepted
+- 文脈: Next.js middleware は Edge ランタイムで Node `crypto`/Prisma を使えず、`auth()` 取り込みで起動クラッシュした。
+- 決定: middlewareはヘッダ付与のみ。認可は各ページ/レイアウト(`admin/layout.tsx`)・Server Action側で実施。
+- 影響: 認可ロジックを各所に持つ。新規保護ルートはレイアウト/Actionでの認可を忘れない。
+
+## ADR-0006: 起動コマンドは nixpacks.toml / package.json 側を正とする
+- 日付: 2026-06-17
+- 状態: Accepted
+- 文脈: Railway の Custom Start Command / `railway.json` の `startCommand` が `prisma migrate deploy && npm start` を指し、デプロイで混乱した。
+- 決定: 実効の起動は `npm start`（= `db push && next start`）に集約。`db push` を npm start 内に入れ、起動コマンドの上書きに依存しない構成にした。
+- 影響: `railway.json` の `startCommand` は旧記述が残存（migrate deployはno-opのため実害なし）。整理タスクは §TASKS。設定を触る際は本ADRを参照。
+
+## ADR-0007: 環境変数依存モジュールの遅延初期化
+- 日付: 2026-06-17
+- 状態: Accepted
+- 文脈: Stripe/S3/crypto をモジュールトップで初期化すると、ビルド時に env 不在でクラッシュした。
+- 決定: `getStripe()`/`getS3()`/`crypto.getKey()` 形で初回呼び出し時に初期化。DB/auth利用ページは `export const dynamic = "force-dynamic"`。
+- 影響: env未設定でもビルド・起動可能。該当機能は実行時にenvが必要。
+
+## ADR-0008: 管理ロールは ADMIN / STAFF の2種に集約
+- 日付: 2026-06-17
+- 状態: Accepted
+- 文脈: ACCOUNTING(経理) ロールは権限設計が中途半端だった。
+- 決定: 運用は ADMIN（全機能）/ STAFF（料金設定以外）の2ロール。seedから経理ユーザーを削除。`UserRole.ACCOUNTING` enumは互換のため残置（未使用）。
+- 影響: 認可は `requireAdmin`(ADMINのみ=料金設定) / `requireAdminOrStaff`。経理専用機能が必要になれば新ADRで再設計。

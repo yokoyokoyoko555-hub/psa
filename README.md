@@ -2,6 +2,20 @@
 
 株式会社ツルプルンが運営するトレカビンクス向けPSA鑑定受付代行Webシステム。
 
+**本番**: https://psa-production-a106.up.railway.app （Railway, master push で自動デプロイ）
+
+## ドキュメント
+
+| 文書 | 内容 |
+|------|------|
+| [AGENTS.md](AGENTS.md) | **AI開発者（Claude Code / Codex）向けガイド・規約。作業前に必読** |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | システム構成・技術・DB・API・認証・決済 |
+| [docs/TASKS.md](docs/TASKS.md) | 実装済み/未実装機能の一覧 |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | 設計判断記録（ADR） |
+| [docs/ER_DIAGRAM.md](docs/ER_DIAGRAM.md) | ER図 |
+| [docs/API_DESIGN.md](docs/API_DESIGN.md) | API設計 |
+| [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) | Codex等へ渡す一枚要約 |
+
 ## 技術スタック
 
 | カテゴリ | 技術 |
@@ -30,8 +44,8 @@ npm install --legacy-peer-deps
 cp .env.example .env
 # .envを編集（DATABASE_URL, STRIPE_SECRET_KEY, AWS_*等）
 
-# 3. DBマイグレーション
-npx prisma migrate dev --name init
+# 3. DBスキーマ同期（db pushで運用。migrateは未使用）
+npm run db:push
 
 # 4. シードデータ投入
 npm run db:seed
@@ -39,6 +53,8 @@ npm run db:seed
 # 5. 開発サーバー起動
 npm run dev
 ```
+
+> Prisma v7 のため、スキーマ反映は `prisma migrate` ではなく **`prisma db push`** を使用（[ADR-0004](docs/DECISIONS.md)）。
 
 ## 必要な環境変数
 
@@ -63,12 +79,15 @@ npm run dev
 
 ## テストアカウント（シードデータ）
 
-| 種別 | メール | パスワード |
-|------|--------|----------|
-| 管理者 | admin@turupurun.com | Admin1234! |
-| スタッフ | staff@turupurun.com | Staff1234! |
-| 経理 | accounting@turupurun.com | Acct1234! |
-| テスト顧客 | test@example.com | Test1234! |
+> ⚠️ 本番公開前に必ずパスワードを変更すること。
+
+| 種別 | メール | パスワード | 権限 |
+|------|--------|----------|------|
+| 管理者(ADMIN) | admin@turupurun.com | Admin1234! | 全機能 |
+| スタッフ(STAFF) | staff@turupurun.com | Staff1234! | 料金設定以外 |
+| テスト顧客 | test@example.com | Test1234! | 顧客 |
+
+管理ロールは **ADMIN / STAFF の2種**（[ADR-0008](docs/DECISIONS.md)）。
 
 ## ページ構成
 
@@ -121,10 +140,13 @@ Upcharge発生ルート:
 
 1. Railwayプロジェクト作成
 2. PostgreSQLアドオン追加（DATABASE_URLが自動設定される）
-3. 上記の環境変数をRailway管理画面で設定
-4. GitHubリポジトリ連携でプッシュ
-5. nixpacks.tomlに従いビルド → `prisma migrate deploy` → 起動
-6. 初回のみ手動でシードデータ投入: `railway run npm run db:seed`
+3. 環境変数をRailway管理画面で設定（最低: DATABASE_URL, NEXTAUTH_SECRET, NEXTAUTH_URL, ENCRYPTION_KEY, APP_URL, NODE_ENV）
+4. GitHubリポジトリ連携で push → 自動ビルド
+5. `nixpacks.toml` に従いビルド → 起動時 `npm start`（= `prisma db push --accept-data-loss && next start`）でスキーマ同期
+6. 初回のみ Railway の **Console** タブで `npm run db:seed`
+7. Settings → Networking でドメイン生成（`NEXTAUTH_URL`/`APP_URL` の解決に必要）
+
+> Node固定（`.node-version=22.15.0`）/ devDeps込みインストール（`--include=dev`）/ 遅延初期化など、デプロイ上の判断は [docs/DECISIONS.md](docs/DECISIONS.md) を参照。Stripe/S3/SMTP は未設定でも起動可（該当機能利用時に設定）。
 
 ## Stripe設定
 
