@@ -48,18 +48,6 @@ async function main() {
     },
   });
 
-  const accountingPassword = await bcrypt.hash("Acct1234!", 12);
-  await prisma.user.upsert({
-    where: { email: "accounting@turupurun.com" },
-    update: {},
-    create: {
-      email: "accounting@turupurun.com",
-      name: "経理",
-      passwordHash: accountingPassword,
-      role: "ACCOUNTING",
-    },
-  });
-
   // Service prices
   const servicePrices = [
     { serviceLevel: "VALUE" as const, pricePerCard: 2000, agencyFee: 500 },
@@ -122,7 +110,6 @@ async function main() {
   console.log("テストアカウント:");
   console.log("  管理者: admin@turupurun.com / Admin1234!");
   console.log("  スタッフ: staff@turupurun.com / Staff1234!");
-  console.log("  経理: accounting@turupurun.com / Acct1234!");
   console.log("  顧客: test@example.com / Test1234!");
 }
 
