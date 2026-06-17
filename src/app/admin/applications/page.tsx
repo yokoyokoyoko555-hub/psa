@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { format } from "date-fns";

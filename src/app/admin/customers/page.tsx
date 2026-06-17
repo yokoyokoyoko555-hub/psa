@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getAdminCustomers } from "@/actions/admin";
 
 export default async function AdminCustomersPage({

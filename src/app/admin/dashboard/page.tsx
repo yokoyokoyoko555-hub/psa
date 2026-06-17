@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getDashboardStats } from "@/actions/admin";
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
