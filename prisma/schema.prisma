@@ -1,0 +1,441 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ===== ENUMS =====
+
+enum UserRole {
+  ADMIN
+  STAFF
+  ACCOUNTING
+  CUSTOMER
+}
+
+enum CardStatus {
+  DRAFT
+  SUBMITTED_BY_CUSTOMER
+  RECEIVED_BY_STORE
+  INSPECTION_PENDING
+  INSPECTED
+  READY_FOR_PSA
+  SUBMITTED_TO_PSA
+  PSA_RECEIVED
+  GRADING
+  GRADE_AVAILABLE
+  RETURNED_TO_STORE
+  READY_FOR_CUSTOMER_RETURN
+  RETURNED_TO_CUSTOMER
+  UPCHARGE_UNPAID
+  UPCHARGE_PAID
+  PROBLEM
+  CANCELLED
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ServiceLevel {
+  VALUE
+  REGULAR
+  EXPRESS
+  SUPER_EXPRESS
+}
+
+enum ReturnMethod {
+  STORE_PICKUP
+  SHIPPING
+}
+
+enum CardLanguage {
+  JAPANESE
+  ENGLISH
+  KOREAN
+  CHINESE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum UpchargeStatus {
+  PENDING
+  PAID
+  FAILED
+  WAIVED
+}
+
+enum NotificationType {
+  EMAIL
+  SYSTEM
+}
+
+// ===== USERS (管理者・スタッフ・経理) =====
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  name             String
+  passwordHash     String
+  role             UserRole @default(STAFF)
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean  @default(false)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  operationLogs OperationLog[]
+
+  @@map("users")
+}
+
+// ===== CUSTOMERS (顧客) =====
+
+model Customer {
+  id                  String    @id @default(cuid())
+  // 個人情報は暗号化して保存
+  nameEncrypted       String
+  nameKanaEncrypted   String
+  email               String    @unique
+  phoneEncrypted      String
+  postalCode          String
+  prefectureEncrypted String
+  addressEncrypted    String
+  address2Encrypted   String?
+  passwordHash        String
+  stripeCustomerId    String?   @unique
+  emailVerified       DateTime?
+  isActive            Boolean   @default(true)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  applications  Application[]
+  payments      Payment[]
+  upcharges     Upcharge[]
+  agreements    Agreement[]
+  notifications Notification[]
+  sessions      CustomerSession[]
+  cards         Card[]
+
+  @@map("customers")
+}
+
+model CustomerSession {
+  id           String   @id @default(cuid())
+  customerId   String
+  sessionToken String   @unique
+  expires      DateTime
+  createdAt    DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_sessions")
+}
+
+// ===== APPLICATIONS (申込) =====
+
+model Application {
+  id             String            @id @default(cuid())
+  applicationNo  String            @unique // 表示用申込番号 APP-YYYYMMDD-XXXX
+  customerId     String
+  serviceLevel   ServiceLevel
+  returnMethod   ReturnMethod
+  status         ApplicationStatus @default(DRAFT)
+  totalAmount    Int               @default(0) // 円
+  psaFeeTotal    Int               @default(0)
+  agencyFeeTotal Int               @default(0)
+  shippingFee    Int               @default(0)
+  insuranceFee   Int               @default(0)
+  taxAmount      Int               @default(0)
+  notes          String?
+  submittedAt    DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  customer  Customer   @relation(fields: [customerId], references: [id])
+  cards     Card[]
+  payments  Payment[]
+  agreement Agreement?
+
+  @@map("applications")
+}
+
+// ===== CARDS (カード - 最重要テーブル) =====
+
+model Card {
+  id                   String    @id @default(cuid())
+  customerId           String
+  applicationId        String
+  cardNo               String    @unique // 自社管理番号 CARD-YYYYMMDD-XXXX
+  psaSubmissionGroupId String?
+  psaSubmissionId      String? // PSA Submission ID
+  psaOrderId           String? // PSA Order ID
+  psaCertNo            String? // PSA Cert No
+  psaGrade             String? // PSA Grade (10, 9, 8, ...)
+  psaGradedAt          DateTime?
+
+  // カード情報
+  tcgTitle      String // TCGタイトル
+  cardName      String // カード名
+  cardNumber    String? // 型番
+  rarity        String? // レアリティ
+  language      CardLanguage
+  declaredValue Int // 申告価格（円）
+  quantity      Int          @default(1)
+
+  // 料金
+  psaFee    Int @default(0) // PSA鑑定料（売価）
+  psaCost   Int @default(0) // PSA原価（80%）
+  agencyFee Int @default(0) // 代行手数料
+
+  // ステータス
+  status        CardStatus          @default(DRAFT)
+  statusHistory CardStatusHistory[]
+
+  // 画像（S3キー）
+  frontImageKey   String?
+  backImageKey    String?
+  damageImageKeys String[] @default([])
+
+  // 備考
+  notes         String?
+  internalNotes String?
+
+  // QRコード
+  qrCodeKey String?
+
+  // 返却
+  returnedToStoreAt    DateTime?
+  returnedToCustomerAt DateTime?
+  returnTrackingNo     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  application        Application         @relation(fields: [applicationId], references: [id])
+  psaSubmissionGroup PsaSubmissionGroup? @relation(fields: [psaSubmissionGroupId], references: [id])
+  upcharges          Upcharge[]
+
+  @@map("cards")
+}
+
+model CardStatusHistory {
+  id        String     @id @default(cuid())
+  cardId    String
+  status    CardStatus
+  note      String?
+  changedBy String? // userId or customerId
+  changedAt DateTime   @default(now())
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("card_status_histories")
+}
+
+// ===== PSA SUBMISSION GROUPS (PSA提出グループ) =====
+
+model PsaSubmissionGroup {
+  id              String    @id @default(cuid())
+  groupNo         String    @unique // PSG-YYYYMMDD-XXX
+  psaSubmissionId String?
+  psaOrderId      String?
+  submittedAt     DateTime?
+  psaReceivedAt   DateTime?
+  returnedAt      DateTime?
+  status          String    @default("PREPARING") // PREPARING, SUBMITTED, PSA_RECEIVED, RETURNED
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  cards Card[]
+
+  @@map("psa_submission_groups")
+}
+
+// ===== PAYMENTS (決済) =====
+
+model Payment {
+  id                    String        @id @default(cuid())
+  customerId            String
+  applicationId         String?
+  stripePaymentIntentId String?       @unique
+  stripePaymentMethodId String?
+  amount                Int // 円
+  currency              String        @default("jpy")
+  status                PaymentStatus @default(PENDING)
+  description           String?
+  receiptUrl            String?
+  refundedAmount        Int           @default(0)
+  failureReason         String?
+  paidAt                DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  application Application? @relation(fields: [applicationId], references: [id])
+
+  @@map("payments")
+}
+
+// ===== UPCHARGES =====
+
+model Upcharge {
+  id                    String         @id @default(cuid())
+  cardId                String
+  customerId            String
+  reason                String
+  psaDeclaredValue      Int // PSA申告額
+  psaFinalValue         Int // PSA最終評価額
+  upchargeAmount        Int // 追加請求額
+  status                UpchargeStatus @default(PENDING)
+  stripePaymentIntentId String?        @unique
+  notifiedAt            DateTime?
+  paidAt                DateTime?
+  failedAt              DateTime?
+  failureReason         String?
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  card     Card     @relation(fields: [cardId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@map("upcharges")
+}
+
+// ===== SERVICE PRICES (サービス料金設定) =====
+
+model ServicePrice {
+  id           String       @id @default(cuid())
+  serviceLevel ServiceLevel @unique
+  pricePerCard Int // 1枚あたり鑑定料（円）
+  agencyFee    Int // 代行手数料（円）
+  isActive     Boolean      @default(true)
+  updatedAt    DateTime     @updatedAt
+  updatedBy    String?
+
+  @@map("service_prices")
+}
+
+// ===== SHIPPING RULES (送料設定) =====
+
+model ShippingRule {
+  id           String       @id @default(cuid())
+  returnMethod ReturnMethod
+  name         String
+  fee          Int // 送料（円）
+  minAmount    Int          @default(0) // 最低申込金額
+  maxAmount    Int? // 上限（nullなら無制限）
+  isActive     Boolean      @default(true)
+  sortOrder    Int          @default(0)
+  updatedAt    DateTime     @updatedAt
+  updatedBy    String?
+
+  @@map("shipping_rules")
+}
+
+// ===== INSURANCE RULES (保険料設定) =====
+
+model InsuranceRule {
+  id        String   @id @default(cuid())
+  minValue  Int // 最低申告額
+  maxValue  Int? // 上限（nullなら無制限）
+  fee       Int // 保険料（円）
+  feeRate   Float? // 料率（%）。feeとfeeRateどちらか
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("insurance_rules")
+}
+
+// ===== AGREEMENTS (電子同意書) =====
+
+model Agreement {
+  id            String   @id @default(cuid())
+  customerId    String
+  applicationId String   @unique
+  agreedAt      DateTime @default(now())
+  ipAddress     String
+  userAgent     String?
+  agreementText String // 同意内容スナップショット
+  version       String // 同意書バージョン
+
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  application Application @relation(fields: [applicationId], references: [id])
+
+  @@map("agreements")
+}
+
+// ===== NOTIFICATIONS (お知らせ・通知) =====
+
+model Notification {
+  id         String           @id @default(cuid())
+  customerId String? // nullなら全顧客向け
+  type       NotificationType @default(SYSTEM)
+  title      String
+  body       String
+  isRead     Boolean          @default(false)
+  sentAt     DateTime?
+  createdAt  DateTime         @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@map("notifications")
+}
+
+// ===== OPERATION LOGS (操作ログ) =====
+
+model OperationLog {
+  id         String   @id @default(cuid())
+  userId     String? // 管理者・スタッフID
+  customerId String? // 顧客ID
+  ipAddress  String
+  action     String // 操作内容
+  targetType String? // 対象テーブル
+  targetId   String? // 対象ID
+  before     Json? // 変更前
+  after      Json? // 変更後
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("operation_logs")
+}
+
+// ===== SAVED PAYMENT METHODS (保存済み支払い方法) =====
+
+model SavedPaymentMethod {
+  id                    String   @id @default(cuid())
+  customerId            String
+  stripePaymentMethodId String   @unique
+  brand                 String // visa, mastercard, etc.
+  last4                 String
+  expMonth              Int
+  expYear               Int
+  isDefault             Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  @@map("saved_payment_methods")
+}
