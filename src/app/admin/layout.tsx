@@ -1,11 +1,19 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { signOut } from "@/lib/auth";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const pathname = (await headers()).get("x-pathname") ?? "";
+
+  // ログインページは保護対象外（サイドバーなしで素のまま表示。リダイレクトループ防止）
+  if (pathname === "/admin/login") {
+    return <>{children}</>;
+  }
+
   const session = await auth();
 
   if (!session?.user) {
