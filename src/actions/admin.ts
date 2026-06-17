@@ -9,6 +9,7 @@ import { chargeOffSession } from "@/lib/stripe";
 import { sendMail, upchargeNotificationHtml } from "@/lib/mailer";
 import { CardStatus } from "@prisma/client";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 
 async function requireAdmin() {
@@ -21,6 +22,47 @@ async function requireAdminOrStaff() {
   const user = await requireAdmin();
   if (!["ADMIN", "STAFF"].includes(user.role)) throw new Error("Forbidden");
   return user;
+}
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(100),
+});
+
+/** ログイン中の管理者/スタッフ自身のパスワードを変更する */
+export async function changeAdminPassword(
+  input: z.infer<typeof changePasswordSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const sessionUser = await requireAdminOrStaff();
+
+  const parsed = changePasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "新しいパスワードは8文字以上で入力してください" };
+  }
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: sessionUser.id } });
+
+  const valid = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
+  if (!valid) {
+    return { success: false, error: "現在のパスワードが正しくありません" };
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash },
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    userId: user.id,
+    ipAddress: (hdrs as unknown as Headers).get?.("x-forwarded-for") ?? "unknown",
+    action: "ADMIN_PASSWORD_CHANGE",
+    targetType: "users",
+    targetId: user.id,
+  });
+
+  return { success: true };
 }
 
 export async function getDashboardStats() {

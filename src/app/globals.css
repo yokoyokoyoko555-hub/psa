@@ -12,12 +12,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* このアプリは白基調のライト専用UI。OSのダークモードでも配色を固定する。 */
 
 body {
   background: var(--background);
