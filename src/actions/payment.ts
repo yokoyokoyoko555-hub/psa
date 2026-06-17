@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCustomerSession } from "@/lib/customer-auth";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 export async function deletePaymentMethod(methodId: string) {
   const session = await getCustomerSession();
@@ -18,7 +18,7 @@ export async function deletePaymentMethod(methodId: string) {
 
   // Detach from Stripe
   try {
-    await stripe.paymentMethods.detach(method.stripePaymentMethodId);
+    await getStripe().paymentMethods.detach(method.stripePaymentMethodId);
   } catch {
     // proceed with DB deletion even if Stripe fails
   }

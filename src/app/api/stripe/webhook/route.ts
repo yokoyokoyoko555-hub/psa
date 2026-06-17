@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import Stripe from "stripe";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const body = await req.text();

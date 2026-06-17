@@ -1,16 +1,23 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-02-24.acacia",
-  typescript: true,
-});
+let _stripe: Stripe | null = null;
+
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+      apiVersion: "2025-02-24.acacia",
+      typescript: true,
+    });
+  }
+  return _stripe;
+}
 
 export async function createCustomer(params: {
   email: string;
   name: string;
   phone?: string;
 }) {
-  return stripe.customers.create({
+  return getStripe().customers.create({
     email: params.email,
     name: params.name,
     phone: params.phone,
@@ -23,7 +30,7 @@ export async function createPaymentIntent(params: {
   applicationId: string;
   description: string;
 }) {
-  return stripe.paymentIntents.create({
+  return getStripe().paymentIntents.create({
     amount: params.amount,
     currency: "jpy",
     customer: params.customerId,
@@ -43,7 +50,7 @@ export async function chargeOffSession(params: {
   description: string;
   upchargeId: string;
 }) {
-  return stripe.paymentIntents.create({
+  return getStripe().paymentIntents.create({
     amount: params.amount,
     currency: "jpy",
     customer: params.customerId,
@@ -58,7 +65,7 @@ export async function chargeOffSession(params: {
 }
 
 export function constructWebhookEvent(payload: string | Buffer, signature: string) {
-  return stripe.webhooks.constructEvent(
+  return getStripe().webhooks.constructEvent(
     payload,
     signature,
     process.env.STRIPE_WEBHOOK_SECRET!

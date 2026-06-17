@@ -4,6 +4,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const schema = z.object({
   // cardId for post-creation uploads, tempId for pre-creation (apply form)
   cardId: z.string().optional(),
