@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { getCustomerSession } from "@/lib/customer-auth";
-import ApplyForm from "./ApplyForm";
+import ApplyEntry from "./ApplyEntry";
 import { prisma } from "@/lib/prisma";
 
 export default async function ApplyPage() {
@@ -16,7 +16,7 @@ export default async function ApplyPage() {
   ]);
 
   return (
-    <ApplyForm
+    <ApplyEntry
       customerId={customer.id}
       stripePublishableKey={process.env.STRIPE_PUBLISHABLE_KEY!}
       servicePrices={servicePrices}

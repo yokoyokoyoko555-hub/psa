@@ -23,6 +23,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const navItems = [
     { href: "/admin/dashboard", label: "ダッシュボード", icon: "📊" },
     { href: "/admin/applications", label: "申込管理", icon: "📋" },
+    { href: "/admin/store-requests", label: "代理申込", icon: "🏪" },
     { href: "/admin/cards", label: "カード管理", icon: "🃏" },
     { href: "/admin/customers", label: "顧客管理", icon: "👥" },
     { href: "/admin/psa-groups", label: "PSA提出グループ", icon: "📦" },

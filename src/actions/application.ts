@@ -202,6 +202,68 @@ export async function createApplication(
   };
 }
 
+const storeRequestSchema = z.object({
+  region: z.nativeEnum(ServiceRegion),
+  returnMethod: z.nativeEnum(ReturnMethod),
+  agreementText: z.string().min(1),
+  agreementVersion: z.string().min(1),
+  ipAddress: z.string(),
+  userAgent: z.string().optional(),
+});
+
+/**
+ * 代理申込（当社入力）の依頼を顧客が作成する。
+ * カード明細は入れず、提出先・返却方法・同意のみ。管理画面に「要対応」(source=STORE, status=DRAFT)として表示される。
+ * 料金確定と決済は店舗の入力完了時（completeStoreApplication）に行う。
+ */
+export async function createStoreRequest(
+  input: z.infer<typeof storeRequestSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const parsed = storeRequestSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
+
+  const applicationNo = await generateApplicationNo();
+
+  const application = await prisma.$transaction(async (tx) => {
+    const app = await tx.application.create({
+      data: {
+        applicationNo,
+        customerId: customer.id,
+        serviceLevel: "REGULAR", // 仮（店舗が確定）
+        region: parsed.data.region,
+        source: "STORE",
+        returnMethod: parsed.data.returnMethod,
+        status: "DRAFT",
+      },
+    });
+    await tx.agreement.create({
+      data: {
+        customerId: customer.id,
+        applicationId: app.id,
+        ipAddress: parsed.data.ipAddress,
+        userAgent: parsed.data.userAgent,
+        agreementText: parsed.data.agreementText,
+        version: parsed.data.agreementVersion,
+      },
+    });
+    return app;
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    customerId: customer.id,
+    ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
+    action: "STORE_REQUEST_CREATE",
+    targetType: "applications",
+    targetId: application.id,
+  });
+
+  return { success: true };
+}
+
 export async function getMyApplications() {
   const customer = await getCustomerSession();
   if (!customer) return [];

@@ -44,9 +44,9 @@
 ## 未実装・要改善
 
 ### 優先度: 高
-- 🟡 **当社入力（代理申込）UI** — 管理画面に「代理申込」ページを追加（source=STORE・手数料あり）。基盤(enum/料金/計算/顧客フロー地域選択)は実装済み、店舗入力画面が残り（[ADR-0011](DECISIONS.md)）
+- 🟡 **代理申込の決済通電** — 画面・データ・フローは実装済み（顧客の依頼→管理「要対応」→店舗入力→確定）。残りは「依頼時のカード登録(案A)」と「確定時の登録カードへ off_session 即時決済」で、いずれも Stripe Elements 統合に依存（[ADR-0011](DECISIONS.md)）
 - ❌ **PSA US の正式料金** — 現在JPと同額の暫定値。管理画面→設定で正式値に更新
-- ❌ **Stripe Elements 統合**（`ApplyForm.tsx` の payment ステップを実決済に。`@stripe/react-stripe-js`/`@stripe/stripe-js` 導入、`Elements` プロバイダ、`confirmCardPayment` 実装）
+- ❌ **Stripe Elements 統合**（通常申込の決済 + 代理のカード登録/即時決済の前提）（`ApplyForm.tsx` の payment ステップを実決済に。`@stripe/react-stripe-js`/`@stripe/stripe-js` 導入、`Elements` プロバイダ、`confirmCardPayment` 実装）
 - ❌ **管理者2FA(TOTP)の配線**（`speakeasy` 利用。QR発行→検証→ログインフローへ組込み。現状UIのみ）
 - ❌ **本番シークレットの差し替え**（テスト用パスワード `Admin1234!` 等、`ENCRYPTION_KEY`/`NEXTAUTH_SECRET` の本番値確認）
 - 🟡 **Stripp/S3/SMTP の本番接続**（env未設定。決済・画像アップロード・メールを使う前に設定）

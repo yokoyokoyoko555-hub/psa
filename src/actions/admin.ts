@@ -3,11 +3,12 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { decrypt } from "@/lib/crypto";
-import { generateGroupNo } from "@/lib/number-generator";
+import { generateGroupNo, generateCardNo } from "@/lib/number-generator";
 import { logOperation } from "@/lib/operation-log";
 import { chargeOffSession } from "@/lib/stripe";
+import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, upchargeNotificationHtml } from "@/lib/mailer";
-import { CardStatus } from "@prisma/client";
+import { CardStatus, CardLanguage, ServiceLevel } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
@@ -373,4 +374,157 @@ export async function getAdminCustomers(params: {
     totalAmount: c.applications.reduce((s, a) => s + a.totalAmount, 0),
     applicationCount: c._count.applications,
   }));
+}
+
+// ===== 代理申込（当社入力 / source=STORE） =====
+
+/** 要対応の代理申込（顧客が依頼し、店舗の入力待ち）一覧 */
+export async function getStoreRequests() {
+  await requireAdminOrStaff();
+  const apps = await prisma.application.findMany({
+    where: { source: "STORE", status: "DRAFT" },
+    include: { customer: { select: { email: true, nameEncrypted: true } }, agreement: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return apps.map((a) => ({
+    id: a.id,
+    applicationNo: a.applicationNo,
+    region: a.region,
+    returnMethod: a.returnMethod,
+    createdAt: a.createdAt,
+    customerEmail: a.customer.email,
+    customerName: decrypt(a.customer.nameEncrypted),
+  }));
+}
+
+const storeCardSchema = z.object({
+  tcgTitle: z.string().min(1).max(200),
+  cardName: z.string().min(1).max(200),
+  cardNumber: z.string().max(100).optional(),
+  rarity: z.string().max(100).optional(),
+  language: z.nativeEnum(CardLanguage),
+  declaredValue: z.number().int().min(1),
+  quantity: z.number().int().min(1).max(100),
+  notes: z.string().max(1000).optional(),
+});
+
+const completeStoreSchema = z.object({
+  applicationId: z.string(),
+  serviceLevel: z.nativeEnum(ServiceLevel),
+  cards: z.array(storeCardSchema).min(1).max(200),
+});
+
+/**
+ * 店舗（当社）が代理申込にカード明細・サービスを入力して確定する。
+ * 手数料あり(applyAgencyFee=true)で料金計算し、申込を SUBMITTED にする。
+ * ※ 決済（登録カードへの即時 off_session 課金）は Stripe 統合後に通電予定。現状は Payment を PENDING で作成のみ。
+ */
+export async function completeStoreApplication(
+  input: z.infer<typeof completeStoreSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdminOrStaff();
+  const parsed = completeStoreSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
+
+  const app = await prisma.application.findUnique({
+    where: { id: parsed.data.applicationId },
+  });
+  if (!app) return { success: false, error: "申込が見つかりません" };
+  if (app.source !== "STORE" || app.status !== "DRAFT") {
+    return { success: false, error: "対応可能な代理申込ではありません" };
+  }
+
+  const servicePrice = await prisma.servicePrice.findUnique({
+    where: { serviceLevel_region: { serviceLevel: parsed.data.serviceLevel, region: app.region } },
+  });
+  if (!servicePrice) return { success: false, error: "サービスレベルが見つかりません" };
+
+  if (servicePrice.maxDeclaredValue !== null) {
+    const over = parsed.data.cards.find((c) => c.declaredValue > servicePrice.maxDeclaredValue!);
+    if (over) {
+      return {
+        success: false,
+        error: `申告価格上限（¥${servicePrice.maxDeclaredValue.toLocaleString()}）を超えるカードがあります（${over.cardName}: ¥${over.declaredValue.toLocaleString()}）。`,
+      };
+    }
+  }
+
+  const totalDeclaredValue = parsed.data.cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
+  const cardCount = parsed.data.cards.reduce((s, c) => s + c.quantity, 0);
+
+  // 当社入力は手数料あり
+  const fees = await calculateFees({
+    serviceLevel: parsed.data.serviceLevel,
+    region: app.region,
+    returnMethod: app.returnMethod,
+    cardCount,
+    totalDeclaredValue,
+    applyAgencyFee: true,
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.application.update({
+      where: { id: app.id },
+      data: {
+        serviceLevel: parsed.data.serviceLevel,
+        status: "SUBMITTED",
+        submittedAt: new Date(),
+        totalAmount: fees.totalAmount,
+        psaFeeTotal: fees.psaFeeTotal,
+        agencyFeeTotal: fees.agencyFeeTotal,
+        shippingFee: fees.shippingFee,
+        insuranceFee: fees.insuranceFee,
+        taxAmount: fees.taxAmount,
+      },
+    });
+
+    for (const c of parsed.data.cards) {
+      const cardNo = await generateCardNo();
+      const psaFee = servicePrice.pricePerCard * c.quantity;
+      const psaCost = Math.floor(psaFee * 0.8);
+      const agencyFee = servicePrice.agencyFee * c.quantity;
+      await tx.card.create({
+        data: {
+          customerId: app.customerId,
+          applicationId: app.id,
+          cardNo,
+          tcgTitle: c.tcgTitle,
+          cardName: c.cardName,
+          cardNumber: c.cardNumber,
+          rarity: c.rarity,
+          language: c.language,
+          declaredValue: c.declaredValue,
+          quantity: c.quantity,
+          psaFee,
+          psaCost,
+          agencyFee,
+          status: "SUBMITTED_BY_CUSTOMER",
+          statusHistory: { create: { status: "SUBMITTED_BY_CUSTOMER", changedBy: user.id } },
+        },
+      });
+    }
+
+    // TODO(Stripe統合後): ここで登録カードへ off_session 即時決済を実行する。
+    await tx.payment.create({
+      data: {
+        customerId: app.customerId,
+        applicationId: app.id,
+        amount: fees.totalAmount,
+        status: "PENDING",
+        description: `代理申込 ${app.applicationNo}`,
+      },
+    });
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    userId: user.id,
+    ipAddress: (hdrs as unknown as Headers).get?.("x-forwarded-for") ?? "unknown",
+    action: "STORE_APPLICATION_COMPLETE",
+    targetType: "applications",
+    targetId: app.id,
+    after: { serviceLevel: parsed.data.serviceLevel, totalAmount: fees.totalAmount },
+  });
+
+  return { success: true };
 }
