@@ -149,8 +149,29 @@ model Customer {
   notifications Notification[]
   sessions      CustomerSession[]
   cards         Card[]
+  addresses     CustomerAddress[]
 
   @@map("customers")
+}
+
+// 顧客の住所帳（返送先の複数登録）
+model CustomerAddress {
+  id                  String   @id @default(cuid())
+  customerId          String
+  nameEncrypted       String
+  postalCode          String
+  prefectureEncrypted String
+  addressEncrypted    String
+  address2Encrypted   String?
+  phoneEncrypted      String?
+  isDefault           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_addresses")
 }
 
 model CustomerSession {

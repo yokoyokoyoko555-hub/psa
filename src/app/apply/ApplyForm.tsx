@@ -17,6 +17,8 @@ const DRAFT_KEY = "psa-apply-draft";
 import { ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
 import type { CustomerProfile } from "@/actions/customer";
+import type { Address } from "@/actions/address";
+import AddressManager from "../mypage/addresses/AddressManager";
 
 const SERVICE_LABELS: Record<ServiceLevel, string> = {
   VALUE: "バリュー",
@@ -77,6 +79,7 @@ type Props = {
   shippingRules: ShippingRule[];
   insuranceRules: InsuranceRule[];
   profile: CustomerProfile | null;
+  addresses: Address[];
 };
 
 const STEPS = [
@@ -94,6 +97,7 @@ export default function ApplyForm({
   insuranceRules,
   stripePublishableKey,
   profile,
+  addresses,
 }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<StepKey>("service");
@@ -107,15 +111,12 @@ export default function ApplyForm({
   const [draft, setDraft] = useState<CardItem>(emptyCard());
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  // 返送先住所（未入力＝登録住所を使用）
-  const [useCustomReturn, setUseCustomReturn] = useState(false);
-  const [ret, setRet] = useState({
-    name: "",
-    postalCode: "",
-    prefecture: "",
-    address: "",
-    address2: "",
-  });
+  // 返送先住所（"registered"＝登録住所 / それ以外は住所帳のID）
+  const [addrList, setAddrList] = useState<Address[]>(addresses);
+  const [returnSel, setReturnSel] = useState<string>(
+    addresses.find((a) => a.isDefault)?.id ?? "registered"
+  );
+  const selectedAddr = addrList.find((a) => a.id === returnSel);
 
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -275,17 +276,13 @@ export default function ApplyForm({
         damageImageKeys: [],
       })),
       returnAddress:
-        useCustomReturn &&
-        ret.name &&
-        /^\d{7}$/.test(ret.postalCode) &&
-        ret.prefecture &&
-        ret.address
+        returnSel !== "registered" && selectedAddr
           ? {
-              name: ret.name,
-              postalCode: ret.postalCode,
-              prefecture: ret.prefecture,
-              address: ret.address,
-              address2: ret.address2 || undefined,
+              name: selectedAddr.name,
+              postalCode: selectedAddr.postalCode,
+              prefecture: selectedAddr.prefecture,
+              address: selectedAddr.address,
+              address2: selectedAddr.address2 || undefined,
             }
           : undefined,
       agreementText: AGREEMENT_TEXT,
@@ -664,12 +661,16 @@ export default function ApplyForm({
                 </span>
               </div>
               {/* 登録住所（デフォルト） */}
-              <label className="flex items-start gap-3 border-2 rounded-lg p-4 cursor-pointer transition border-gray-200 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+              <label
+                className={`flex items-start gap-3 border-2 rounded-lg p-4 cursor-pointer transition ${
+                  returnSel === "registered" ? "border-brand-500 bg-brand-50" : "border-gray-200"
+                }`}
+              >
                 <input
                   type="radio"
                   name="returnAddr"
-                  checked={!useCustomReturn}
-                  onChange={() => setUseCustomReturn(false)}
+                  checked={returnSel === "registered"}
+                  onChange={() => setReturnSel("registered")}
                   className="mt-1"
                 />
                 <span className="text-sm text-gray-800">
@@ -689,54 +690,17 @@ export default function ApplyForm({
                 </span>
               </label>
 
-              {/* 別の住所に返送 */}
-              <label className="flex items-center gap-3 border-2 rounded-lg p-4 cursor-pointer transition border-gray-200 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
-                <input
-                  type="radio"
-                  name="returnAddr"
-                  checked={useCustomReturn}
-                  onChange={() => setUseCustomReturn(true)}
-                />
-                <span className="text-sm font-medium text-gray-800">別の住所に返送する</span>
-              </label>
-
-              {useCustomReturn && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <input
-                    className={inputCls}
-                    placeholder="お名前 *"
-                    value={ret.name}
-                    onChange={(e) => setRet({ ...ret, name: e.target.value })}
-                  />
-                  <input
-                    className={inputCls}
-                    placeholder="郵便番号（7桁） *"
-                    value={ret.postalCode}
-                    onChange={(e) => setRet({ ...ret, postalCode: e.target.value.replace(/-/g, "") })}
-                  />
-                  <input
-                    className={inputCls}
-                    placeholder="都道府県 *"
-                    value={ret.prefecture}
-                    onChange={(e) => setRet({ ...ret, prefecture: e.target.value })}
-                  />
-                  <input
-                    className={inputCls}
-                    placeholder="住所（市区町村・番地） *"
-                    value={ret.address}
-                    onChange={(e) => setRet({ ...ret, address: e.target.value })}
-                  />
-                  <input
-                    className={`${inputCls} sm:col-span-2`}
-                    placeholder="建物名・部屋番号など"
-                    value={ret.address2}
-                    onChange={(e) => setRet({ ...ret, address2: e.target.value })}
-                  />
-                </div>
-              )}
+              {/* 住所帳（追加・編集・削除・デフォルト設定・選択） */}
+              <AddressManager
+                initialAddresses={addrList}
+                selectable
+                selectedId={returnSel === "registered" ? null : returnSel}
+                onSelect={(id) => setReturnSel(id)}
+                onChange={setAddrList}
+              />
 
               <p className="text-xs text-gray-400">
-                ※ 未入力の場合は登録住所に返送します。登録住所の変更はマイページから行えます。
+                ※ 登録住所のままにする場合は上を選択してください。住所帳はマイページからも管理できます。
               </p>
             </div>
 
@@ -764,11 +728,8 @@ export default function ApplyForm({
 
             <button
               onClick={() => {
-                if (
-                  useCustomReturn &&
-                  (!ret.name || !/^\d{7}$/.test(ret.postalCode) || !ret.prefecture || !ret.address)
-                ) {
-                  setError("返送先住所（お名前・郵便番号7桁・都道府県・住所）を入力してください");
+                if (returnSel !== "registered" && !selectedAddr) {
+                  setError("返送先を選択してください");
                   return;
                 }
                 setError("");
@@ -795,8 +756,8 @@ export default function ApplyForm({
               </div>
               <div className="text-sm text-gray-600 mb-3">
                 <span className="font-medium">返送先:</span>{" "}
-                {useCustomReturn
-                  ? `${ret.name}／〒${ret.postalCode} ${ret.prefecture}${ret.address}${ret.address2 ? ` ${ret.address2}` : ""}`
+                {returnSel !== "registered" && selectedAddr
+                  ? `${selectedAddr.name}／〒${selectedAddr.postalCode} ${selectedAddr.prefecture}${selectedAddr.address}${selectedAddr.address2 ? ` ${selectedAddr.address2}` : ""}`
                   : profile
                     ? `${profile.name}（登録住所）`
                     : "登録住所"}
