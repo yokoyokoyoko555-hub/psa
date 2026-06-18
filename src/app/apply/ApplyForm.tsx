@@ -322,7 +322,7 @@ export default function ApplyForm({
           {/* ロゴ（クリックでトップへ） */}
           <Link href="/" className="shrink-0 hover:opacity-70 transition">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="トレカビンクス" className="h-10 w-auto" />
+            <img src="/logo.jpg" alt="トレカビンクス" className="h-10 w-auto" />
           </Link>
 
           {/* パンくず（到達済みステップはリンクで戻れる） */}
