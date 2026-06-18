@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 const registerSchema = z.object({
   name: z.string().min(1).max(100),
@@ -123,6 +124,54 @@ export interface CustomerProfile {
   prefecture: string;
   address: string;
   address2?: string;
+}
+
+const updateProfileSchema = z.object({
+  name: z.string().min(1).max(100),
+  nameKana: z.string().min(1).max(100),
+  phone: z.string().regex(/^[0-9-+() ]{10,20}$/),
+  postalCode: z.string().regex(/^\d{7}$/),
+  prefecture: z.string().min(1),
+  address: z.string().min(1),
+  address2: z.string().optional(),
+});
+
+export async function updateCustomerProfile(
+  input: z.infer<typeof updateProfileSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const parsed = updateProfileSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "入力内容が正しくありません" };
+  }
+
+  await prisma.customer.update({
+    where: { id: customer.id },
+    data: {
+      nameEncrypted: encrypt(parsed.data.name),
+      nameKanaEncrypted: encrypt(parsed.data.nameKana),
+      phoneEncrypted: encrypt(parsed.data.phone),
+      postalCode: parsed.data.postalCode,
+      prefectureEncrypted: encrypt(parsed.data.prefecture),
+      addressEncrypted: encrypt(parsed.data.address),
+      address2Encrypted: parsed.data.address2 ? encrypt(parsed.data.address2) : null,
+    },
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    customerId: customer.id,
+    ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
+    action: "CUSTOMER_PROFILE_UPDATE",
+    targetType: "customers",
+    targetId: customer.id,
+  });
+
+  revalidatePath("/mypage/profile");
+  revalidatePath("/mypage");
+  return { success: true };
 }
 
 export async function getCustomerProfile(): Promise<CustomerProfile | null> {
