@@ -8,10 +8,12 @@ declare global {
   }
 }
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createApplication } from "@/actions/application";
+
+const DRAFT_KEY = "psa-apply-draft";
 import { ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
 
@@ -91,6 +93,7 @@ export default function ApplyForm({
 }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<StepKey>("service");
+  const [maxStep, setMaxStep] = useState(0); // 到達済みの最大ステップindex（パンくずのリンク可否）
 
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(null);
@@ -189,6 +192,45 @@ export default function ApplyForm({
   const taxAmount = Math.floor(subtotal * TAX_RATE);
   const totalAmount = subtotal + taxAmount;
 
+  // 一時保存（localStorage）からの復元
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.region) setRegion(d.region);
+      if (d.serviceLevel) setServiceLevel(d.serviceLevel);
+      if (d.returnMethod) setReturnMethod(d.returnMethod);
+      if (Array.isArray(d.cards)) setCards(d.cards);
+      if (typeof d.maxStep === "number") setMaxStep(Math.min(d.maxStep, 2));
+      if (d.step && d.step !== "payment") setStep(d.step);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function saveDraftToStorage() {
+    try {
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({ region, serviceLevel, returnMethod, cards, step, maxStep })
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function handleSaveAndExit() {
+    saveDraftToStorage();
+    router.push("/mypage");
+  }
+
+  function goStep(key: StepKey) {
+    const idx = STEPS.findIndex((s) => s.key === key);
+    setMaxStep((m) => Math.max(m, idx));
+    setStep(key);
+  }
+
   async function handleSubmit() {
     if (!agreed) {
       setError("利用規約に同意してください");
@@ -223,7 +265,13 @@ export default function ApplyForm({
     });
 
     if (result.success && result.clientSecret) {
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* ignore */
+      }
       setClientSecret(result.clientSecret);
+      setMaxStep(3);
       setStep("payment");
     } else {
       setError(result.error ?? "エラーが発生しました");
@@ -269,35 +317,50 @@ export default function ApplyForm({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-4 py-4">
-        <div className="max-w-3xl mx-auto">
-          <Link href="/" className="inline-block hover:opacity-70 transition">
-            <p className="text-xs text-gray-500">トレカビンクス PSA申込</p>
-            <h1 className="font-bold text-gray-900">PSA鑑定申込</h1>
+      <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+          {/* ロゴ（クリックでトップへ） */}
+          <Link
+            href="/"
+            className="shrink-0 font-extrabold text-brand-600 text-lg tracking-tight hover:opacity-70 transition"
+          >
+            トレカビンクス
           </Link>
+
+          {/* パンくず（到達済みステップはリンクで戻れる） */}
+          <nav className="flex items-center gap-1 text-xs sm:text-sm overflow-x-auto whitespace-nowrap">
+            {STEPS.map((s, i) => {
+              const reachable = i <= maxStep;
+              const current = i === currentIdx;
+              return (
+                <span key={s.key} className="flex items-center gap-1">
+                  {reachable && !current ? (
+                    <button
+                      onClick={() => goStep(s.key)}
+                      className="text-brand-600 hover:underline font-medium"
+                    >
+                      {s.label}
+                    </button>
+                  ) : (
+                    <span className={current ? "font-bold text-gray-900" : "text-gray-400"}>
+                      {s.label}
+                    </span>
+                  )}
+                  {i < STEPS.length - 1 && <span className="text-gray-300">›</span>}
+                </span>
+              );
+            })}
+          </nav>
+
+          {/* 一時保存して終了 */}
+          <button
+            onClick={handleSaveAndExit}
+            className="shrink-0 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+          >
+            保存・終了
+          </button>
         </div>
       </header>
-
-      {/* Stepper */}
-      <div className="max-w-3xl mx-auto px-4 py-4">
-        <div className="flex items-center gap-2">
-          {STEPS.map((s, i) => (
-            <div key={s.key} className="flex items-center gap-2">
-              <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                  i <= currentIdx ? "bg-brand-600 text-white" : "bg-gray-200 text-gray-500"
-                }`}
-              >
-                {i + 1}
-              </div>
-              <span className={`text-sm ${i === currentIdx ? "font-bold text-brand-700" : "text-gray-500"}`}>
-                {s.label}
-              </span>
-              {i < STEPS.length - 1 && <span className="text-gray-300 mx-1">›</span>}
-            </div>
-          ))}
-        </div>
-      </div>
 
       <main className="max-w-3xl mx-auto px-4 pb-16">
         {error && (
@@ -381,7 +444,7 @@ export default function ApplyForm({
                   return;
                 }
                 setError("");
-                setStep("cards");
+                goStep("cards");
               }}
               className="w-full bg-brand-600 text-white font-bold py-4 rounded-xl hover:bg-brand-700 transition"
             >
@@ -546,7 +609,7 @@ export default function ApplyForm({
                     return;
                   }
                   setError("");
-                  setStep("confirm");
+                  goStep("confirm");
                 }}
                 className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
               >
