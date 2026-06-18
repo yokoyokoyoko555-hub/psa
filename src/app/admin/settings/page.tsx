@@ -7,7 +7,7 @@ import InsuranceRuleForm from "./InsuranceRuleForm";
 
 export default async function SettingsPage() {
   const [servicePrices, shippingRules, insuranceRules] = await Promise.all([
-    prisma.servicePrice.findMany(),
+    prisma.servicePrice.findMany({ orderBy: { pricePerCard: "asc" } }),
     prisma.shippingRule.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.insuranceRule.findMany({ orderBy: { sortOrder: "asc" } }),
   ]);

@@ -6,10 +6,16 @@ import { prisma } from "@/lib/prisma";
 import type { ServicePrice } from "@prisma/client";
 
 const SERVICE_LABELS: Record<string, string> = {
-  VALUE: "Value",
-  REGULAR: "Regular",
-  EXPRESS: "Express",
-  SUPER_EXPRESS: "Super Express",
+  VALUE: "バリュー",
+  REGULAR: "レギュラー",
+  EXPRESS: "エクスプレス",
+  SUPER_EXPRESS: "スーパー・エクスプレス",
+  WALK_THROUGH: "ウォーク・スルー",
+  PREMIUM_1: "プレミアム 1",
+  PREMIUM_2: "プレミアム 2",
+  PREMIUM_3: "プレミアム 3",
+  PREMIUM_5: "プレミアム 5",
+  PREMIUM_10: "プレミアム 10",
 };
 
 export default function ServicePriceForm({ servicePrices }: { servicePrices: ServicePrice[] }) {
@@ -45,6 +51,7 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
             <th className="text-left px-3 py-2 text-gray-600 font-medium">サービス</th>
             <th className="text-left px-3 py-2 text-gray-600 font-medium">鑑定料（/枚）</th>
             <th className="text-left px-3 py-2 text-gray-600 font-medium">代行手数料（/枚）</th>
+            <th className="text-left px-3 py-2 text-gray-600 font-medium">申告価格上限</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -68,6 +75,11 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
                   min={0}
                   className="w-32 border border-gray-300 rounded px-2 py-1 text-sm"
                 />
+              </td>
+              <td className="px-3 py-3 text-gray-600">
+                {sp.maxDeclaredValue === null
+                  ? "なし"
+                  : `¥${sp.maxDeclaredValue.toLocaleString()}`}
               </td>
             </tr>
           ))}

@@ -45,10 +45,16 @@ enum ApplicationStatus {
 }
 
 enum ServiceLevel {
-  VALUE
+  VALUE // 旧プラン（未使用・互換のため残置）
   REGULAR
   EXPRESS
   SUPER_EXPRESS
+  WALK_THROUGH
+  PREMIUM_1
+  PREMIUM_2
+  PREMIUM_3
+  PREMIUM_5
+  PREMIUM_10
 }
 
 enum ReturnMethod {
@@ -322,13 +328,14 @@ model Upcharge {
 // ===== SERVICE PRICES (サービス料金設定) =====
 
 model ServicePrice {
-  id           String       @id @default(cuid())
-  serviceLevel ServiceLevel @unique
-  pricePerCard Int // 1枚あたり鑑定料（円）
-  agencyFee    Int // 代行手数料（円）
-  isActive     Boolean      @default(true)
-  updatedAt    DateTime     @updatedAt
-  updatedBy    String?
+  id               String       @id @default(cuid())
+  serviceLevel     ServiceLevel @unique
+  pricePerCard     Int // 1枚あたり鑑定料（円）= 顧客請求額
+  agencyFee        Int // 代行手数料（円）
+  maxDeclaredValue Int? // 申告価格の上限（円）。nullは上限なし
+  isActive         Boolean      @default(true)
+  updatedAt        DateTime     @updatedAt
+  updatedBy        String?
 
   @@map("service_prices")
 }

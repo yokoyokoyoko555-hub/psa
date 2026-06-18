@@ -49,6 +49,25 @@ export async function createApplication(
     return { success: false, error: "Stripe顧客情報が見つかりません" };
   }
 
+  // 申告価格上限のバリデーション（選択サービスレベルの上限を超えるカードは不可）
+  const servicePrice = await prisma.servicePrice.findUnique({
+    where: { serviceLevel: parsed.data.serviceLevel },
+  });
+  if (!servicePrice) {
+    return { success: false, error: "サービスレベルが見つかりません" };
+  }
+  if (servicePrice.maxDeclaredValue !== null) {
+    const over = parsed.data.cards.find(
+      (c) => c.declaredValue > servicePrice.maxDeclaredValue!
+    );
+    if (over) {
+      return {
+        success: false,
+        error: `このサービスレベルの申告価格上限（¥${servicePrice.maxDeclaredValue.toLocaleString()}）を超えるカードがあります（${over.cardName || "無題"}: ¥${over.declaredValue.toLocaleString()}）。上位のサービスレベルを選択してください。`,
+      };
+    }
+  }
+
   const totalDeclaredValue = parsed.data.cards.reduce(
     (sum, c) => sum + c.declaredValue * c.quantity,
     0

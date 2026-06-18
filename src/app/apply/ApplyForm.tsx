@@ -41,10 +41,16 @@ const LANGUAGE_LABELS: Record<CardLanguage, string> = {
 };
 
 const SERVICE_LABELS: Record<ServiceLevel, string> = {
-  VALUE: "Value",
-  REGULAR: "Regular",
-  EXPRESS: "Express",
-  SUPER_EXPRESS: "Super Express",
+  VALUE: "バリュー",
+  REGULAR: "レギュラー",
+  EXPRESS: "エクスプレス",
+  SUPER_EXPRESS: "スーパー・エクスプレス",
+  WALK_THROUGH: "ウォーク・スルー",
+  PREMIUM_1: "プレミアム 1",
+  PREMIUM_2: "プレミアム 2",
+  PREMIUM_3: "プレミアム 3",
+  PREMIUM_5: "プレミアム 5",
+  PREMIUM_10: "プレミアム 10",
 };
 
 const TAX_RATE = 0.1;
@@ -552,7 +558,11 @@ export default function ApplyForm({
                       ¥{sp.pricePerCard.toLocaleString()}/枚
                     </p>
                     <p className="text-xs text-gray-500">
-                      代行手数料 ¥{sp.agencyFee.toLocaleString()}/枚
+                      {sp.agencyFee > 0 && <>代行手数料 ¥{sp.agencyFee.toLocaleString()}/枚<br /></>}
+                      申告価格上限{" "}
+                      {sp.maxDeclaredValue === null
+                        ? "なし"
+                        : `¥${sp.maxDeclaredValue.toLocaleString()}`}
                     </p>
                   </button>
                 ))}

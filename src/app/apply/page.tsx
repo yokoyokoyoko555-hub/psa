@@ -10,7 +10,7 @@ export default async function ApplyPage() {
   if (!customer) redirect("/login");
 
   const [servicePrices, shippingRules, insuranceRules] = await Promise.all([
-    prisma.servicePrice.findMany({ where: { isActive: true } }),
+    prisma.servicePrice.findMany({ where: { isActive: true }, orderBy: { pricePerCard: "asc" } }),
     prisma.shippingRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     prisma.insuranceRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
   ]);

@@ -48,21 +48,21 @@ async function main() {
     },
   });
 
-  // Service prices
-  const servicePrices = [
-    { serviceLevel: "VALUE" as const, pricePerCard: 2000, agencyFee: 500 },
-    { serviceLevel: "REGULAR" as const, pricePerCard: 3500, agencyFee: 800 },
-    { serviceLevel: "EXPRESS" as const, pricePerCard: 8000, agencyFee: 1500 },
-    { serviceLevel: "SUPER_EXPRESS" as const, pricePerCard: 25000, agencyFee: 3000 },
-  ];
-
-  for (const sp of servicePrices) {
-    await prisma.servicePrice.upsert({
-      where: { serviceLevel: sp.serviceLevel },
-      update: { pricePerCard: sp.pricePerCard, agencyFee: sp.agencyFee },
-      create: sp,
-    });
-  }
+  // Service prices（PSA料金表。pricePerCard=顧客請求額、agencyFee=代行手数料は別途運用で設定）
+  await prisma.servicePrice.deleteMany();
+  await prisma.servicePrice.createMany({
+    data: [
+      { serviceLevel: "REGULAR", pricePerCard: 9584, agencyFee: 0, maxDeclaredValue: 250000 },
+      { serviceLevel: "EXPRESS", pricePerCard: 20682, agencyFee: 0, maxDeclaredValue: 400000 },
+      { serviceLevel: "SUPER_EXPRESS", pricePerCard: 40482, agencyFee: 0, maxDeclaredValue: 750000 },
+      { serviceLevel: "WALK_THROUGH", pricePerCard: 80982, agencyFee: 0, maxDeclaredValue: 1500000 },
+      { serviceLevel: "PREMIUM_1", pricePerCard: 149980, agencyFee: 0, maxDeclaredValue: 4000000 },
+      { serviceLevel: "PREMIUM_2", pricePerCard: 299980, agencyFee: 0, maxDeclaredValue: 8000000 },
+      { serviceLevel: "PREMIUM_3", pricePerCard: 449980, agencyFee: 0, maxDeclaredValue: 15000000 },
+      { serviceLevel: "PREMIUM_5", pricePerCard: 749980, agencyFee: 0, maxDeclaredValue: 35000000 },
+      { serviceLevel: "PREMIUM_10", pricePerCard: 1499980, agencyFee: 0, maxDeclaredValue: null },
+    ],
+  });
 
   // Shipping rules
   await prisma.shippingRule.deleteMany();

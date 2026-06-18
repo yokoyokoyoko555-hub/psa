@@ -19,7 +19,7 @@
 | `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `psaSubmissionId`/`psaOrderId`, `status` |
 | `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(円), `status`(PaymentStatus) |
 | `Upcharge` / upcharges | 追加請求 | `psaDeclaredValue`/`psaFinalValue`/`upchargeAmount`, `status`(UpchargeStatus) |
-| `ServicePrice` / service_prices | サービス料金 | `serviceLevel`(uniq), `pricePerCard`, `agencyFee`, `isActive` |
+| `ServicePrice` / service_prices | サービス料金 | `serviceLevel`(uniq), `pricePerCard`(=顧客請求額), `agencyFee`, `maxDeclaredValue`(申告価格上限/null=無制限), `isActive` |
 | `ShippingRule` / shipping_rules | 送料 | `returnMethod`, `fee`, `minAmount`/`maxAmount`(帯), `sortOrder` |
 | `InsuranceRule` / insurance_rules | 保険料 | `minValue`/`maxValue`(帯), `fee` または `feeRate`(%) |
 | `Agreement` / agreements | 電子同意書 | `applicationId`(uniq), `agreedAt`, `ipAddress`/`userAgent`, `agreementText`, `version` |
@@ -72,7 +72,7 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 ## その他のEnum
 - `UserRole`: ADMIN / STAFF / ACCOUNTING(未使用) / CUSTOMER
 - `ApplicationStatus`: DRAFT / SUBMITTED / IN_PROGRESS / COMPLETED / CANCELLED
-- `ServiceLevel`: VALUE / REGULAR / EXPRESS / SUPER_EXPRESS
+- `ServiceLevel`: REGULAR / EXPRESS / SUPER_EXPRESS / WALK_THROUGH / PREMIUM_1 / PREMIUM_2 / PREMIUM_3 / PREMIUM_5 / PREMIUM_10（`VALUE`は旧プラン・未使用で残置）
 - `ReturnMethod`: STORE_PICKUP / SHIPPING
 - `CardLanguage`: JAPANESE / ENGLISH / KOREAN / CHINESE / OTHER
 - `PaymentStatus`: PENDING / SUCCEEDED / FAILED / REFUNDED / PARTIALLY_REFUNDED
