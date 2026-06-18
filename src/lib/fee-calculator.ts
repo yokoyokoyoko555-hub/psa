@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { ServiceLevel, ReturnMethod } from "@prisma/client";
+import { ServiceLevel, ReturnMethod, ServiceRegion } from "@prisma/client";
 
 const TAX_RATE = 0.1;
 const PSA_COST_RATE = 0.8; // 代理店価格: 定価の80%
@@ -16,13 +16,16 @@ export interface FeeBreakdown {
 
 export async function calculateFees(params: {
   serviceLevel: ServiceLevel;
+  region: ServiceRegion;
   returnMethod: ReturnMethod;
   cardCount: number;
   totalDeclaredValue: number;
+  /** 代行手数料を加算するか（当社入力=true / 顧客入力=false） */
+  applyAgencyFee: boolean;
 }): Promise<FeeBreakdown> {
   const [servicePrice, shippingRules, insuranceRules] = await Promise.all([
     prisma.servicePrice.findUnique({
-      where: { serviceLevel: params.serviceLevel },
+      where: { serviceLevel_region: { serviceLevel: params.serviceLevel, region: params.region } },
     }),
     prisma.shippingRule.findMany({
       where: { returnMethod: params.returnMethod, isActive: true },
@@ -38,7 +41,9 @@ export async function calculateFees(params: {
 
   const psaFeeTotal = servicePrice.pricePerCard * params.cardCount;
   const psaCostTotal = Math.floor(psaFeeTotal * PSA_COST_RATE);
-  const agencyFeeTotal = servicePrice.agencyFee * params.cardCount;
+  const agencyFeeTotal = params.applyAgencyFee
+    ? servicePrice.agencyFee * params.cardCount
+    : 0;
 
   // 送料計算（金額帯ごと）
   const shippingRule = shippingRules.find((r) => {

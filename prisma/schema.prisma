@@ -62,6 +62,18 @@ enum ReturnMethod {
   SHIPPING
 }
 
+// 鑑定提出先（料金体系が異なる）
+enum ServiceRegion {
+  PSA_JP
+  PSA_US
+}
+
+// 申込の入力経路（手数料の有無を分岐）
+enum ApplicationSource {
+  CUSTOMER // 顧客自身が入力（手数料なし）
+  STORE // 店舗（当社）が代理入力（手数料あり）
+}
+
 enum CardLanguage {
   JAPANESE
   ENGLISH
@@ -159,6 +171,8 @@ model Application {
   applicationNo  String            @unique // 表示用申込番号 APP-YYYYMMDD-XXXX
   customerId     String
   serviceLevel   ServiceLevel
+  region         ServiceRegion     @default(PSA_JP) // 提出先（PSA日本 / PSA US）
+  source         ApplicationSource @default(CUSTOMER) // 顧客入力 / 当社(店舗)入力
   returnMethod   ReturnMethod
   status         ApplicationStatus @default(DRAFT)
   totalAmount    Int               @default(0) // 円
@@ -328,15 +342,17 @@ model Upcharge {
 // ===== SERVICE PRICES (サービス料金設定) =====
 
 model ServicePrice {
-  id               String       @id @default(cuid())
-  serviceLevel     ServiceLevel @unique
+  id               String        @id @default(cuid())
+  serviceLevel     ServiceLevel
+  region           ServiceRegion @default(PSA_JP)
   pricePerCard     Int // 1枚あたり鑑定料（円）= 顧客請求額
-  agencyFee        Int // 代行手数料（円）
+  agencyFee        Int // 代行手数料（円）= 当社入力(STORE)時のみ加算
   maxDeclaredValue Int? // 申告価格の上限（円）。nullは上限なし
-  isActive         Boolean      @default(true)
-  updatedAt        DateTime     @updatedAt
+  isActive         Boolean       @default(true)
+  updatedAt        DateTime      @updatedAt
   updatedBy        String?
 
+  @@unique([serviceLevel, region])
   @@map("service_prices")
 }
 

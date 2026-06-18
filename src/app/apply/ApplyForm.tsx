@@ -11,8 +11,13 @@ declare global {
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createApplication } from "@/actions/application";
-import { CardLanguage, ServiceLevel, ReturnMethod } from "@prisma/client";
+import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
+
+const REGION_LABELS: Record<ServiceRegion, string> = {
+  PSA_JP: "PSA 日本",
+  PSA_US: "PSA US",
+};
 
 interface CardInput {
   tcgTitle: string;
@@ -125,6 +130,7 @@ export default function ApplyForm({
   const router = useRouter();
   const [step, setStep] = useState<"cards" | "service" | "confirm" | "payment">("cards");
   const [cards, setCards] = useState<CardInput[]>([newCard()]);
+  const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [serviceLevel, setServiceLevel] = useState<ServiceLevel>("REGULAR");
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
   const [agreed, setAgreed] = useState(false);
@@ -163,9 +169,10 @@ export default function ApplyForm({
   const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
   const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
 
-  const servicePrice = servicePrices.find((p) => p.serviceLevel === serviceLevel);
+  const regionPrices = servicePrices.filter((p) => p.region === region);
+  const servicePrice = regionPrices.find((p) => p.serviceLevel === serviceLevel);
   const psaFeeTotal = (servicePrice?.pricePerCard ?? 0) * cardCount;
-  const agencyFeeTotal = (servicePrice?.agencyFee ?? 0) * cardCount;
+  const agencyFeeTotal = 0; // 顧客入力は手数料なし
 
   const shippingRule =
     shippingRules.find((r) => {
@@ -200,6 +207,7 @@ export default function ApplyForm({
 
     const result = await createApplication({
       serviceLevel,
+      region,
       returnMethod,
       cards: cards.map((c) => ({
         tcgTitle: c.tcgTitle,
@@ -541,9 +549,28 @@ export default function ApplyForm({
             <h2 className="text-lg font-bold text-gray-900">サービス・返却方法の選択</h2>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <h3 className="font-bold text-gray-800">鑑定提出先</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {(["PSA_JP", "PSA_US"] as ServiceRegion[]).map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRegion(r)}
+                    className={`border-2 rounded-xl p-4 text-center font-bold transition ${
+                      region === r
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-gray-200 text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    {REGION_LABELS[r]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h3 className="font-bold text-gray-800">サービスレベル</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {servicePrices.map((sp) => (
+                {regionPrices.map((sp) => (
                   <button
                     key={sp.serviceLevel}
                     onClick={() => setServiceLevel(sp.serviceLevel)}
@@ -663,6 +690,7 @@ export default function ApplyForm({
                 ))}
               </div>
               <div className="mt-2 text-sm text-gray-600">
+                <span className="font-medium">提出先:</span> {REGION_LABELS[region]} /{" "}
                 <span className="font-medium">サービス:</span>{" "}
                 {SERVICE_LABELS[serviceLevel]} /{" "}
                 <span className="font-medium">返却:</span>{" "}

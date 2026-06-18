@@ -6,7 +6,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
 import { createPaymentIntent } from "@/lib/stripe";
 import { logOperation, getClientIp } from "@/lib/operation-log";
-import { CardLanguage, ServiceLevel, ReturnMethod } from "@prisma/client";
+import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
 import { z } from "zod";
 import { headers } from "next/headers";
 
@@ -26,6 +26,7 @@ const cardSchema = z.object({
 
 const applicationSchema = z.object({
   serviceLevel: z.nativeEnum(ServiceLevel),
+  region: z.nativeEnum(ServiceRegion),
   returnMethod: z.nativeEnum(ReturnMethod),
   cards: z.array(cardSchema).min(1).max(200),
   agreementText: z.string().min(1),
@@ -49,9 +50,14 @@ export async function createApplication(
     return { success: false, error: "Stripe顧客情報が見つかりません" };
   }
 
-  // 申告価格上限のバリデーション（選択サービスレベルの上限を超えるカードは不可）
+  // 申告価格上限のバリデーション（選択サービスレベル×地域の上限を超えるカードは不可）
   const servicePrice = await prisma.servicePrice.findUnique({
-    where: { serviceLevel: parsed.data.serviceLevel },
+    where: {
+      serviceLevel_region: {
+        serviceLevel: parsed.data.serviceLevel,
+        region: parsed.data.region,
+      },
+    },
   });
   if (!servicePrice) {
     return { success: false, error: "サービスレベルが見つかりません" };
@@ -74,11 +80,14 @@ export async function createApplication(
   );
   const cardCount = parsed.data.cards.reduce((sum, c) => sum + c.quantity, 0);
 
+  // 顧客自身の申込は手数料なし（当社入力=STORE は管理画面の代理申込で別途）
   const fees = await calculateFees({
     serviceLevel: parsed.data.serviceLevel,
+    region: parsed.data.region,
     returnMethod: parsed.data.returnMethod,
     cardCount,
     totalDeclaredValue,
+    applyAgencyFee: false,
   });
 
   const applicationNo = await generateApplicationNo();
@@ -89,6 +98,8 @@ export async function createApplication(
         applicationNo,
         customerId: customer.id,
         serviceLevel: parsed.data.serviceLevel,
+        region: parsed.data.region,
+        source: "CUSTOMER",
         returnMethod: parsed.data.returnMethod,
         status: "DRAFT",
         totalAmount: fees.totalAmount,
@@ -100,16 +111,14 @@ export async function createApplication(
       },
     });
 
-    // カード作成
-    const servicePriceData = await prisma.servicePrice.findUnique({
-      where: { serviceLevel: parsed.data.serviceLevel },
-    });
+    // カード作成（顧客入力のため代行手数料は0）
+    const servicePriceData = servicePrice;
 
     for (const cardInput of parsed.data.cards) {
       const cardNo = await generateCardNo();
       const psaFee = (servicePriceData?.pricePerCard ?? 0) * cardInput.quantity;
       const psaCost = Math.floor(psaFee * 0.8);
-      const agencyFee = (servicePriceData?.agencyFee ?? 0) * cardInput.quantity;
+      const agencyFee = 0; // 顧客入力は手数料なし
 
       await tx.card.create({
         data: {

@@ -10,12 +10,21 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const updates: { id: string; pricePerCard: number; agencyFee: number }[] = await req.json();
+  const updates: {
+    id: string;
+    pricePerCard: number;
+    agencyFee: number;
+    maxDeclaredValue: number | null;
+  }[] = await req.json();
 
   for (const u of updates) {
     await prisma.servicePrice.update({
       where: { id: u.id },
-      data: { pricePerCard: u.pricePerCard, agencyFee: u.agencyFee },
+      data: {
+        pricePerCard: u.pricePerCard,
+        agencyFee: u.agencyFee,
+        maxDeclaredValue: u.maxDeclaredValue,
+      },
     });
   }
 

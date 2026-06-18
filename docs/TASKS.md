@@ -44,6 +44,8 @@
 ## 未実装・要改善
 
 ### 優先度: 高
+- 🟡 **当社入力（代理申込）UI** — 管理画面に「代理申込」ページを追加（source=STORE・手数料あり）。基盤(enum/料金/計算/顧客フロー地域選択)は実装済み、店舗入力画面が残り（[ADR-0011](DECISIONS.md)）
+- ❌ **PSA US の正式料金** — 現在JPと同額の暫定値。管理画面→設定で正式値に更新
 - ❌ **Stripe Elements 統合**（`ApplyForm.tsx` の payment ステップを実決済に。`@stripe/react-stripe-js`/`@stripe/stripe-js` 導入、`Elements` プロバイダ、`confirmCardPayment` 実装）
 - ❌ **管理者2FA(TOTP)の配線**（`speakeasy` 利用。QR発行→検証→ログインフローへ組込み。現状UIのみ）
 - ❌ **本番シークレットの差し替え**（テスト用パスワード `Admin1234!` 等、`ENCRYPTION_KEY`/`NEXTAUTH_SECRET` の本番値確認）

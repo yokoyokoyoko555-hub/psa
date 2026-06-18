@@ -48,20 +48,26 @@ async function main() {
     },
   });
 
-  // Service prices（PSA料金表。pricePerCard=顧客請求額、agencyFee=代行手数料は別途運用で設定）
+  // Service prices（PSA料金表。pricePerCard=顧客請求額、agencyFee=当社入力時のみ加算）
+  // 地域(PSA_JP / PSA_US)ごとに保持。PSA_US は暫定で JP と同額（管理画面で調整）。
+  const baseLevels = [
+    { serviceLevel: "REGULAR" as const, pricePerCard: 9584, maxDeclaredValue: 250000 },
+    { serviceLevel: "EXPRESS" as const, pricePerCard: 20682, maxDeclaredValue: 400000 },
+    { serviceLevel: "SUPER_EXPRESS" as const, pricePerCard: 40482, maxDeclaredValue: 750000 },
+    { serviceLevel: "WALK_THROUGH" as const, pricePerCard: 80982, maxDeclaredValue: 1500000 },
+    { serviceLevel: "PREMIUM_1" as const, pricePerCard: 149980, maxDeclaredValue: 4000000 },
+    { serviceLevel: "PREMIUM_2" as const, pricePerCard: 299980, maxDeclaredValue: 8000000 },
+    { serviceLevel: "PREMIUM_3" as const, pricePerCard: 449980, maxDeclaredValue: 15000000 },
+    { serviceLevel: "PREMIUM_5" as const, pricePerCard: 749980, maxDeclaredValue: 35000000 },
+    { serviceLevel: "PREMIUM_10" as const, pricePerCard: 1499980, maxDeclaredValue: null },
+  ];
+  const regions = ["PSA_JP", "PSA_US"] as const;
+
   await prisma.servicePrice.deleteMany();
   await prisma.servicePrice.createMany({
-    data: [
-      { serviceLevel: "REGULAR", pricePerCard: 9584, agencyFee: 0, maxDeclaredValue: 250000 },
-      { serviceLevel: "EXPRESS", pricePerCard: 20682, agencyFee: 0, maxDeclaredValue: 400000 },
-      { serviceLevel: "SUPER_EXPRESS", pricePerCard: 40482, agencyFee: 0, maxDeclaredValue: 750000 },
-      { serviceLevel: "WALK_THROUGH", pricePerCard: 80982, agencyFee: 0, maxDeclaredValue: 1500000 },
-      { serviceLevel: "PREMIUM_1", pricePerCard: 149980, agencyFee: 0, maxDeclaredValue: 4000000 },
-      { serviceLevel: "PREMIUM_2", pricePerCard: 299980, agencyFee: 0, maxDeclaredValue: 8000000 },
-      { serviceLevel: "PREMIUM_3", pricePerCard: 449980, agencyFee: 0, maxDeclaredValue: 15000000 },
-      { serviceLevel: "PREMIUM_5", pricePerCard: 749980, agencyFee: 0, maxDeclaredValue: 35000000 },
-      { serviceLevel: "PREMIUM_10", pricePerCard: 1499980, agencyFee: 0, maxDeclaredValue: null },
-    ],
+    data: regions.flatMap((region) =>
+      baseLevels.map((l) => ({ ...l, region, agencyFee: 0 }))
+    ),
   });
 
   // Shipping rules

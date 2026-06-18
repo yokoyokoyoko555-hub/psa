@@ -13,13 +13,13 @@
 | `User` / users | 管理者・スタッフ | `email`(uniq), `passwordHash`, `role`, `twoFactorSecret`/`twoFactorEnabled`, `isActive` |
 | `Customer` / customers | 顧客 | PII列=`*Encrypted`(AES-256-GCM), `email`(uniq)/`postalCode`は平文, `stripeCustomerId`(uniq) |
 | `CustomerSession` / customer_sessions | 顧客セッション | `sessionToken`(uniq), `expires`, Customterへ Cascade |
-| `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), 料金内訳, `status`(ApplicationStatus) |
+| `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `source`(CUSTOMER/STORE), 料金内訳, `status` |
 | `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金 |
 | `CardStatusHistory` / card_status_histories | ステータス履歴 | `status`, `changedBy`(userId or customerId), Cardへ Cascade |
 | `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `psaSubmissionId`/`psaOrderId`, `status` |
 | `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(円), `status`(PaymentStatus) |
 | `Upcharge` / upcharges | 追加請求 | `psaDeclaredValue`/`psaFinalValue`/`upchargeAmount`, `status`(UpchargeStatus) |
-| `ServicePrice` / service_prices | サービス料金 | `serviceLevel`(uniq), `pricePerCard`(=顧客請求額), `agencyFee`, `maxDeclaredValue`(申告価格上限/null=無制限), `isActive` |
+| `ServicePrice` / service_prices | サービス料金 | `@@unique([serviceLevel, region])`, `region`(PSA_JP/PSA_US), `pricePerCard`(=顧客請求額), `agencyFee`(当社入力時のみ加算), `maxDeclaredValue`(上限/null=無制限), `isActive` |
 | `ShippingRule` / shipping_rules | 送料 | `returnMethod`, `fee`, `minAmount`/`maxAmount`(帯), `sortOrder` |
 | `InsuranceRule` / insurance_rules | 保険料 | `minValue`/`maxValue`(帯), `fee` または `feeRate`(%) |
 | `Agreement` / agreements | 電子同意書 | `applicationId`(uniq), `agreedAt`, `ipAddress`/`userAgent`, `agreementText`, `version` |
@@ -74,6 +74,8 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 - `ApplicationStatus`: DRAFT / SUBMITTED / IN_PROGRESS / COMPLETED / CANCELLED
 - `ServiceLevel`: REGULAR / EXPRESS / SUPER_EXPRESS / WALK_THROUGH / PREMIUM_1 / PREMIUM_2 / PREMIUM_3 / PREMIUM_5 / PREMIUM_10（`VALUE`は旧プラン・未使用で残置）
 - `ReturnMethod`: STORE_PICKUP / SHIPPING
+- `ServiceRegion`: PSA_JP / PSA_US（鑑定提出先。料金体系が地域別）
+- `ApplicationSource`: CUSTOMER（顧客入力=手数料なし）/ STORE（当社入力=手数料あり）
 - `CardLanguage`: JAPANESE / ENGLISH / KOREAN / CHINESE / OTHER
 - `PaymentStatus`: PENDING / SUCCEEDED / FAILED / REFUNDED / PARTIALLY_REFUNDED
 - `UpchargeStatus`: PENDING / PAID / FAILED / WAIVED
