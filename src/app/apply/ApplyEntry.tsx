@@ -4,6 +4,7 @@ import { useState } from "react";
 import ApplyForm from "./ApplyForm";
 import StoreRequestForm from "./StoreRequestForm";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
+import type { CustomerProfile } from "@/actions/customer";
 
 type Props = {
   customerId: string;
@@ -11,6 +12,7 @@ type Props = {
   servicePrices: ServicePrice[];
   shippingRules: ShippingRule[];
   insuranceRules: InsuranceRule[];
+  profile: CustomerProfile | null;
 };
 
 export default function ApplyEntry(props: Props) {

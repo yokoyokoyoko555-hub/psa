@@ -16,6 +16,7 @@ import { createApplication } from "@/actions/application";
 const DRAFT_KEY = "psa-apply-draft";
 import { ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
+import type { CustomerProfile } from "@/actions/customer";
 
 const SERVICE_LABELS: Record<ServiceLevel, string> = {
   VALUE: "バリュー",
@@ -75,11 +76,13 @@ type Props = {
   servicePrices: ServicePrice[];
   shippingRules: ShippingRule[];
   insuranceRules: InsuranceRule[];
+  profile: CustomerProfile | null;
 };
 
 const STEPS = [
   { key: "service", label: "サービス選択" },
   { key: "cards", label: "カード情報" },
+  { key: "shipping", label: "発送先・請求" },
   { key: "confirm", label: "確認・同意" },
   { key: "payment", label: "お支払い" },
 ] as const;
@@ -90,6 +93,7 @@ export default function ApplyForm({
   shippingRules,
   insuranceRules,
   stripePublishableKey,
+  profile,
 }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<StepKey>("service");
@@ -203,7 +207,7 @@ export default function ApplyForm({
       if (d.serviceLevel) setServiceLevel(d.serviceLevel);
       if (d.returnMethod) setReturnMethod(d.returnMethod);
       if (Array.isArray(d.cards)) setCards(d.cards);
-      if (typeof d.maxStep === "number") setMaxStep(Math.min(d.maxStep, 2));
+      if (typeof d.maxStep === "number") setMaxStep(Math.min(d.maxStep, 3));
       if (d.step && d.step !== "payment") setStep(d.step);
     } catch {
       /* ignore */
@@ -273,7 +277,7 @@ export default function ApplyForm({
         /* ignore */
       }
       setClientSecret(result.clientSecret);
-      setMaxStep(3);
+      setMaxStep(4);
       setStep("payment");
     } else {
       setError(result.error ?? "エラーが発生しました");
@@ -616,8 +620,66 @@ export default function ApplyForm({
                   return;
                 }
                 setError("");
-                goStep("confirm");
+                goStep("shipping");
               }}
+              className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
+            >
+              発送先・請求へ進む
+            </button>
+          </div>
+        )}
+
+        {/* STEP 3: Shipping & Billing */}
+        {step === "shipping" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-gray-900">発送先（返却先）</h2>
+                <span className="text-xs text-gray-500">
+                  {returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}
+                </span>
+              </div>
+              {profile ? (
+                <div className="border border-gray-200 rounded-lg p-4 text-sm text-gray-800">
+                  <p className="font-medium">{profile.name} 様</p>
+                  <p className="text-gray-600 mt-1">
+                    〒{profile.postalCode}　{profile.prefecture}
+                    {profile.address}
+                    {profile.address2 ? ` ${profile.address2}` : ""}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">登録住所が取得できませんでした。</p>
+              )}
+              <p className="text-xs text-gray-400">
+                ※ 登録済みの住所を使用します。変更はマイページから行えます。
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+              <h2 className="font-bold text-gray-900">電話番号</h2>
+              <div className="border border-gray-200 rounded-lg p-4 text-sm text-gray-800">
+                {profile?.phone ?? "—"}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+              <h2 className="font-bold text-gray-900">支払い方法</h2>
+              <p className="text-sm text-gray-500">支払い方法を選択してください</p>
+              <button
+                type="button"
+                disabled
+                className="w-full flex items-center gap-2 border border-gray-200 rounded-lg p-4 text-sm text-gray-400 cursor-not-allowed"
+              >
+                <span className="text-lg">＋</span> 新しいカードを追加する
+              </button>
+              <p className="text-xs text-gray-400">
+                ※ カード決済（Stripe）は準備中です。次の確認画面で申込内容をご確認いただけます。
+              </p>
+            </div>
+
+            <button
+              onClick={() => goStep("confirm")}
               className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
             >
               確認へ進む
@@ -625,7 +687,7 @@ export default function ApplyForm({
           </div>
         )}
 
-        {/* STEP 3: Confirm */}
+        {/* STEP 4: Confirm */}
         {step === "confirm" && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
