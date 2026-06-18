@@ -9,6 +9,7 @@ declare global {
 }
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createApplication } from "@/actions/application";
 import { ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
@@ -270,8 +271,10 @@ export default function ApplyForm({
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="max-w-3xl mx-auto">
-          <p className="text-xs text-gray-500">トレカビンクス PSA申込</p>
-          <h1 className="font-bold text-gray-900">PSA鑑定申込</h1>
+          <Link href="/" className="inline-block hover:opacity-70 transition">
+            <p className="text-xs text-gray-500">トレカビンクス PSA申込</p>
+            <h1 className="font-bold text-gray-900">PSA鑑定申込</h1>
+          </Link>
         </div>
       </header>
 
