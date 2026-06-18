@@ -319,26 +319,16 @@ export default function ApplyForm({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        {/* 上段: ロゴ + 保存・終了 */}
-        <div className="px-4 py-3 border-b border-gray-100">
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-            <Link href="/" className="shrink-0 hover:opacity-70 transition">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.jpg" alt="トレカビンクス" className="h-10 w-auto" />
-            </Link>
-            <button
-              onClick={handleSaveAndExit}
-              className="shrink-0 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
-            >
-              保存・終了
-            </button>
-          </div>
-        </div>
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3">
+        <div className="max-w-6xl mx-auto flex items-center gap-4">
+          {/* ロゴ（クリックでトップへ） */}
+          <Link href="/" className="shrink-0 hover:opacity-70 transition">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="トレカビンクス" className="h-10 w-auto" />
+          </Link>
 
-        {/* 下段: 番号付きステッパー（到達済みステップはクリックで戻れる） */}
-        <div className="px-4 py-3">
-          <nav className="max-w-6xl mx-auto flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm overflow-x-auto whitespace-nowrap">
+          {/* 番号付きステッパー（到達済みステップはクリックで戻れる） */}
+          <nav className="flex-1 flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm overflow-x-auto whitespace-nowrap">
             {STEPS.map((s, i) => {
               const reachable = i <= maxStep;
               const current = i === currentIdx;
@@ -375,6 +365,14 @@ export default function ApplyForm({
               );
             })}
           </nav>
+
+          {/* 一時保存して終了 */}
+          <button
+            onClick={handleSaveAndExit}
+            className="shrink-0 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+          >
+            保存・終了
+          </button>
         </div>
       </header>
 
