@@ -14,7 +14,7 @@
 | `Customer` / customers | 顧客 | PII列=`*Encrypted`(AES-256-GCM), `email`(uniq)/`postalCode`は平文, `stripeCustomerId`(uniq) |
 | `CustomerSession` / customer_sessions | 顧客セッション | `sessionToken`(uniq), `expires`, Customterへ Cascade |
 | `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `source`(CUSTOMER/STORE), 料金内訳, `status` |
-| `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金 |
+| `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金 |
 | `CardStatusHistory` / card_status_histories | ステータス履歴 | `status`, `changedBy`(userId or customerId), Cardへ Cascade |
 | `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `psaSubmissionId`/`psaOrderId`, `status` |
 | `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(円), `status`(PaymentStatus) |

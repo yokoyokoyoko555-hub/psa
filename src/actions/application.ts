@@ -12,10 +12,11 @@ import { headers } from "next/headers";
 
 const cardSchema = z.object({
   tcgTitle: z.string().min(1).max(200),
+  releaseYear: z.number().int().min(1900).max(2100).optional(),
   cardName: z.string().min(1).max(200),
   cardNumber: z.string().max(100).optional(),
   rarity: z.string().max(100).optional(),
-  language: z.nativeEnum(CardLanguage),
+  language: z.nativeEnum(CardLanguage).default("JAPANESE"),
   declaredValue: z.number().int().min(1),
   quantity: z.number().int().min(1).max(100),
   frontImageKey: z.string().optional(),
@@ -126,6 +127,7 @@ export async function createApplication(
           applicationId: app.id,
           cardNo,
           tcgTitle: cardInput.tcgTitle,
+          releaseYear: cardInput.releaseYear,
           cardName: cardInput.cardName,
           cardNumber: cardInput.cardNumber,
           rarity: cardInput.rarity,

@@ -210,11 +210,12 @@ model Card {
   psaGradedAt          DateTime?
 
   // カード情報
-  tcgTitle      String // TCGタイトル
+  tcgTitle      String // タイトル（セット名など）
+  releaseYear   Int? // 発行年
   cardName      String // カード名
-  cardNumber    String? // 型番
+  cardNumber    String? // カード番号
   rarity        String? // レアリティ
-  language      CardLanguage
+  language      CardLanguage @default(JAPANESE)
   declaredValue Int // 申告価格（円）
   quantity      Int          @default(1)
 

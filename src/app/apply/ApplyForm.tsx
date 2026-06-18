@@ -8,42 +8,11 @@ declare global {
   }
 }
 
-import { useState, useCallback, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createApplication } from "@/actions/application";
-import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
+import { ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
-
-const REGION_LABELS: Record<ServiceRegion, string> = {
-  PSA_JP: "PSA 日本",
-  PSA_US: "PSA US",
-};
-
-interface CardInput {
-  tcgTitle: string;
-  cardName: string;
-  cardNumber: string;
-  rarity: string;
-  language: CardLanguage;
-  declaredValue: number;
-  quantity: number;
-  frontImageKey: string;
-  backImageKey: string;
-  damageImageKeys: string[];
-  notes: string;
-  // client-side temp IDs for S3 upload (not sent to server directly)
-  _tempId: string;
-  _frontUploading: boolean;
-  _backUploading: boolean;
-}
-
-const LANGUAGE_LABELS: Record<CardLanguage, string> = {
-  JAPANESE: "日本語",
-  ENGLISH: "英語",
-  KOREAN: "韓国語",
-  CHINESE: "中国語",
-  OTHER: "その他",
-};
 
 const SERVICE_LABELS: Record<ServiceLevel, string> = {
   VALUE: "バリュー",
@@ -58,7 +27,13 @@ const SERVICE_LABELS: Record<ServiceLevel, string> = {
   PREMIUM_10: "プレミアム 10",
 };
 
+const REGION_LABELS: Record<ServiceRegion, string> = {
+  PSA_JP: "PSA 日本",
+  PSA_US: "PSA US",
+};
+
 const TAX_RATE = 0.1;
+const AGREEMENT_VERSION = "v1.0";
 const AGREEMENT_TEXT = `PSA鑑定受付代行サービス利用規約
 
 1. 本サービスはカードのPSA鑑定を代行するサービスです。
@@ -69,24 +44,25 @@ const AGREEMENT_TEXT = `PSA鑑定受付代行サービス利用規約
 6. 個人情報は鑑定業務にのみ使用します。
 7. カードの郵送時の事故については責任を負いかねます。`;
 
-const AGREEMENT_VERSION = "v1.0";
+interface CardItem {
+  tcgTitle: string;
+  releaseYear: string; // 入力は文字列、送信時に数値化
+  cardNumber: string;
+  cardName: string;
+  rarity: string;
+  quantity: number;
+  declaredValue: number;
+}
 
-function newCard(): CardInput {
+function emptyCard(): CardItem {
   return {
     tcgTitle: "",
-    cardName: "",
+    releaseYear: "",
     cardNumber: "",
+    cardName: "",
     rarity: "",
-    language: "JAPANESE",
-    declaredValue: 0,
     quantity: 1,
-    frontImageKey: "",
-    backImageKey: "",
-    damageImageKeys: [],
-    notes: "",
-    _tempId: crypto.randomUUID(),
-    _frontUploading: false,
-    _backUploading: false,
+    declaredValue: 0,
   };
 }
 
@@ -98,28 +74,13 @@ type Props = {
   insuranceRules: InsuranceRule[];
 };
 
-async function uploadToS3(
-  file: File,
-  tempId: string,
-  type: "front" | "back" | "damage"
-): Promise<string> {
-  const contentType = file.type as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
-  const res = await fetch("/api/s3/presign", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tempId, type, contentType }),
-  });
-  if (!res.ok) throw new Error("プリサイン取得失敗");
-  const { uploadUrl, key } = await res.json();
-
-  const put = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": contentType },
-    body: file,
-  });
-  if (!put.ok) throw new Error("S3アップロード失敗");
-  return key;
-}
+const STEPS = [
+  { key: "service", label: "サービス選択" },
+  { key: "cards", label: "カード情報" },
+  { key: "confirm", label: "確認・同意" },
+  { key: "payment", label: "お支払い" },
+] as const;
+type StepKey = (typeof STEPS)[number]["key"];
 
 export default function ApplyForm({
   servicePrices,
@@ -128,49 +89,79 @@ export default function ApplyForm({
   stripePublishableKey,
 }: Props) {
   const router = useRouter();
-  const [step, setStep] = useState<"cards" | "service" | "confirm" | "payment">("cards");
-  const [cards, setCards] = useState<CardInput[]>([newCard()]);
+  const [step, setStep] = useState<StepKey>("service");
+
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
-  const [serviceLevel, setServiceLevel] = useState<ServiceLevel>("REGULAR");
+  const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(null);
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
+
+  const [cards, setCards] = useState<CardItem[]>([]);
+  const [draft, setDraft] = useState<CardItem>(emptyCard());
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const cardRefs = useRef<HTMLInputElement[]>([]);
-
-  const addCard = () => setCards((prev) => [...prev, newCard()]);
-  const removeCard = (i: number) => setCards((prev) => prev.filter((_, idx) => idx !== i));
-
-  const updateCard = useCallback(
-    <K extends keyof CardInput>(i: number, field: K, value: CardInput[K]) => {
-      setCards((prev) => prev.map((c, idx) => (idx === i ? { ...c, [field]: value } : c)));
-    },
-    []
-  );
-
-  async function handleImageUpload(
-    i: number,
-    type: "front" | "back",
-    file: File
-  ) {
-    updateCard(i, type === "front" ? "_frontUploading" : "_backUploading", true);
-    try {
-      const key = await uploadToS3(file, cards[i]._tempId, type);
-      updateCard(i, type === "front" ? "frontImageKey" : "backImageKey", key);
-    } catch {
-      setError(`画像アップロードに失敗しました（${type}）`);
-    } finally {
-      updateCard(i, type === "front" ? "_frontUploading" : "_backUploading", false);
-    }
-  }
-
-  const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
-  const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
 
   const regionPrices = servicePrices.filter((p) => p.region === region);
   const servicePrice = regionPrices.find((p) => p.serviceLevel === serviceLevel);
+  const cap = servicePrice?.maxDeclaredValue ?? null;
+
+  function setDraftField<K extends keyof CardItem>(field: K, value: CardItem[K]) {
+    setDraft((d) => ({ ...d, [field]: value }));
+  }
+
+  function clearDraft() {
+    setDraft(emptyCard());
+    setEditingIndex(null);
+    setError("");
+  }
+
+  function saveDraft() {
+    setError("");
+    if (!draft.tcgTitle.trim() || !draft.cardName.trim()) {
+      setError("タイトルとカード名は必須です");
+      return;
+    }
+    if (draft.declaredValue < 1) {
+      setError("申告金額を入力してください");
+      return;
+    }
+    if (cap !== null && draft.declaredValue > cap) {
+      setError(
+        `申告金額が選択中のサービス上限（¥${cap.toLocaleString()}）を超えています。上位サービスを選択してください。`
+      );
+      return;
+    }
+    if (draft.quantity < 1) {
+      setError("枚数は1以上で入力してください");
+      return;
+    }
+
+    if (editingIndex !== null) {
+      setCards((prev) => prev.map((c, i) => (i === editingIndex ? draft : c)));
+    } else {
+      setCards((prev) => [...prev, draft]);
+    }
+    clearDraft();
+  }
+
+  function editCard(i: number) {
+    setDraft(cards[i]);
+    setEditingIndex(i);
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function deleteCard(i: number) {
+    setCards((prev) => prev.filter((_, idx) => idx !== i));
+    if (editingIndex === i) clearDraft();
+  }
+
+  const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
+  const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
   const psaFeeTotal = (servicePrice?.pricePerCard ?? 0) * cardCount;
   const agencyFeeTotal = 0; // 顧客入力は手数料なし
 
@@ -202,6 +193,10 @@ export default function ApplyForm({
       setError("利用規約に同意してください");
       return;
     }
+    if (!serviceLevel) {
+      setError("サービスを選択してください");
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -211,16 +206,14 @@ export default function ApplyForm({
       returnMethod,
       cards: cards.map((c) => ({
         tcgTitle: c.tcgTitle,
+        releaseYear: c.releaseYear ? parseInt(c.releaseYear) : undefined,
         cardName: c.cardName,
         cardNumber: c.cardNumber || undefined,
         rarity: c.rarity || undefined,
-        language: c.language,
+        language: "JAPANESE" as const,
         declaredValue: c.declaredValue,
         quantity: c.quantity,
-        frontImageKey: c.frontImageKey || undefined,
-        backImageKey: c.backImageKey || undefined,
-        damageImageKeys: c.damageImageKeys,
-        notes: c.notes || undefined,
+        damageImageKeys: [],
       })),
       agreementText: AGREEMENT_TEXT,
       agreementVersion: AGREEMENT_VERSION,
@@ -241,12 +234,13 @@ export default function ApplyForm({
     if (!clientSecret) return;
     setPaymentLoading(true);
     setError("");
-
-    // Dynamically load Stripe.js from CDN
     if (!window.Stripe) {
       const script = document.createElement("script");
       script.src = "https://js.stripe.com/v3/";
-      await new Promise<void>((resolve) => { script.onload = () => resolve(); document.head.appendChild(script); });
+      await new Promise<void>((resolve) => {
+        script.onload = () => resolve();
+        document.head.appendChild(script);
+      });
     }
     const stripe = window.Stripe?.(stripePublishableKey) as {
       confirmCardPayment: (secret: string, opts: object) => Promise<{ error?: { message?: string } }>;
@@ -256,23 +250,9 @@ export default function ApplyForm({
       setPaymentLoading(false);
       return;
     }
-
-    const cardNumberEl = document.getElementById("stripe-card-number") as HTMLInputElement | null;
-    if (!cardNumberEl) {
-      setError("カード番号を入力してください");
-      setPaymentLoading(false);
-      return;
-    }
-
-    // For production: use stripe.confirmCardPayment with Elements
-    // This is a simplified placeholder that shows the flow
     const { error: stripeError } = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: {
-        card: { token: "tok_visa" },
-        billing_details: { name: "Customer" },
-      },
+      payment_method: { card: { token: "tok_visa" }, billing_details: { name: "Customer" } },
     });
-
     if (stripeError) {
       setError(stripeError.message ?? "決済エラーが発生しました");
       setPaymentLoading(false);
@@ -280,6 +260,11 @@ export default function ApplyForm({
       router.push("/mypage?payment=success");
     }
   }
+
+  const currentIdx = STEPS.findIndex((s) => s.key === step);
+
+  const inputCls =
+    "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -290,266 +275,39 @@ export default function ApplyForm({
         </div>
       </header>
 
-      {/* Progress */}
-      <div className="bg-white border-b border-gray-100 px-4 py-3">
-        <div className="max-w-3xl mx-auto flex gap-4">
-          {(["cards", "service", "confirm", "payment"] as const).map((s, i) => {
-            const labels = ["カード情報", "サービス", "確認・同意", "お支払い"];
-            const currentIdx = ["cards", "service", "confirm", "payment"].indexOf(step);
-            return (
+      {/* Stepper */}
+      <div className="max-w-3xl mx-auto px-4 py-4">
+        <div className="flex items-center gap-2">
+          {STEPS.map((s, i) => (
+            <div key={s.key} className="flex items-center gap-2">
               <div
-                key={s}
-                className={`flex items-center gap-2 text-sm ${
-                  step === s
-                    ? "text-brand-600 font-bold"
-                    : i < currentIdx
-                    ? "text-green-600"
-                    : "text-gray-400"
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                  i <= currentIdx ? "bg-brand-600 text-white" : "bg-gray-200 text-gray-500"
                 }`}
               >
-                <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    i < currentIdx
-                      ? "bg-green-500 text-white"
-                      : step === s
-                      ? "bg-brand-600 text-white"
-                      : "bg-gray-200 text-gray-500"
-                  }`}
-                >
-                  {i < currentIdx ? "✓" : i + 1}
-                </span>
-                <span className="hidden sm:inline">{labels[i]}</span>
+                {i + 1}
               </div>
-            );
-          })}
+              <span className={`text-sm ${i === currentIdx ? "font-bold text-brand-700" : "text-gray-500"}`}>
+                {s.label}
+              </span>
+              {i < STEPS.length - 1 && <span className="text-gray-300 mx-1">›</span>}
+            </div>
+          ))}
         </div>
       </div>
 
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-3xl mx-auto px-4 pb-16">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-6 text-sm">
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm mb-4">
             {error}
           </div>
         )}
 
-        {/* STEP 1: Cards */}
-        {step === "cards" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">カード情報入力</h2>
-              <button
-                onClick={addCard}
-                className="bg-brand-50 text-brand-600 font-medium px-4 py-2 rounded-lg text-sm hover:bg-brand-100 transition"
-              >
-                ＋ カードを追加
-              </button>
-            </div>
-
-            {cards.map((card, i) => (
-              <div key={card._tempId} className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-bold text-gray-800">カード {i + 1}</h3>
-                  {cards.length > 1 && (
-                    <button
-                      onClick={() => removeCard(i)}
-                      className="text-red-500 text-sm hover:text-red-700"
-                    >
-                      削除
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      TCGタイトル <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={card.tcgTitle}
-                      onChange={(e) => updateCard(i, "tcgTitle", e.target.value)}
-                      placeholder="例: ポケモンカードゲーム"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      カード名 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={card.cardName}
-                      onChange={(e) => updateCard(i, "cardName", e.target.value)}
-                      placeholder="例: リザードン"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">型番</label>
-                    <input
-                      type="text"
-                      value={card.cardNumber}
-                      onChange={(e) => updateCard(i, "cardNumber", e.target.value)}
-                      placeholder="例: 003/102"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">レアリティ</label>
-                    <input
-                      type="text"
-                      value={card.rarity}
-                      onChange={(e) => updateCard(i, "rarity", e.target.value)}
-                      placeholder="例: ☆☆☆"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      言語 <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={card.language}
-                      onChange={(e) => updateCard(i, "language", e.target.value as CardLanguage)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    >
-                      {(Object.entries(LANGUAGE_LABELS) as [CardLanguage, string][]).map(
-                        ([v, l]) => (
-                          <option key={v} value={v}>
-                            {l}
-                          </option>
-                        )
-                      )}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      申告価格（円） <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={card.declaredValue || ""}
-                      onChange={(e) =>
-                        updateCard(i, "declaredValue", parseInt(e.target.value) || 0)
-                      }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      枚数 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={card.quantity}
-                      onChange={(e) =>
-                        updateCard(i, "quantity", parseInt(e.target.value) || 1)
-                      }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    />
-                  </div>
-
-                  {/* Image uploads */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      表面画像
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        disabled={card._frontUploading}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleImageUpload(i, "front", file);
-                        }}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-brand-50 file:text-brand-600"
-                      />
-                      {card._frontUploading && (
-                        <span className="absolute right-3 top-2 text-xs text-gray-400">
-                          アップロード中...
-                        </span>
-                      )}
-                    </div>
-                    {card.frontImageKey && (
-                      <p className="text-xs text-green-600 mt-1">✓ アップロード済み</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      裏面画像
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        disabled={card._backUploading}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleImageUpload(i, "back", file);
-                        }}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-brand-50 file:text-brand-600"
-                      />
-                      {card._backUploading && (
-                        <span className="absolute right-3 top-2 text-xs text-gray-400">
-                          アップロード中...
-                        </span>
-                      )}
-                    </div>
-                    {card.backImageKey && (
-                      <p className="text-xs text-green-600 mt-1">✓ アップロード済み</p>
-                    )}
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">備考</label>
-                    <textarea
-                      value={card.notes}
-                      onChange={(e) => updateCard(i, "notes", e.target.value)}
-                      rows={2}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            <button
-              onClick={() => {
-                if (
-                  cards.some(
-                    (c) => !c.tcgTitle || !c.cardName || c.declaredValue <= 0
-                  )
-                ) {
-                  setError(
-                    "必須項目を入力してください（TCGタイトル、カード名、申告価格）"
-                  );
-                  return;
-                }
-                if (cards.some((c) => c._frontUploading || c._backUploading)) {
-                  setError("画像のアップロードが完了するまでお待ちください");
-                  return;
-                }
-                setError("");
-                setStep("service");
-              }}
-              className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
-            >
-              次へ：サービス選択
-            </button>
-          </div>
-        )}
-
-        {/* STEP 2: Service */}
+        {/* STEP 1: Service */}
         {step === "service" && (
           <div className="space-y-6">
-            <h2 className="text-lg font-bold text-gray-900">サービス・返却方法の選択</h2>
-
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h3 className="font-bold text-gray-800">鑑定提出先</h3>
+              <h2 className="font-bold text-gray-800">鑑定提出先</h2>
               <div className="grid grid-cols-2 gap-3">
                 {(["PSA_JP", "PSA_US"] as ServiceRegion[]).map((r) => (
                   <button
@@ -568,11 +326,14 @@ export default function ApplyForm({
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h3 className="font-bold text-gray-800">サービスレベル</h3>
+              <h2 className="font-bold text-gray-800">サービスレベル</h2>
+              <p className="text-xs text-gray-500">
+                申告金額の上限に応じてサービスを選んでください。選択後にカードを入力します。
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {regionPrices.map((sp) => (
                   <button
-                    key={sp.serviceLevel}
+                    key={sp.id}
                     onClick={() => setServiceLevel(sp.serviceLevel)}
                     className={`border-2 rounded-xl p-4 text-left transition ${
                       serviceLevel === sp.serviceLevel
@@ -581,15 +342,10 @@ export default function ApplyForm({
                     }`}
                   >
                     <p className="font-bold text-gray-900">{SERVICE_LABELS[sp.serviceLevel]}</p>
-                    <p className="text-brand-600 font-medium">
-                      ¥{sp.pricePerCard.toLocaleString()}/枚
-                    </p>
+                    <p className="text-brand-600 font-medium">¥{sp.pricePerCard.toLocaleString()}/枚</p>
                     <p className="text-xs text-gray-500">
-                      {sp.agencyFee > 0 && <>代行手数料 ¥{sp.agencyFee.toLocaleString()}/枚<br /></>}
                       申告価格上限{" "}
-                      {sp.maxDeclaredValue === null
-                        ? "なし"
-                        : `¥${sp.maxDeclaredValue.toLocaleString()}`}
+                      {sp.maxDeclaredValue === null ? "なし" : `¥${sp.maxDeclaredValue.toLocaleString()}`}
                     </p>
                   </button>
                 ))}
@@ -597,76 +353,201 @@ export default function ApplyForm({
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h3 className="font-bold text-gray-800">返却方法</h3>
+              <h2 className="font-bold text-gray-800">返却方法</h2>
               <div className="grid grid-cols-2 gap-3">
                 {(["STORE_PICKUP", "SHIPPING"] as ReturnMethod[]).map((m) => (
                   <button
                     key={m}
                     onClick={() => setReturnMethod(m)}
-                    className={`border-2 rounded-xl p-4 text-left transition ${
+                    className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                       returnMethod === m
-                        ? "border-brand-500 bg-brand-50"
-                        : "border-gray-200 hover:border-gray-300"
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-gray-200 text-gray-700 hover:border-gray-300"
                     }`}
                   >
-                    <p className="text-2xl mb-1">{m === "STORE_PICKUP" ? "🏪" : "📦"}</p>
-                    <p className="font-bold text-gray-900">
-                      {m === "STORE_PICKUP" ? "店頭受取" : "配送"}
-                    </p>
-                    {m === "STORE_PICKUP" && (
-                      <p className="text-xs text-green-600 mt-1">無料</p>
-                    )}
+                    {m === "STORE_PICKUP" ? "店頭受取" : "配送"}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Estimate */}
-            <div className="bg-brand-50 rounded-xl border border-brand-200 p-6">
-              <h3 className="font-bold text-brand-900 mb-3">お見積もり（税込）</h3>
-              <div className="space-y-1 text-sm text-brand-800">
-                <div className="flex justify-between">
-                  <span>PSA鑑定料（{cardCount}枚）</span>
-                  <span>¥{psaFeeTotal.toLocaleString()}</span>
+            <button
+              onClick={() => {
+                if (!serviceLevel) {
+                  setError("サービスレベルを選択してください");
+                  return;
+                }
+                setError("");
+                setStep("cards");
+              }}
+              className="w-full bg-brand-600 text-white font-bold py-4 rounded-xl hover:bg-brand-700 transition"
+            >
+              カード情報の入力へ
+            </button>
+          </div>
+        )}
+
+        {/* STEP 2: Cards */}
+        {step === "cards" && (
+          <div className="space-y-6">
+            <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
+              選択中: <strong>{REGION_LABELS[region]} / {serviceLevel && SERVICE_LABELS[serviceLevel]}</strong>
+              {cap !== null && <>（申告金額上限 ¥{cap.toLocaleString()}/枚）</>}
+            </div>
+
+            {/* Card entry form */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <h2 className="font-bold text-gray-800">
+                {editingIndex !== null ? "カードを編集" : "カード情報を入力"}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">タイトル *</label>
+                  <input
+                    className={inputCls}
+                    placeholder="例: ポケモンカードゲーム"
+                    value={draft.tcgTitle}
+                    onChange={(e) => setDraftField("tcgTitle", e.target.value)}
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span>代行手数料</span>
-                  <span>¥{agencyFeeTotal.toLocaleString()}</span>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">発行年</label>
+                  <input
+                    type="number"
+                    className={inputCls}
+                    placeholder="例: 2022"
+                    value={draft.releaseYear}
+                    onChange={(e) => setDraftField("releaseYear", e.target.value)}
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span>送料</span>
-                  <span>¥{shippingFee.toLocaleString()}</span>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">カード番号</label>
+                  <input
+                    className={inputCls}
+                    placeholder="例: 003/102"
+                    value={draft.cardNumber}
+                    onChange={(e) => setDraftField("cardNumber", e.target.value)}
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span>保険料（申告総額 ¥{totalDeclaredValue.toLocaleString()}）</span>
-                  <span>¥{insuranceFee.toLocaleString()}</span>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">カード名 *</label>
+                  <input
+                    className={inputCls}
+                    placeholder="例: リザードン"
+                    value={draft.cardName}
+                    onChange={(e) => setDraftField("cardName", e.target.value)}
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span>消費税（10%）</span>
-                  <span>¥{taxAmount.toLocaleString()}</span>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">レアリティ</label>
+                  <input
+                    className={inputCls}
+                    placeholder="例: SR"
+                    value={draft.rarity}
+                    onChange={(e) => setDraftField("rarity", e.target.value)}
+                  />
                 </div>
-                <div className="flex justify-between font-bold text-brand-900 border-t border-brand-300 pt-2 mt-2 text-base">
-                  <span>お支払い合計</span>
-                  <span>¥{totalAmount.toLocaleString()}</span>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">枚数 *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    className={inputCls}
+                    value={draft.quantity || ""}
+                    onChange={(e) => setDraftField("quantity", parseInt(e.target.value) || 1)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">申告金額（円） *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    className={inputCls}
+                    placeholder="例: 50000"
+                    value={draft.declaredValue || ""}
+                    onChange={(e) => setDraftField("declaredValue", parseInt(e.target.value) || 0)}
+                  />
                 </div>
               </div>
-              <p className="text-xs text-brand-500 mt-2">
-                ※ Upchargeが発生した場合は別途ご請求します
-              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={saveDraft}
+                  className="bg-brand-600 text-white font-bold px-6 py-2 rounded-lg hover:bg-brand-700 transition"
+                >
+                  {editingIndex !== null ? "更新" : "保存"}
+                </button>
+                <button
+                  onClick={clearDraft}
+                  className="border border-gray-300 text-gray-600 px-6 py-2 rounded-lg hover:bg-gray-50 transition"
+                >
+                  消去
+                </button>
+              </div>
+            </div>
+
+            {/* Saved cards list */}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="font-bold text-gray-800">アイテム（{cards.length}）</h3>
+                <span className="text-sm text-gray-500">
+                  申告合計 ¥{totalDeclaredValue.toLocaleString()}
+                </span>
+              </div>
+              {cards.length === 0 ? (
+                <p className="px-4 py-8 text-center text-gray-400 text-sm">
+                  上のフォームからカードを追加してください
+                </p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {cards.map((c, i) => (
+                    <div key={i} className="px-4 py-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">
+                          {c.releaseYear ? `${c.releaseYear} ` : ""}
+                          {c.tcgTitle} {c.cardNumber} {c.cardName}
+                          {c.rarity ? `（${c.rarity}）` : ""}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {c.quantity}枚 / 申告 ¥{(c.declaredValue * c.quantity).toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => editCard(i)}
+                        className="text-brand-600 hover:text-brand-800 text-sm font-medium"
+                      >
+                        編集
+                      </button>
+                      <button
+                        onClick={() => deleteCard(i)}
+                        className="text-red-500 hover:text-red-700 text-sm font-medium"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
               <button
-                onClick={() => setStep("cards")}
-                className="flex-1 border border-gray-300 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 transition"
+                onClick={() => setStep("service")}
+                className="border border-gray-300 text-gray-600 px-6 py-3 rounded-xl hover:bg-gray-50 transition"
               >
                 戻る
               </button>
               <button
-                onClick={() => setStep("confirm")}
+                onClick={() => {
+                  if (cards.length === 0) {
+                    setError("カードを1枚以上追加してください");
+                    return;
+                  }
+                  setError("");
+                  setStep("confirm");
+                }}
                 className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
               >
-                次へ：確認・同意
+                確認へ進む
               </button>
             </div>
           </div>
@@ -675,67 +556,61 @@ export default function ApplyForm({
         {/* STEP 3: Confirm */}
         {step === "confirm" && (
           <div className="space-y-6">
-            <h2 className="text-lg font-bold text-gray-900">申込内容の確認と同意</h2>
-
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-800 mb-2">申込カード一覧</h3>
-              <div className="space-y-2">
-                {cards.map((c, i) => (
-                  <div key={c._tempId} className="flex justify-between text-sm text-gray-700 py-1 border-b border-gray-100">
-                    <span>
-                      {i + 1}. {c.cardName}（{c.tcgTitle}）× {c.quantity}枚
-                    </span>
-                    <span className="text-gray-500">申告 ¥{(c.declaredValue * c.quantity).toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 text-sm text-gray-600">
+              <h2 className="font-bold text-gray-900 mb-3">申込内容の確認</h2>
+              <div className="text-sm text-gray-600 mb-3">
                 <span className="font-medium">提出先:</span> {REGION_LABELS[region]} /{" "}
                 <span className="font-medium">サービス:</span>{" "}
-                {SERVICE_LABELS[serviceLevel]} /{" "}
+                {serviceLevel && SERVICE_LABELS[serviceLevel]} /{" "}
                 <span className="font-medium">返却:</span>{" "}
                 {returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}
               </div>
+              <div className="divide-y divide-gray-100">
+                {cards.map((c, i) => (
+                  <div key={i} className="flex justify-between text-sm text-gray-700 py-1">
+                    <span>
+                      {i + 1}. {c.releaseYear ? `${c.releaseYear} ` : ""}
+                      {c.cardName}（{c.tcgTitle}）× {c.quantity}枚
+                    </span>
+                    <span className="text-gray-500">
+                      申告 ¥{(c.declaredValue * c.quantity).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-800 mb-3">利用規約</h3>
-              <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-600 whitespace-pre-line h-48 overflow-y-auto border border-gray-200">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-gray-500">鑑定料</span><span>¥{psaFeeTotal.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">送料</span><span>¥{shippingFee.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">保険料</span><span>¥{insuranceFee.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">消費税</span><span>¥{taxAmount.toLocaleString()}</span></div>
+              <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-2 mt-2">
+                <span>合計</span><span>¥{totalAmount.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+              <h3 className="font-bold text-gray-800">利用規約</h3>
+              <pre className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto">
                 {AGREEMENT_TEXT}
-              </div>
-              <label className="flex items-start gap-3 mt-4 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="mt-1 w-4 h-4"
-                />
-                <span className="text-sm text-gray-700">
-                  上記利用規約を読み、内容に同意します
-                </span>
+              </pre>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+                利用規約に同意します
               </label>
-            </div>
-
-            <div className="bg-brand-50 rounded-xl border border-brand-200 p-6">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-brand-900">お支払い合計</span>
-                <span className="text-2xl font-bold text-brand-900">
-                  ¥{totalAmount.toLocaleString()}
-                </span>
-              </div>
-              <p className="text-xs text-brand-500 mt-1">（税込）</p>
             </div>
 
             <div className="flex gap-3">
               <button
-                onClick={() => setStep("service")}
-                className="flex-1 border border-gray-300 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-50 transition"
+                onClick={() => setStep("cards")}
+                className="border border-gray-300 text-gray-600 px-6 py-3 rounded-xl hover:bg-gray-50 transition"
               >
                 戻る
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={loading || !agreed}
+                disabled={loading}
                 className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 disabled:opacity-50 transition"
               >
                 {loading ? "処理中..." : "申込を確定して決済へ"}
@@ -744,67 +619,26 @@ export default function ApplyForm({
           </div>
         )}
 
-        {/* STEP 4: Payment */}
+        {/* STEP 4: Payment (placeholder) */}
         {step === "payment" && (
           <div className="space-y-6">
-            <h2 className="text-lg font-bold text-gray-900">お支払い</h2>
-
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <div className="flex justify-between items-center mb-6">
-                <span className="font-bold text-gray-900">お支払い金額</span>
-                <span className="text-2xl font-bold text-gray-900">
-                  ¥{totalAmount.toLocaleString()}
-                </span>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <h2 className="font-bold text-gray-900">お支払い</h2>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                ※ 決済機能（Stripe Elements）は統合準備中です。clientSecret:{" "}
+                <code className="break-all">{clientSecret.slice(0, 24)}...</code>
               </div>
-
-              {/* Stripe Elements placeholder */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    カード番号
-                  </label>
-                  <div className="border border-gray-300 rounded-lg px-3 py-3 bg-gray-50 text-sm text-gray-400">
-                    Stripe Elements がここに表示されます
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">有効期限</label>
-                    <div className="border border-gray-300 rounded-lg px-3 py-3 bg-gray-50 text-sm text-gray-400">
-                      MM / YY
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">セキュリティコード</label>
-                    <div className="border border-gray-300 rounded-lg px-3 py-3 bg-gray-50 text-sm text-gray-400">
-                      CVC
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs text-gray-500 mt-2">
-                  <span>🔒</span>
-                  <span>決済情報はStripeによって安全に処理されます。カード情報は当社に送信されません。</span>
-                </div>
-
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
-                  ※ Stripe Elements を統合するには <code>@stripe/react-stripe-js</code> と <code>@stripe/stripe-js</code> パッケージをインストールし、<code>Elements</code> プロバイダーを設定してください。
-                  clientSecret: <code className="break-all">{clientSecret.slice(0, 30)}...</code>
-                </div>
-              </div>
-
               <button
                 onClick={handlePayment}
                 disabled={paymentLoading}
-                className="w-full mt-6 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 disabled:opacity-50 transition"
+                className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
               >
                 {paymentLoading ? "決済処理中..." : `¥${totalAmount.toLocaleString()} を支払う`}
               </button>
+              <p className="text-xs text-gray-400 text-center">
+                カード情報はStripeのサーバーで安全に処理されます。
+              </p>
             </div>
-
-            <p className="text-xs text-gray-400 text-center">
-              カード情報はStripeのサーバーで安全に処理されます
-            </p>
           </div>
         )}
       </main>
