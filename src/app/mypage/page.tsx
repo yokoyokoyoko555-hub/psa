@@ -47,12 +47,12 @@ export default async function MypagePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-4 py-4">
+      <header className="bg-white border-b border-gray-200 px-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-500">トレカビンクス PSA申込</p>
-            <h1 className="font-bold text-gray-900">マイページ</h1>
-          </div>
+          <Link href="/" className="shrink-0 hover:opacity-70 transition">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
+          </Link>
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">{name} 様</span>
             <form action={logoutCustomer}>
