@@ -11,16 +11,16 @@ export default function Home() {
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
-            href="/apply"
+            href="/register"
             className="bg-yellow-400 text-brand-900 font-bold px-8 py-4 rounded-xl text-lg hover:bg-yellow-300 transition"
           >
-            PSA申込を始める
+            新規登録
           </Link>
           <Link
             href="/login"
             className="border-2 border-white text-white font-bold px-8 py-4 rounded-xl text-lg hover:bg-white hover:text-brand-900 transition"
           >
-            マイページログイン
+            ログイン
           </Link>
         </div>
         <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 text-left">
