@@ -192,7 +192,8 @@ export default function ApplyForm({
   const taxAmount = Math.floor(subtotal * TAX_RATE);
   const totalAmount = subtotal + taxAmount;
 
-  // 一時保存（localStorage）からの復元
+  // 一時保存（localStorage）からの復元。意図的に effect 内で state を設定する。
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
@@ -208,6 +209,7 @@ export default function ApplyForm({
       /* ignore */
     }
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function saveDraftToStorage() {
     try {
