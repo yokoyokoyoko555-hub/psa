@@ -317,46 +317,62 @@ export default function ApplyForm({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-          {/* ロゴ（クリックでトップへ） */}
-          <Link href="/" className="shrink-0 hover:opacity-70 transition">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.jpg" alt="トレカビンクス" className="h-10 w-auto" />
-          </Link>
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        {/* 上段: ロゴ + 保存・終了 */}
+        <div className="px-4 py-3 border-b border-gray-100">
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+            <Link href="/" className="shrink-0 hover:opacity-70 transition">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.jpg" alt="トレカビンクス" className="h-10 w-auto" />
+            </Link>
+            <button
+              onClick={handleSaveAndExit}
+              className="shrink-0 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+            >
+              保存・終了
+            </button>
+          </div>
+        </div>
 
-          {/* パンくず（到達済みステップはリンクで戻れる） */}
-          <nav className="flex items-center gap-1 text-xs sm:text-sm overflow-x-auto whitespace-nowrap">
+        {/* 下段: 番号付きステッパー（到達済みステップはクリックで戻れる） */}
+        <div className="px-4 py-3">
+          <nav className="max-w-6xl mx-auto flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm overflow-x-auto whitespace-nowrap">
             {STEPS.map((s, i) => {
               const reachable = i <= maxStep;
               const current = i === currentIdx;
+              const reached = i <= currentIdx;
               return (
-                <span key={s.key} className="flex items-center gap-1">
-                  {reachable && !current ? (
-                    <button
-                      onClick={() => goStep(s.key)}
-                      className="text-brand-600 hover:underline font-medium"
+                <span key={s.key} className="flex items-center gap-1 sm:gap-2">
+                  <button
+                    type="button"
+                    disabled={!reachable}
+                    onClick={() => reachable && goStep(s.key)}
+                    className={`flex items-center gap-1.5 ${reachable ? "cursor-pointer" : "cursor-default"}`}
+                  >
+                    <span
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        reached ? "bg-brand-600 text-white" : "bg-gray-200 text-gray-500"
+                      }`}
+                    >
+                      {i + 1}
+                    </span>
+                    <span
+                      className={
+                        current
+                          ? "font-bold text-gray-900"
+                          : reachable
+                            ? "text-gray-600 hover:text-brand-700"
+                            : "text-gray-400"
+                      }
                     >
                       {s.label}
-                    </button>
-                  ) : (
-                    <span className={current ? "font-bold text-gray-900" : "text-gray-400"}>
-                      {s.label}
                     </span>
-                  )}
+                  </button>
                   {i < STEPS.length - 1 && <span className="text-gray-300">›</span>}
                 </span>
               );
             })}
           </nav>
-
-          {/* 一時保存して終了 */}
-          <button
-            onClick={handleSaveAndExit}
-            className="shrink-0 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
-          >
-            保存・終了
-          </button>
         </div>
       </header>
 
@@ -593,27 +609,19 @@ export default function ApplyForm({
               )}
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setStep("service")}
-                className="border border-gray-300 text-gray-600 px-6 py-3 rounded-xl hover:bg-gray-50 transition"
-              >
-                戻る
-              </button>
-              <button
-                onClick={() => {
-                  if (cards.length === 0) {
-                    setError("カードを1枚以上追加してください");
-                    return;
-                  }
-                  setError("");
-                  goStep("confirm");
-                }}
-                className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
-              >
-                確認へ進む
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                if (cards.length === 0) {
+                  setError("カードを1枚以上追加してください");
+                  return;
+                }
+                setError("");
+                goStep("confirm");
+              }}
+              className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
+            >
+              確認へ進む
+            </button>
           </div>
         )}
 
@@ -665,21 +673,13 @@ export default function ApplyForm({
               </label>
             </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={() => setStep("cards")}
-                className="border border-gray-300 text-gray-600 px-6 py-3 rounded-xl hover:bg-gray-50 transition"
-              >
-                戻る
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 disabled:opacity-50 transition"
-              >
-                {loading ? "処理中..." : "申込を確定して決済へ"}
-              </button>
-            </div>
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 disabled:opacity-50 transition"
+            >
+              {loading ? "処理中..." : "申込を確定して決済へ"}
+            </button>
           </div>
         )}
 
