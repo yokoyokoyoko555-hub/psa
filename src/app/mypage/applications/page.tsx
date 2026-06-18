@@ -9,7 +9,7 @@ import { ja } from "date-fns/locale";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
-  SUBMITTED: { label: "申込済", color: "bg-blue-100 text-blue-700" },
+  SUBMITTED: { label: "申込済", color: "bg-brand-100 text-brand-700" },
   IN_PROGRESS: { label: "処理中", color: "bg-yellow-100 text-yellow-700" },
   COMPLETED: { label: "完了", color: "bg-green-100 text-green-700" },
   CANCELLED: { label: "キャンセル", color: "bg-red-100 text-red-700" },
@@ -34,7 +34,7 @@ export default async function ApplicationsPage() {
         {applications.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
             <p className="text-gray-500 mb-4">まだ申込がありません</p>
-            <Link href="/apply" className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
+            <Link href="/apply" className="bg-brand-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-brand-700 transition">
               PSA申込を始める
             </Link>
           </div>
@@ -47,7 +47,7 @@ export default async function ApplicationsPage() {
                 <Link
                   key={app.id}
                   href={`/mypage/applications/${app.id}`}
-                  className="bg-white rounded-xl border border-gray-200 p-6 hover:border-blue-300 transition block"
+                  className="bg-white rounded-xl border border-gray-200 p-6 hover:border-brand-300 transition block"
                 >
                   <div className="flex items-start justify-between">
                     <div>

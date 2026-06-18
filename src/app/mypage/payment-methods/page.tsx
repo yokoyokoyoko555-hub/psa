@@ -20,7 +20,7 @@ export default async function PaymentMethodsPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="max-w-2xl mx-auto">
-          <a href="/mypage" className="text-sm text-blue-600 hover:underline">
+          <a href="/mypage" className="text-sm text-brand-600 hover:underline">
             ← マイページへ戻る
           </a>
           <h1 className="font-bold text-gray-900 text-xl mt-1">支払い方法管理</h1>
@@ -45,7 +45,7 @@ export default async function PaymentMethodsPage() {
               <div
                 key={m.id}
                 className={`bg-white rounded-xl border p-5 flex items-center justify-between ${
-                  m.isDefault ? "border-blue-300" : "border-gray-200"
+                  m.isDefault ? "border-brand-300" : "border-gray-200"
                 }`}
               >
                 <div className="flex items-center gap-4">
@@ -62,7 +62,7 @@ export default async function PaymentMethodsPage() {
                     <p className="font-medium text-gray-900 capitalize">
                       {m.brand} •••• {m.last4}
                       {m.isDefault && (
-                        <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
+                        <span className="ml-2 text-xs bg-brand-100 text-brand-600 px-2 py-0.5 rounded-full">
                           デフォルト
                         </span>
                       )}

@@ -76,7 +76,7 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
       <button
         type="submit"
         disabled={loading}
-        className="mt-4 bg-blue-600 text-white font-bold px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition text-sm"
+        className="mt-4 bg-brand-600 text-white font-bold px-6 py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition text-sm"
       >
         {loading ? "保存中..." : "保存"}
       </button>

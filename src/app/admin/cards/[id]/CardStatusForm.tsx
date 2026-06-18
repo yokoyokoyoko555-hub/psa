@@ -48,7 +48,7 @@ export default function CardStatusForm({
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as CardStatus)}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
       >
         {STATUS_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -59,12 +59,12 @@ export default function CardStatusForm({
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="備考（任意）"
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
       />
       <button
         type="submit"
         disabled={loading || status === currentStatus}
-        className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition text-sm"
+        className="w-full bg-brand-600 text-white font-bold py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition text-sm"
       >
         {loading ? "更新中..." : "ステータスを更新"}
       </button>

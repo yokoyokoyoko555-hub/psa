@@ -20,8 +20,8 @@ export default async function DashboardPage() {
 
   const STATUS_LABELS: Record<string, { label: string; color: string }> = {
     DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
-    SUBMITTED_BY_CUSTOMER: { label: "申込済", color: "bg-blue-100 text-blue-700" },
-    RECEIVED_BY_STORE: { label: "受取済", color: "bg-blue-100 text-blue-700" },
+    SUBMITTED_BY_CUSTOMER: { label: "申込済", color: "bg-brand-100 text-brand-700" },
+    RECEIVED_BY_STORE: { label: "受取済", color: "bg-brand-100 text-brand-700" },
     INSPECTION_PENDING: { label: "検品待", color: "bg-yellow-100 text-yellow-700" },
     INSPECTED: { label: "検品済", color: "bg-yellow-100 text-yellow-700" },
     READY_FOR_PSA: { label: "PSA準備中", color: "bg-orange-100 text-orange-700" },
@@ -45,7 +45,7 @@ export default async function DashboardPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
         {[
-          { label: "総申込件数", value: stats.total, color: "bg-blue-500" },
+          { label: "総申込件数", value: stats.total, color: "bg-brand-500" },
           { label: "PSA提出待ち", value: stats.psaWaiting, color: "bg-orange-500" },
           { label: "PSA返却待ち", value: stats.psaReturning, color: "bg-purple-500" },
           { label: "未払い", value: stats.unpaid, color: "bg-red-500" },

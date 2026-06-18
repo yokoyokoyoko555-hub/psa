@@ -69,19 +69,19 @@ export default async function MypagePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
             href="/apply"
-            className="bg-blue-600 text-white rounded-xl p-6 hover:bg-blue-700 transition flex items-center gap-4"
+            className="bg-brand-600 text-white rounded-xl p-6 hover:bg-brand-700 transition flex items-center gap-4"
           >
             <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-2xl">📋</div>
             <div>
               <p className="font-bold text-lg">新規PSA申込</p>
-              <p className="text-blue-200 text-sm">カードを申し込む</p>
+              <p className="text-brand-200 text-sm">カードを申し込む</p>
             </div>
           </Link>
           <Link
             href="/mypage/applications"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-blue-300 transition flex items-center gap-4"
+            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
           >
-            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-2xl">📦</div>
+            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">📦</div>
             <div>
               <p className="font-bold text-lg text-gray-900">申込一覧</p>
               <p className="text-gray-500 text-sm">全{applications.length}件</p>
@@ -89,9 +89,9 @@ export default async function MypagePage() {
           </Link>
           <Link
             href="/mypage/payment-methods"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-blue-300 transition flex items-center gap-4"
+            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
           >
-            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-2xl">💳</div>
+            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">💳</div>
             <div>
               <p className="font-bold text-lg text-gray-900">支払い方法</p>
               <p className="text-gray-500 text-sm">登録カード管理</p>
@@ -112,7 +112,7 @@ export default async function MypagePage() {
                 <Link
                   key={app.id}
                   href={`/mypage/applications/${app.id}`}
-                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 transition block"
+                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-brand-300 transition block"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -123,7 +123,7 @@ export default async function MypagePage() {
                       <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                         app.status === "COMPLETED" ? "bg-green-100 text-green-700" :
                         app.status === "CANCELLED" ? "bg-gray-100 text-gray-600" :
-                        "bg-blue-100 text-blue-700"
+                        "bg-brand-100 text-brand-700"
                       }`}>
                         {STATUS_LABELS[app.status] ?? app.status}
                       </span>

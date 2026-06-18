@@ -30,7 +30,7 @@ export default function SubmitGroupForm({ groupId }: { groupId: string }) {
           name="psaSubmissionId"
           required
           placeholder="SUB-XXXXXXXX"
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       </div>
       <div>
@@ -40,7 +40,7 @@ export default function SubmitGroupForm({ groupId }: { groupId: string }) {
           name="psaOrderId"
           required
           placeholder="ORD-XXXXXXXX"
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       </div>
       <div>
@@ -50,7 +50,7 @@ export default function SubmitGroupForm({ groupId }: { groupId: string }) {
           name="submittedAt"
           required
           defaultValue={new Date().toISOString().split("T")[0]}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       </div>
       <button

@@ -10,6 +10,18 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* ブランドカラー（テーマ色 #6B0505 を主色とする赤褐色スケール） */
+  --color-brand-50: #fbf0f0;
+  --color-brand-100: #f6dcdc;
+  --color-brand-200: #edbcbc;
+  --color-brand-300: #e09090;
+  --color-brand-400: #cc5a5a;
+  --color-brand-500: #a83232;
+  --color-brand-600: #6b0505;
+  --color-brand-700: #5a0404;
+  --color-brand-800: #470303;
+  --color-brand-900: #2f0202;
 }
 
 /* このアプリは白基調のライト専用UI。OSのダークモードでも配色を固定する。 */

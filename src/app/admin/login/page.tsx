@@ -55,7 +55,7 @@ export default function AdminLoginPage() {
                   type="email"
                   name="email"
                   required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
               <div>
@@ -64,13 +64,13 @@ export default function AdminLoginPage() {
                   type="password"
                   name="password"
                   required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
               >
                 {loading ? "ログイン中..." : "ログイン"}
               </button>
@@ -87,7 +87,7 @@ export default function AdminLoginPage() {
                 maxLength={6}
                 pattern="\d{6}"
                 placeholder="000000"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-center text-2xl tracking-widest focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
               <button
                 onClick={() => {
@@ -95,7 +95,7 @@ export default function AdminLoginPage() {
                   router.push("/admin/dashboard");
                 }}
                 disabled={totpCode.length !== 6}
-                className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
               >
                 確認
               </button>

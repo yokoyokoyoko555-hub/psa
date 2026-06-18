@@ -8,8 +8,8 @@ import { format } from "date-fns";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
-  SUBMITTED_BY_CUSTOMER: { label: "申込済", color: "bg-blue-100 text-blue-700" },
-  RECEIVED_BY_STORE: { label: "受取済", color: "bg-blue-100 text-blue-700" },
+  SUBMITTED_BY_CUSTOMER: { label: "申込済", color: "bg-brand-100 text-brand-700" },
+  RECEIVED_BY_STORE: { label: "受取済", color: "bg-brand-100 text-brand-700" },
   INSPECTION_PENDING: { label: "検品待ち", color: "bg-yellow-100 text-yellow-700" },
   INSPECTED: { label: "検品済", color: "bg-yellow-100 text-yellow-700" },
   READY_FOR_PSA: { label: "PSA準備中", color: "bg-orange-100 text-orange-700" },
@@ -53,12 +53,12 @@ export default async function AdminCardsPage({
             name="search"
             defaultValue={sp.search}
             placeholder="カード名・管理番号・Cert#で検索"
-            className="flex-1 min-w-48 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 min-w-48 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <select
             name="status"
             defaultValue={sp.status}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           >
             <option value="">全ステータス</option>
             {Object.entries(STATUS_LABELS).map(([v, { label }]) => (
@@ -67,7 +67,7 @@ export default async function AdminCardsPage({
           </select>
           <button
             type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+            className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 transition"
           >
             検索
           </button>
@@ -125,7 +125,7 @@ export default async function AdminCardsPage({
                       <div className="flex gap-2">
                         <Link
                           href={`/admin/cards/${card.id}`}
-                          className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                          className="text-brand-600 hover:text-brand-800 text-xs font-medium"
                         >
                           詳細
                         </Link>
@@ -154,7 +154,7 @@ export default async function AdminCardsPage({
             {page > 1 && (
               <Link
                 href={`?page=${page - 1}${sp.status ? `&status=${sp.status}` : ""}${sp.search ? `&search=${sp.search}` : ""}`}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm text-brand-600 hover:text-brand-800"
               >
                 前へ
               </Link>
@@ -162,7 +162,7 @@ export default async function AdminCardsPage({
             {page * 50 < total && (
               <Link
                 href={`?page=${page + 1}${sp.status ? `&status=${sp.status}` : ""}${sp.search ? `&search=${sp.search}` : ""}`}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-sm text-brand-600 hover:text-brand-800"
               >
                 次へ
               </Link>

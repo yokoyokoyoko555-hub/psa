@@ -39,7 +39,7 @@ export default async function AdminCustomerDetailPage({
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <Link href="/admin/customers" className="text-sm text-blue-600 hover:underline">
+        <Link href="/admin/customers" className="text-sm text-brand-600 hover:underline">
           ← 顧客一覧
         </Link>
       </div>
@@ -48,7 +48,7 @@ export default async function AdminCustomerDetailPage({
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-xl font-bold text-blue-600">
+              <div className="w-12 h-12 bg-brand-100 rounded-full flex items-center justify-center text-xl font-bold text-brand-600">
                 {name.charAt(0)}
               </div>
               <div>
@@ -105,7 +105,7 @@ export default async function AdminCustomerDetailPage({
                   <div key={m.id} className="flex items-center justify-between text-sm">
                     <span className="capitalize">
                       {m.brand} •••• {m.last4}
-                      {m.isDefault && <span className="ml-1 text-xs text-blue-600">(デフォルト)</span>}
+                      {m.isDefault && <span className="ml-1 text-xs text-brand-600">(デフォルト)</span>}
                     </span>
                     <span className="text-gray-400 text-xs">{m.expMonth}/{m.expYear}</span>
                   </div>
@@ -127,7 +127,7 @@ export default async function AdminCustomerDetailPage({
                 <Link
                   key={app.id}
                   href={`/admin/applications/${app.id}`}
-                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 transition block"
+                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-brand-300 transition block"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div>
@@ -140,7 +140,7 @@ export default async function AdminCustomerDetailPage({
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                         app.status === "COMPLETED" ? "bg-green-100 text-green-700" :
                         app.status === "CANCELLED" ? "bg-gray-100 text-gray-600" :
-                        "bg-blue-100 text-blue-700"
+                        "bg-brand-100 text-brand-700"
                       }`}>
                         {app.status}
                       </span>

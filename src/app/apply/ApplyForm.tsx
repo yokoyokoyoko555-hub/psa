@@ -287,7 +287,7 @@ export default function ApplyForm({
                 key={s}
                 className={`flex items-center gap-2 text-sm ${
                   step === s
-                    ? "text-blue-600 font-bold"
+                    ? "text-brand-600 font-bold"
                     : i < currentIdx
                     ? "text-green-600"
                     : "text-gray-400"
@@ -298,7 +298,7 @@ export default function ApplyForm({
                     i < currentIdx
                       ? "bg-green-500 text-white"
                       : step === s
-                      ? "bg-blue-600 text-white"
+                      ? "bg-brand-600 text-white"
                       : "bg-gray-200 text-gray-500"
                   }`}
                 >
@@ -325,7 +325,7 @@ export default function ApplyForm({
               <h2 className="text-lg font-bold text-gray-900">カード情報入力</h2>
               <button
                 onClick={addCard}
-                className="bg-blue-50 text-blue-600 font-medium px-4 py-2 rounded-lg text-sm hover:bg-blue-100 transition"
+                className="bg-brand-50 text-brand-600 font-medium px-4 py-2 rounded-lg text-sm hover:bg-brand-100 transition"
               >
                 ＋ カードを追加
               </button>
@@ -355,7 +355,7 @@ export default function ApplyForm({
                       value={card.tcgTitle}
                       onChange={(e) => updateCard(i, "tcgTitle", e.target.value)}
                       placeholder="例: ポケモンカードゲーム"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
                   <div>
@@ -367,7 +367,7 @@ export default function ApplyForm({
                       value={card.cardName}
                       onChange={(e) => updateCard(i, "cardName", e.target.value)}
                       placeholder="例: リザードン"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
                   <div>
@@ -377,7 +377,7 @@ export default function ApplyForm({
                       value={card.cardNumber}
                       onChange={(e) => updateCard(i, "cardNumber", e.target.value)}
                       placeholder="例: 003/102"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
                   <div>
@@ -387,7 +387,7 @@ export default function ApplyForm({
                       value={card.rarity}
                       onChange={(e) => updateCard(i, "rarity", e.target.value)}
                       placeholder="例: ☆☆☆"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
                   <div>
@@ -397,7 +397,7 @@ export default function ApplyForm({
                     <select
                       value={card.language}
                       onChange={(e) => updateCard(i, "language", e.target.value as CardLanguage)}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     >
                       {(Object.entries(LANGUAGE_LABELS) as [CardLanguage, string][]).map(
                         ([v, l]) => (
@@ -419,7 +419,7 @@ export default function ApplyForm({
                       onChange={(e) =>
                         updateCard(i, "declaredValue", parseInt(e.target.value) || 0)
                       }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
                   <div>
@@ -434,7 +434,7 @@ export default function ApplyForm({
                       onChange={(e) =>
                         updateCard(i, "quantity", parseInt(e.target.value) || 1)
                       }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
 
@@ -452,7 +452,7 @@ export default function ApplyForm({
                           const file = e.target.files?.[0];
                           if (file) handleImageUpload(i, "front", file);
                         }}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-50 file:text-blue-600"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-brand-50 file:text-brand-600"
                       />
                       {card._frontUploading && (
                         <span className="absolute right-3 top-2 text-xs text-gray-400">
@@ -477,7 +477,7 @@ export default function ApplyForm({
                           const file = e.target.files?.[0];
                           if (file) handleImageUpload(i, "back", file);
                         }}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-50 file:text-blue-600"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:bg-brand-50 file:text-brand-600"
                       />
                       {card._backUploading && (
                         <span className="absolute right-3 top-2 text-xs text-gray-400">
@@ -496,7 +496,7 @@ export default function ApplyForm({
                       value={card.notes}
                       onChange={(e) => updateCard(i, "notes", e.target.value)}
                       rows={2}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
                 </div>
@@ -522,7 +522,7 @@ export default function ApplyForm({
                 setError("");
                 setStep("service");
               }}
-              className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition"
+              className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
             >
               次へ：サービス選択
             </button>
@@ -543,12 +543,12 @@ export default function ApplyForm({
                     onClick={() => setServiceLevel(sp.serviceLevel)}
                     className={`border-2 rounded-xl p-4 text-left transition ${
                       serviceLevel === sp.serviceLevel
-                        ? "border-blue-500 bg-blue-50"
+                        ? "border-brand-500 bg-brand-50"
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
                     <p className="font-bold text-gray-900">{SERVICE_LABELS[sp.serviceLevel]}</p>
-                    <p className="text-blue-600 font-medium">
+                    <p className="text-brand-600 font-medium">
                       ¥{sp.pricePerCard.toLocaleString()}/枚
                     </p>
                     <p className="text-xs text-gray-500">
@@ -568,7 +568,7 @@ export default function ApplyForm({
                     onClick={() => setReturnMethod(m)}
                     className={`border-2 rounded-xl p-4 text-left transition ${
                       returnMethod === m
-                        ? "border-blue-500 bg-blue-50"
+                        ? "border-brand-500 bg-brand-50"
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
@@ -585,9 +585,9 @@ export default function ApplyForm({
             </div>
 
             {/* Estimate */}
-            <div className="bg-blue-50 rounded-xl border border-blue-200 p-6">
-              <h3 className="font-bold text-blue-900 mb-3">お見積もり（税込）</h3>
-              <div className="space-y-1 text-sm text-blue-800">
+            <div className="bg-brand-50 rounded-xl border border-brand-200 p-6">
+              <h3 className="font-bold text-brand-900 mb-3">お見積もり（税込）</h3>
+              <div className="space-y-1 text-sm text-brand-800">
                 <div className="flex justify-between">
                   <span>PSA鑑定料（{cardCount}枚）</span>
                   <span>¥{psaFeeTotal.toLocaleString()}</span>
@@ -608,12 +608,12 @@ export default function ApplyForm({
                   <span>消費税（10%）</span>
                   <span>¥{taxAmount.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between font-bold text-blue-900 border-t border-blue-300 pt-2 mt-2 text-base">
+                <div className="flex justify-between font-bold text-brand-900 border-t border-brand-300 pt-2 mt-2 text-base">
                   <span>お支払い合計</span>
                   <span>¥{totalAmount.toLocaleString()}</span>
                 </div>
               </div>
-              <p className="text-xs text-blue-500 mt-2">
+              <p className="text-xs text-brand-500 mt-2">
                 ※ Upchargeが発生した場合は別途ご請求します
               </p>
             </div>
@@ -627,7 +627,7 @@ export default function ApplyForm({
               </button>
               <button
                 onClick={() => setStep("confirm")}
-                className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition"
+                className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
               >
                 次へ：確認・同意
               </button>
@@ -678,14 +678,14 @@ export default function ApplyForm({
               </label>
             </div>
 
-            <div className="bg-blue-50 rounded-xl border border-blue-200 p-6">
+            <div className="bg-brand-50 rounded-xl border border-brand-200 p-6">
               <div className="flex justify-between items-center">
-                <span className="font-bold text-blue-900">お支払い合計</span>
-                <span className="text-2xl font-bold text-blue-900">
+                <span className="font-bold text-brand-900">お支払い合計</span>
+                <span className="text-2xl font-bold text-brand-900">
                   ¥{totalAmount.toLocaleString()}
                 </span>
               </div>
-              <p className="text-xs text-blue-500 mt-1">（税込）</p>
+              <p className="text-xs text-brand-500 mt-1">（税込）</p>
             </div>
 
             <div className="flex gap-3">
@@ -698,7 +698,7 @@ export default function ApplyForm({
               <button
                 onClick={handleSubmit}
                 disabled={loading || !agreed}
-                className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition"
+                className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 disabled:opacity-50 transition"
               >
                 {loading ? "処理中..." : "申込を確定して決済へ"}
               </button>
@@ -758,7 +758,7 @@ export default function ApplyForm({
               <button
                 onClick={handlePayment}
                 disabled={paymentLoading}
-                className="w-full mt-6 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition"
+                className="w-full mt-6 bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 disabled:opacity-50 transition"
               >
                 {paymentLoading ? "決済処理中..." : `¥${totalAmount.toLocaleString()} を支払う`}
               </button>

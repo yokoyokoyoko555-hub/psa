@@ -7,7 +7,7 @@ import Link from "next/link";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
-  SUBMITTED: { label: "申込済", color: "bg-blue-100 text-blue-700" },
+  SUBMITTED: { label: "申込済", color: "bg-brand-100 text-brand-700" },
   IN_PROGRESS: { label: "処理中", color: "bg-yellow-100 text-yellow-700" },
   COMPLETED: { label: "完了", color: "bg-green-100 text-green-700" },
   CANCELLED: { label: "キャンセル", color: "bg-red-100 text-red-700" },
@@ -59,7 +59,7 @@ export default async function AdminApplicationsPage({
             href={`?status=${f.value}`}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               (sp.status ?? "") === f.value
-                ? "bg-blue-600 text-white"
+                ? "bg-brand-600 text-white"
                 : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300"
             }`}
           >

@@ -9,8 +9,8 @@ import { ja } from "date-fns/locale";
 
 const CARD_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
-  SUBMITTED_BY_CUSTOMER: { label: "申込済", color: "bg-blue-100 text-blue-700" },
-  RECEIVED_BY_STORE: { label: "店舗受取済", color: "bg-blue-100 text-blue-700" },
+  SUBMITTED_BY_CUSTOMER: { label: "申込済", color: "bg-brand-100 text-brand-700" },
+  RECEIVED_BY_STORE: { label: "店舗受取済", color: "bg-brand-100 text-brand-700" },
   INSPECTION_PENDING: { label: "検品待ち", color: "bg-yellow-100 text-yellow-700" },
   INSPECTED: { label: "検品済", color: "bg-yellow-100 text-yellow-700" },
   READY_FOR_PSA: { label: "PSA提出準備中", color: "bg-orange-100 text-orange-700" },

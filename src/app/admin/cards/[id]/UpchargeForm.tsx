@@ -53,7 +53,7 @@ export default function UpchargeForm({ cardId }: { cardId: string }) {
           name="reason"
           required
           placeholder="例: 申告価格より評価額が高額なため"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       </div>
 
@@ -65,7 +65,7 @@ export default function UpchargeForm({ cardId }: { cardId: string }) {
             name="psaDeclaredValue"
             required
             min={0}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
         <div>
@@ -75,7 +75,7 @@ export default function UpchargeForm({ cardId }: { cardId: string }) {
             name="psaFinalValue"
             required
             min={0}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
         <div>
@@ -85,7 +85,7 @@ export default function UpchargeForm({ cardId }: { cardId: string }) {
             name="upchargeAmount"
             required
             min={1}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
       </div>

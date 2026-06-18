@@ -29,14 +29,14 @@ const CARD_STATUS_LABELS: Record<string, string> = {
 
 const STATUS_BADGE: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-600",
-  SUBMITTED_BY_CUSTOMER: "bg-blue-100 text-blue-700",
-  RECEIVED_BY_STORE: "bg-blue-100 text-blue-700",
+  SUBMITTED_BY_CUSTOMER: "bg-brand-100 text-brand-700",
+  RECEIVED_BY_STORE: "bg-brand-100 text-brand-700",
   INSPECTION_PENDING: "bg-yellow-100 text-yellow-700",
   INSPECTED: "bg-yellow-100 text-yellow-700",
   READY_FOR_PSA: "bg-purple-100 text-purple-700",
   SUBMITTED_TO_PSA: "bg-purple-100 text-purple-700",
   PSA_RECEIVED: "bg-purple-100 text-purple-700",
-  GRADING: "bg-indigo-100 text-indigo-700",
+  GRADING: "bg-brand-100 text-brand-700",
   GRADE_AVAILABLE: "bg-green-100 text-green-700",
   RETURNED_TO_STORE: "bg-green-100 text-green-700",
   READY_FOR_CUSTOMER_RETURN: "bg-green-100 text-green-700",
@@ -77,7 +77,7 @@ export default async function AdminApplicationDetailPage({
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <Link href="/admin/applications" className="text-sm text-blue-600 hover:underline">
+        <Link href="/admin/applications" className="text-sm text-brand-600 hover:underline">
           ← 申込一覧
         </Link>
         <span className="text-gray-400">/</span>
@@ -104,7 +104,7 @@ export default async function AdminApplicationDetailPage({
                     ? "bg-green-100 text-green-700"
                     : application.status === "CANCELLED"
                     ? "bg-gray-100 text-gray-600"
-                    : "bg-blue-100 text-blue-700"
+                    : "bg-brand-100 text-brand-700"
                 }`}
               >
                 {application.status}
@@ -161,13 +161,13 @@ export default async function AdminApplicationDetailPage({
               {application.cards.map((card) => (
                 <div
                   key={card.id}
-                  className="border border-gray-100 rounded-lg p-4 hover:border-blue-200 transition"
+                  className="border border-gray-100 rounded-lg p-4 hover:border-brand-200 transition"
                 >
                   <div className="flex items-start justify-between">
                     <div>
                       <Link
                         href={`/admin/cards/${card.id}`}
-                        className="font-medium text-blue-600 hover:underline"
+                        className="font-medium text-brand-600 hover:underline"
                       >
                         {card.cardName}
                       </Link>
@@ -249,7 +249,7 @@ export default async function AdminApplicationDetailPage({
             </dl>
             <Link
               href={`/admin/customers/${application.customerId}`}
-              className="mt-4 block text-sm text-blue-600 hover:underline"
+              className="mt-4 block text-sm text-brand-600 hover:underline"
             >
               顧客詳細を見る →
             </Link>
