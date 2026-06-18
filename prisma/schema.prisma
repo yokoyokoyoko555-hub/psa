@@ -125,6 +125,7 @@ model User {
 
 model Customer {
   id                  String    @id @default(cuid())
+  memberNo            String?   @unique // 会員番号（登録時に自動発行）
   // 個人情報は暗号化して保存
   nameEncrypted       String
   nameKanaEncrypted   String

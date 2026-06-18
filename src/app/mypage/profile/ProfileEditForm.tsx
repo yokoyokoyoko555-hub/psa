@@ -51,9 +51,15 @@ export default function ProfileEditForm({ profile }: { profile: CustomerProfile 
         </div>
       )}
 
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">メールアドレス（変更不可）</label>
-        <input value={profile.email} disabled className={`${inputCls} bg-gray-50 text-gray-500`} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">会員番号</label>
+          <input value={profile.memberNo ?? "—"} disabled className={`${inputCls} bg-gray-50 text-gray-500`} />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">メールアドレス（変更不可）</label>
+          <input value={profile.email} disabled className={`${inputCls} bg-gray-50 text-gray-500`} />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -44,6 +44,8 @@
 ## 未実装・要改善
 
 ### 優先度: 高
+- ❌ **メール認証（新規登録）** — SMTP未設定。`Customer.emailVerified` 列はある。確認メール送信→トークン検証→有効化の実装が必要（SMTP設定が前提。未設定で有効化すると登録不可になる）
+- ❌ **強力なBot対策** — 現状はハニーポット（キー不要）のみ実装済み。reCAPTCHA / Cloudflare Turnstile を入れる場合はサイトキー＋シークレットが必要
 - 🟡 **代理申込の決済通電** — 画面・データ・フローは実装済み（顧客の依頼→管理「要対応」→店舗入力→確定）。残りは「依頼時のカード登録(案A)」と「確定時の登録カードへ off_session 即時決済」で、いずれも Stripe Elements 統合に依存（[ADR-0011](DECISIONS.md)）
 - ❌ **PSA US の正式料金** — 現在JPと同額の暫定値。管理画面→設定で正式値に更新
 - ❌ **Stripe Elements 統合**（通常申込の決済 + 代理のカード登録/即時決済の前提）（`ApplyForm.tsx` の payment ステップを実決済に。`@stripe/react-stripe-js`/`@stripe/stripe-js` 導入、`Elements` プロバイダ、`confirmCardPayment` 実装）

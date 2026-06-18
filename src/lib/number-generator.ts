@@ -19,6 +19,11 @@ export async function generateCardNo(): Promise<string> {
   return `${prefix}${String(count + 1).padStart(4, "0")}`;
 }
 
+export async function generateMemberNo(): Promise<string> {
+  const count = await prisma.customer.count();
+  return `B${String(count + 1).padStart(6, "0")}`;
+}
+
 export async function generateGroupNo(): Promise<string> {
   const today = format(new Date(), "yyyyMMdd");
   const prefix = `PSG-${today}-`;

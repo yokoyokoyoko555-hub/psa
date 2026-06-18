@@ -36,6 +36,7 @@ export default function RegisterPage() {
       address: fd.get("address") as string,
       address2: fd.get("address2") as string || undefined,
       password: fd.get("password") as string,
+      hp: (fd.get("company") as string) || undefined,
     });
 
     if (result.success) {
@@ -60,6 +61,15 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* ハニーポット（Bot対策）。人間には見えない。Botが埋めると登録を拒否 */}
+            <input
+              type="text"
+              name="company"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              className="hidden"
+            />
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">氏名 <span className="text-red-500">*</span></label>

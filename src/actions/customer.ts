@@ -5,6 +5,7 @@ import { encrypt, decrypt } from "@/lib/crypto";
 import { createCustomerSession, deleteCustomerSession, getCustomerSession } from "@/lib/customer-auth";
 import { createCustomer as createStripeCustomer } from "@/lib/stripe";
 import { logOperation, getClientIp } from "@/lib/operation-log";
+import { generateMemberNo } from "@/lib/number-generator";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { headers } from "next/headers";
@@ -21,6 +22,7 @@ const registerSchema = z.object({
   address: z.string().min(1),
   address2: z.string().optional(),
   password: z.string().min(8).max(100),
+  hp: z.string().optional(), // ハニーポット（人間は空、Botが埋める）
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -31,6 +33,11 @@ export async function registerCustomer(
   const parsed = registerSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: "入力内容が正しくありません" };
+  }
+
+  // Bot対策（ハニーポット）: 隠しフィールドが埋められていたら拒否
+  if (parsed.data.hp && parsed.data.hp.trim() !== "") {
+    return { success: false, error: "登録に失敗しました" };
   }
 
   const existing = await prisma.customer.findUnique({
@@ -49,8 +56,11 @@ export async function registerCustomer(
     phone: parsed.data.phone,
   });
 
+  const memberNo = await generateMemberNo();
+
   const customer = await prisma.customer.create({
     data: {
+      memberNo,
       nameEncrypted: encrypt(parsed.data.name),
       nameKanaEncrypted: encrypt(parsed.data.nameKana),
       email: parsed.data.email,
@@ -116,6 +126,7 @@ export async function logoutCustomer(): Promise<void> {
 
 export interface CustomerProfile {
   id: string;
+  memberNo: string | null;
   name: string;
   nameKana: string;
   email: string;
@@ -180,6 +191,7 @@ export async function getCustomerProfile(): Promise<CustomerProfile | null> {
 
   return {
     id: customer.id,
+    memberNo: customer.memberNo,
     name: decrypt(customer.nameEncrypted),
     nameKana: decrypt(customer.nameKanaEncrypted),
     email: customer.email,

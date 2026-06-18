@@ -54,7 +54,9 @@ export default async function MypagePage() {
             <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
           </Link>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{name} 様</span>
+            <span className="text-sm text-gray-600">
+              {customer.memberNo ? `${customer.memberNo}　` : ""}{name} 様
+            </span>
             <form action={logoutCustomer}>
               <button type="submit" className="text-sm text-gray-500 hover:text-gray-700">
                 ログアウト
