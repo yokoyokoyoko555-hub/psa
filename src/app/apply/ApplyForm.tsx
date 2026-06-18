@@ -107,6 +107,16 @@ export default function ApplyForm({
   const [draft, setDraft] = useState<CardItem>(emptyCard());
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
+  // 返送先住所（未入力＝登録住所を使用）
+  const [useCustomReturn, setUseCustomReturn] = useState(false);
+  const [ret, setRet] = useState({
+    name: "",
+    postalCode: "",
+    prefecture: "",
+    address: "",
+    address2: "",
+  });
+
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -264,6 +274,20 @@ export default function ApplyForm({
         quantity: c.quantity,
         damageImageKeys: [],
       })),
+      returnAddress:
+        useCustomReturn &&
+        ret.name &&
+        /^\d{7}$/.test(ret.postalCode) &&
+        ret.prefecture &&
+        ret.address
+          ? {
+              name: ret.name,
+              postalCode: ret.postalCode,
+              prefecture: ret.prefecture,
+              address: ret.address,
+              address2: ret.address2 || undefined,
+            }
+          : undefined,
       agreementText: AGREEMENT_TEXT,
       agreementVersion: AGREEMENT_VERSION,
       ipAddress: "client",
@@ -639,20 +663,80 @@ export default function ApplyForm({
                   {returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}
                 </span>
               </div>
-              {profile ? (
-                <div className="border border-gray-200 rounded-lg p-4 text-sm text-gray-800">
-                  <p className="font-medium">{profile.name} 様</p>
-                  <p className="text-gray-600 mt-1">
-                    〒{profile.postalCode}　{profile.prefecture}
-                    {profile.address}
-                    {profile.address2 ? ` ${profile.address2}` : ""}
-                  </p>
+              {/* 登録住所（デフォルト） */}
+              <label className="flex items-start gap-3 border-2 rounded-lg p-4 cursor-pointer transition border-gray-200 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+                <input
+                  type="radio"
+                  name="returnAddr"
+                  checked={!useCustomReturn}
+                  onChange={() => setUseCustomReturn(false)}
+                  className="mt-1"
+                />
+                <span className="text-sm text-gray-800">
+                  {profile ? (
+                    <>
+                      <span className="font-medium">{profile.name} 様（登録住所）</span>
+                      <br />
+                      <span className="text-gray-600">
+                        〒{profile.postalCode}　{profile.prefecture}
+                        {profile.address}
+                        {profile.address2 ? ` ${profile.address2}` : ""}
+                      </span>
+                    </>
+                  ) : (
+                    "登録住所"
+                  )}
+                </span>
+              </label>
+
+              {/* 別の住所に返送 */}
+              <label className="flex items-center gap-3 border-2 rounded-lg p-4 cursor-pointer transition border-gray-200 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+                <input
+                  type="radio"
+                  name="returnAddr"
+                  checked={useCustomReturn}
+                  onChange={() => setUseCustomReturn(true)}
+                />
+                <span className="text-sm font-medium text-gray-800">別の住所に返送する</span>
+              </label>
+
+              {useCustomReturn && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <input
+                    className={inputCls}
+                    placeholder="お名前 *"
+                    value={ret.name}
+                    onChange={(e) => setRet({ ...ret, name: e.target.value })}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="郵便番号（7桁） *"
+                    value={ret.postalCode}
+                    onChange={(e) => setRet({ ...ret, postalCode: e.target.value.replace(/-/g, "") })}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="都道府県 *"
+                    value={ret.prefecture}
+                    onChange={(e) => setRet({ ...ret, prefecture: e.target.value })}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="住所（市区町村・番地） *"
+                    value={ret.address}
+                    onChange={(e) => setRet({ ...ret, address: e.target.value })}
+                  />
+                  <input
+                    className={`${inputCls} sm:col-span-2`}
+                    placeholder="建物名・部屋番号など"
+                    value={ret.address2}
+                    onChange={(e) => setRet({ ...ret, address2: e.target.value })}
+                  />
                 </div>
-              ) : (
-                <p className="text-sm text-gray-500">登録住所が取得できませんでした。</p>
               )}
+
               <p className="text-xs text-gray-400">
-                ※ 登録済みの住所を使用します。変更はマイページから行えます。
+                ※ 未入力の場合は登録住所に返送します。登録住所の変更はマイページから行えます。
               </p>
             </div>
 
@@ -679,7 +763,17 @@ export default function ApplyForm({
             </div>
 
             <button
-              onClick={() => goStep("confirm")}
+              onClick={() => {
+                if (
+                  useCustomReturn &&
+                  (!ret.name || !/^\d{7}$/.test(ret.postalCode) || !ret.prefecture || !ret.address)
+                ) {
+                  setError("返送先住所（お名前・郵便番号7桁・都道府県・住所）を入力してください");
+                  return;
+                }
+                setError("");
+                goStep("confirm");
+              }}
               className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
             >
               確認へ進む
@@ -692,12 +786,20 @@ export default function ApplyForm({
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="font-bold text-gray-900 mb-3">申込内容の確認</h2>
-              <div className="text-sm text-gray-600 mb-3">
+              <div className="text-sm text-gray-600 mb-2">
                 <span className="font-medium">提出先:</span> {REGION_LABELS[region]} /{" "}
                 <span className="font-medium">サービス:</span>{" "}
                 {serviceLevel && SERVICE_LABELS[serviceLevel]} /{" "}
                 <span className="font-medium">返却:</span>{" "}
                 {returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}
+              </div>
+              <div className="text-sm text-gray-600 mb-3">
+                <span className="font-medium">返送先:</span>{" "}
+                {useCustomReturn
+                  ? `${ret.name}／〒${ret.postalCode} ${ret.prefecture}${ret.address}${ret.address2 ? ` ${ret.address2}` : ""}`
+                  : profile
+                    ? `${profile.name}（登録住所）`
+                    : "登録住所"}
               </div>
               <div className="divide-y divide-gray-100">
                 {cards.map((c, i) => (

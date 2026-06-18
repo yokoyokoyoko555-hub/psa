@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCustomerSession } from "@/lib/customer-auth";
+import { encrypt } from "@/lib/crypto";
 import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
 import { createPaymentIntent } from "@/lib/stripe";
@@ -25,11 +26,20 @@ const cardSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
+const returnAddressSchema = z.object({
+  name: z.string().min(1).max(100),
+  postalCode: z.string().regex(/^\d{7}$/),
+  prefecture: z.string().min(1),
+  address: z.string().min(1),
+  address2: z.string().optional(),
+});
+
 const applicationSchema = z.object({
   serviceLevel: z.nativeEnum(ServiceLevel),
   region: z.nativeEnum(ServiceRegion),
   returnMethod: z.nativeEnum(ReturnMethod),
   cards: z.array(cardSchema).min(1).max(200),
+  returnAddress: returnAddressSchema.optional(), // 未指定なら登録住所を使用
   agreementText: z.string().min(1),
   agreementVersion: z.string().min(1),
   ipAddress: z.string(),
@@ -102,6 +112,9 @@ export async function createApplication(
         region: parsed.data.region,
         source: "CUSTOMER",
         returnMethod: parsed.data.returnMethod,
+        shippingAddressEncrypted: parsed.data.returnAddress
+          ? encrypt(JSON.stringify(parsed.data.returnAddress))
+          : null,
         status: "DRAFT",
         totalAmount: fees.totalAmount,
         psaFeeTotal: fees.psaFeeTotal,

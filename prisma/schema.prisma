@@ -175,6 +175,8 @@ model Application {
   region         ServiceRegion     @default(PSA_JP) // 提出先（PSA日本 / PSA US）
   source         ApplicationSource @default(CUSTOMER) // 顧客入力 / 当社(店舗)入力
   returnMethod   ReturnMethod
+  // 返送先住所（暗号化JSON）。null の場合は顧客の登録住所を使用
+  shippingAddressEncrypted String?
   status         ApplicationStatus @default(DRAFT)
   totalAmount    Int               @default(0) // 円
   psaFeeTotal    Int               @default(0)
