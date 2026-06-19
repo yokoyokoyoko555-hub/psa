@@ -45,8 +45,10 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-4 py-4">
-        <div className="max-w-4xl mx-auto flex items-center gap-4">
-          <Link href="/mypage/applications" className="text-gray-500 hover:text-gray-700">← 申込一覧</Link>
+        <div className="max-w-4xl mx-auto flex items-center gap-3">
+          <Link href="/mypage" className="text-gray-500 hover:text-gray-700">← マイページ</Link>
+          <span className="text-gray-300">/</span>
+          <Link href="/mypage/applications" className="text-gray-500 hover:text-gray-700">申込一覧</Link>
           <h1 className="font-bold text-gray-900">{application.applicationNo}</h1>
         </div>
       </header>
