@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { verifyRegistrationToken } from "@/actions/customer";
-import EmailStart from "./EmailStart";
+import AuthScreen from "@/components/AuthScreen";
 import RegisterForm from "./RegisterForm";
 
 export default async function RegisterPage({
@@ -12,9 +12,9 @@ export default async function RegisterPage({
 }) {
   const { token } = await searchParams;
 
-  // トークンなし → メールアドレス入力から開始
+  // トークンなし → 新規登録/ログインの認証画面
   if (!token) {
-    return <EmailStart />;
+    return <AuthScreen initialTab="signup" />;
   }
 
   // トークンあり → 検証して登録フォーム
