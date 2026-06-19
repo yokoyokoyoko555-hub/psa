@@ -174,6 +174,19 @@ model CustomerAddress {
   @@map("customer_addresses")
 }
 
+// 新規登録のメール認証（メール入力→確認リンク→登録）
+model EmailVerification {
+  id         String    @id @default(cuid())
+  email      String
+  token      String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email])
+  @@map("email_verifications")
+}
+
 model CustomerSession {
   id           String   @id @default(cuid())
   customerId   String

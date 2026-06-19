@@ -13,6 +13,7 @@
 | `User` / users | 管理者・スタッフ | `email`(uniq), `passwordHash`, `role`, `twoFactorSecret`/`twoFactorEnabled`, `isActive` |
 | `Customer` / customers | 顧客 | `memberNo`(uniq, 登録時自動発行 B######), PII列=`*Encrypted`(AES-256-GCM), `email`(uniq)/`postalCode`は平文, `stripeCustomerId`(uniq), `emailVerified` |
 | `CustomerSession` / customer_sessions | 顧客セッション | `sessionToken`(uniq), `expires`, Customterへ Cascade |
+| `EmailVerification` / email_verifications | 新規登録メール認証 | `token`(uniq), `email`, `expiresAt`(24h), `consumedAt` |
 | `CustomerAddress` / customer_addresses | 住所帳（返送先） | PII列=`*Encrypted`, `isDefault`, Customterへ Cascade |
 | `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `source`(CUSTOMER/STORE), 料金内訳, `status` |
 | `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金 |

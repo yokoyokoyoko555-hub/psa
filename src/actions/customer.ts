@@ -12,6 +12,72 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+// ===== 新規登録のメール認証 =====
+
+const emailSchema = z.object({
+  email: z.string().email(),
+  hp: z.string().optional(), // ハニーポット
+});
+
+/**
+ * メールアドレスを受け取り、確認リンクを送信する（24時間有効）。
+ * SMTP未設定時はテスト用に devLink を返す（設定後は自動でメール送信）。
+ */
+export async function requestRegistration(
+  input: z.infer<typeof emailSchema>
+): Promise<{ success: boolean; error?: string; sent?: boolean; devLink?: string }> {
+  const parsed = emailSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "メールアドレスが正しくありません" };
+
+  if (parsed.data.hp && parsed.data.hp.trim() !== "") {
+    return { success: false, error: "送信に失敗しました" };
+  }
+
+  const email = parsed.data.email.toLowerCase();
+
+  const existing = await prisma.customer.findUnique({ where: { email } });
+  if (existing) {
+    return { success: false, error: "このメールアドレスはすでに登録されています" };
+  }
+
+  const { randomBytes } = await import("crypto");
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  await prisma.emailVerification.create({ data: { email, token, expiresAt } });
+
+  const base = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "";
+  const verifyUrl = `${base}/register?token=${token}`;
+
+  // SMTP未設定ならテスト用にリンクを返す
+  if (!process.env.SMTP_HOST) {
+    return { success: true, sent: false, devLink: verifyUrl };
+  }
+
+  try {
+    const { sendMail, registrationVerificationHtml } = await import("@/lib/mailer");
+    await sendMail({
+      to: email,
+      subject: "【トレカビンクス】会員登録のご案内",
+      html: registrationVerificationHtml({ verifyUrl }),
+    });
+    return { success: true, sent: true };
+  } catch {
+    return { success: true, sent: false, devLink: verifyUrl };
+  }
+}
+
+/** トークンを検証し、有効なら対象メールを返す（登録ページの表示用） */
+export async function verifyRegistrationToken(
+  token: string
+): Promise<{ valid: boolean; email?: string }> {
+  const rec = await prisma.emailVerification.findUnique({ where: { token } });
+  if (!rec || rec.consumedAt || rec.expiresAt < new Date()) {
+    return { valid: false };
+  }
+  return { valid: true, email: rec.email };
+}
+
 const registerSchema = z.object({
   name: z.string().min(1).max(100),
   nameKana: z.string().min(1).max(100),
@@ -22,6 +88,7 @@ const registerSchema = z.object({
   address: z.string().min(1),
   address2: z.string().optional(),
   password: z.string().min(8).max(100),
+  token: z.string().min(1), // メール認証トークン
   hp: z.string().optional(), // ハニーポット（人間は空、Botが埋める）
 });
 
@@ -38,6 +105,17 @@ export async function registerCustomer(
   // Bot対策（ハニーポット）: 隠しフィールドが埋められていたら拒否
   if (parsed.data.hp && parsed.data.hp.trim() !== "") {
     return { success: false, error: "登録に失敗しました" };
+  }
+
+  // メール認証トークンの検証（メール所有確認）
+  const verification = await prisma.emailVerification.findUnique({
+    where: { token: parsed.data.token },
+  });
+  if (!verification || verification.consumedAt || verification.expiresAt < new Date()) {
+    return { success: false, error: "認証リンクが無効か期限切れです。最初からやり直してください。" };
+  }
+  if (verification.email.toLowerCase() !== parsed.data.email.toLowerCase()) {
+    return { success: false, error: "メールアドレスが一致しません。" };
   }
 
   const existing = await prisma.customer.findUnique({
@@ -71,7 +149,14 @@ export async function registerCustomer(
       address2Encrypted: parsed.data.address2 ? encrypt(parsed.data.address2) : null,
       passwordHash,
       stripeCustomerId: stripeCustomer.id,
+      emailVerified: new Date(), // 認証リンク経由なので確認済み
     },
+  });
+
+  // トークンを消費（再利用防止）
+  await prisma.emailVerification.update({
+    where: { id: verification.id },
+    data: { consumedAt: new Date() },
   });
 
   const hdrs = await headers();

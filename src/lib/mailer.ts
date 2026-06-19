@@ -23,6 +23,21 @@ export async function sendMail(options: MailOptions) {
   });
 }
 
+export function registrationVerificationHtml(params: { verifyUrl: string }): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>新規会員登録のご案内</h2>
+      <p>トレカビンクス PSA鑑定受付代行サービスへのご登録ありがとうございます。</p>
+      <p>下記のボタンから24時間以内に会員情報のご登録をお願いします。</p>
+      <p style="text-align:center; margin: 24px 0;">
+        <a href="${params.verifyUrl}" style="background:#6b0505;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;">会員登録に進む</a>
+      </p>
+      <p style="font-size:12px;color:#888;">このリンクは24時間有効です。心当たりがない場合はこのメールを破棄してください。</p>
+      <p style="font-size:12px;color:#888;">${params.verifyUrl}</p>
+    </div>
+  `;
+}
+
 export function upchargeNotificationHtml(params: {
   customerName: string;
   cardName: string;
