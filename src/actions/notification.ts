@@ -25,6 +25,10 @@ const publishSchema = z.object({
   isPublished: z.boolean(),
 });
 
+const deleteSchema = z.object({
+  id: z.string().min(1),
+});
+
 async function requireAdminOrStaff() {
   const session = await auth();
   const user = session?.user as { id?: string; role?: string } | undefined;
@@ -180,6 +184,39 @@ export async function updateNotificationPublishStatus(
 
   revalidatePath("/admin/notifications");
   revalidatePath(`/admin/notifications/${notification.id}`);
+  revalidatePath("/mypage");
+  revalidatePath("/mypage/notifications");
+
+  return { success: true };
+}
+
+export async function deleteNotification(
+  input: z.infer<typeof deleteSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdminOrStaff();
+
+  const parsed = deleteSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "入力内容が正しくありません" };
+  }
+
+  const current = await prisma.notification.findUnique({ where: { id: parsed.data.id } });
+  if (!current) return { success: false, error: "お知らせが見つかりません" };
+
+  await prisma.notification.delete({ where: { id: parsed.data.id } });
+
+  const hdrs = await headers();
+  await logOperation({
+    userId: user.id,
+    ipAddress: (hdrs as unknown as Headers).get?.("x-forwarded-for") ?? "unknown",
+    action: "NOTIFICATION_DELETE",
+    targetType: "notifications",
+    targetId: current.id,
+    before: { title: current.title, isPublished: current.isPublished },
+  });
+
+  revalidatePath("/admin/notifications");
+  revalidatePath(`/admin/notifications/${current.id}`);
   revalidatePath("/mypage");
   revalidatePath("/mypage/notifications");
 

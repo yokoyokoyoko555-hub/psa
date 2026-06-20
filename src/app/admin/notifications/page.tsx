@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import Link from "next/link";
+import NotificationDeleteButton from "./NotificationDeleteButton";
 import NotificationForm from "./NotificationForm";
 import NotificationPublishButton from "./NotificationPublishButton";
 import NotificationVisibilityButton from "./NotificationVisibilityButton";
@@ -80,12 +81,15 @@ export default async function AdminNotificationsPage({
                     <NotificationVisibilityButton id={n.id} showOnMypage={n.showOnMypage} />
                   </td>
                   <td className="px-6 py-3">
-                    <Link
-                      href={`/admin/notifications/${n.id}`}
-                      className="text-brand-600 hover:text-brand-800 font-medium"
-                    >
-                      編集
-                    </Link>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/admin/notifications/${n.id}`}
+                        className="text-brand-600 hover:text-brand-800 font-medium"
+                      >
+                        編集
+                      </Link>
+                      <NotificationDeleteButton id={n.id} />
+                    </div>
                   </td>
                 </tr>
               ))}
