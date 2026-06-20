@@ -52,19 +52,18 @@ export default async function ApplicationsPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
           </Link>
+          <h1 className="font-bold text-gray-900">申込一覧</h1>
+          <div className="flex-1" />
+          <Link
+            href="/apply"
+            className="shrink-0 bg-brand-600 text-white rounded-full px-4 py-1.5 text-sm font-bold hover:bg-brand-700 transition"
+          >
+            新規申込
+          </Link>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">申込一覧</h1>
-          <Link
-            href="/apply"
-            className="bg-gray-900 text-white font-bold px-5 py-3 rounded-full hover:bg-gray-700 transition flex items-center gap-2"
-          >
-            ＋ 新規申込
-          </Link>
-        </div>
         <ApplicationCenter apps={rows} />
       </main>
     </div>
