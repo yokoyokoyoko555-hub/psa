@@ -2,7 +2,7 @@
 
 > 本書はシステムの全体構成を記述する「正」のドキュメント。
 > 実装と乖離が出た場合は、実装を確認のうえ本書を更新すること（AGENTS.md のルール参照）。
-> 最終更新: 2026-06-18
+> 最終更新: 2026-06-20
 
 ---
 
@@ -108,7 +108,7 @@ psa-system/
 | `User` | 管理者/スタッフ | `role`(ADMIN/STAFF/…), `passwordHash`, 2FA項目 |
 | `Customer` | 顧客 | PII列は `*Encrypted`（AES-256-GCM）, `email`/`postalCode`は平文, `stripeCustomerId` |
 | `CustomerSession` | 顧客セッション | `sessionToken`(cookie), `expires` |
-| `Application` | 申込 | `applicationNo`(APP-…), 料金内訳, `status` |
+| `Application` | 申込 | `applicationNo`(APP-…), 返送先住所/電話（暗号化）, 料金内訳, `status` |
 | `Card` | カード（最重要） | `cardNo`(CARD-…), PSA各種ID/grade, 画像S3キー, `status`(17段階), 料金 |
 | `CardStatusHistory` | ステータス履歴 | `changedBy`(userId or customerId) |
 | `PsaSubmissionGroup` | PSA提出グループ | `groupNo`(PSG-…), `psaSubmissionId`/`psaOrderId` |

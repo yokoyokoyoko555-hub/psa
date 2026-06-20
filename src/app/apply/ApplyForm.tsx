@@ -145,6 +145,8 @@ export default function ApplyForm({
   );
   const selectedAddr = addrList.find((a) => a.id === returnSel);
 
+  const [shippingPhone, setShippingPhone] = useState<string>(profile?.phone ?? "");
+
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -305,6 +307,11 @@ export default function ApplyForm({
       setError("サービスを選択してください");
       return;
     }
+    const normalizedShippingPhone = shippingPhone.trim();
+    if (!/^[0-9-+() ]{10,20}$/.test(normalizedShippingPhone)) {
+      setError("電話番号を正しく入力してください");
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -334,6 +341,7 @@ export default function ApplyForm({
               address2: selectedAddr.address2 || undefined,
             }
           : undefined,
+      shippingPhone: normalizedShippingPhone,
       agreementText: AGREEMENT_TEXT,
       agreementVersion: AGREEMENT_VERSION,
       ipAddress: "client",
@@ -393,7 +401,7 @@ export default function ApplyForm({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-1.5">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center gap-4">
           {/* ロゴ（クリックでトップへ） */}
           <Link href="/" className="shrink-0 hover:opacity-70 transition">
@@ -754,10 +762,15 @@ export default function ApplyForm({
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-              <h2 className="font-bold text-gray-900">電話番号</h2>
-              <div className="border border-gray-200 rounded-lg p-4 text-sm text-gray-800">
-                {profile?.phone ?? "—"}
-              </div>
+              <h2 className="font-bold text-gray-900">電話番号 <span className="text-red-500">*</span></h2>
+              <input
+                type="tel"
+                value={shippingPhone}
+                onChange={(e) => setShippingPhone(e.target.value)}
+                placeholder="090-1234-5678"
+                className={inputCls}
+              />
+              <p className="text-xs text-gray-400">配送・連絡に使用します。</p>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">

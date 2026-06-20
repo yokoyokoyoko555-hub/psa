@@ -72,6 +72,9 @@ export default async function AdminApplicationDetailPage({
   const customerPhone = application.customer.phoneEncrypted
     ? decrypt(application.customer.phoneEncrypted)
     : "-";
+  const shippingPhone = application.shippingPhoneEncrypted
+    ? decrypt(application.shippingPhoneEncrypted)
+    : customerPhone;
   const customerEmail = application.customer.email;
 
   return (
@@ -244,7 +247,7 @@ export default async function AdminApplicationDetailPage({
               </div>
               <div>
                 <dt className="text-gray-500 text-xs">電話番号</dt>
-                <dd className="font-medium text-gray-900">{customerPhone}</dd>
+                <dd className="font-medium text-gray-900">{shippingPhone}</dd>
               </div>
             </dl>
             <Link

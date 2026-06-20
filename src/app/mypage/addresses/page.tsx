@@ -20,7 +20,7 @@ export default async function AddressesPage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.jpg" alt="トレカビンクス" className="h-10 w-auto" />
           </Link>
-          <h1 className="font-bold text-gray-900">住所帳</h1>
+          <h1 className="font-bold text-gray-900">返送先情報</h1>
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">

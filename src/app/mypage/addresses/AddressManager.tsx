@@ -15,7 +15,6 @@ type FormState = {
   prefecture: string;
   address: string;
   address2: string;
-  phone: string;
 };
 
 const emptyForm: FormState = {
@@ -24,7 +23,6 @@ const emptyForm: FormState = {
   prefecture: "",
   address: "",
   address2: "",
-  phone: "",
 };
 
 const inputCls =
@@ -69,7 +67,6 @@ export default function AddressManager({
       prefecture: a.prefecture,
       address: a.address,
       address2: a.address2 ?? "",
-      phone: a.phone ?? "",
     });
     setEditingId(a.id);
     setAdding(false);
@@ -106,7 +103,6 @@ export default function AddressManager({
       prefecture: form.prefecture,
       address: form.address,
       address2: form.address2 || undefined,
-      phone: form.phone || undefined,
     };
     const res = editingId
       ? await updateAddress(editingId, payload)
@@ -178,7 +174,6 @@ export default function AddressManager({
                 {a.address}
                 {a.address2 ? ` ${a.address2}` : ""}
               </p>
-              {a.phone && <p className="text-xs text-gray-400 mt-0.5">{a.phone}</p>}
             </button>
 
             <div className="relative">
@@ -293,7 +288,6 @@ function AddressFields({
       <input className={inputCls} placeholder="都道府県 *" value={form.prefecture} onChange={(e) => setForm({ ...form, prefecture: e.target.value })} />
       <input className={inputCls} placeholder="住所（市区町村・番地） *" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
       <input className={`${inputCls} sm:col-span-2`} placeholder="建物名・部屋番号など" value={form.address2} onChange={(e) => setForm({ ...form, address2: e.target.value })} />
-      <input className={`${inputCls} sm:col-span-2`} placeholder="電話番号（任意）" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
     </div>
   );
 }

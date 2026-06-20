@@ -2,7 +2,7 @@
 
 > `prisma/schema.prisma` が単一の真実。スキーマ変更時は本書も更新する（[AGENTS.md §3]）。
 > スキーマ同期は `prisma db push`（migrate未運用 / [ADR-0004]）。
-> 最終更新: 2026-06-18
+> 最終更新: 2026-06-20
 
 ---
 
@@ -15,7 +15,7 @@
 | `CustomerSession` / customer_sessions | 顧客セッション | `sessionToken`(uniq), `expires`, Customterへ Cascade |
 | `EmailVerification` / email_verifications | 新規登録メール認証 | `token`(uniq), `email`, `expiresAt`(24h), `consumedAt` |
 | `CustomerAddress` / customer_addresses | 住所帳（返送先） | PII列=`*Encrypted`, `isDefault`, Customterへ Cascade |
-| `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `source`(CUSTOMER/STORE), 料金内訳, `status` |
+| `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `source`(CUSTOMER/STORE), 返送先住所/電話（暗号化）, 料金内訳, `status` |
 | `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金 |
 | `CardStatusHistory` / card_status_histories | ステータス履歴 | `status`, `changedBy`(userId or customerId), Cardへ Cascade |
 | `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `psaSubmissionId`/`psaOrderId`, `status` |
@@ -89,6 +89,9 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 `customers` の以下を暗号化保存:
 `nameEncrypted` / `nameKanaEncrypted` / `phoneEncrypted` / `prefectureEncrypted` / `addressEncrypted` / `address2Encrypted`
 （`email`・`postalCode` は検索性のため平文）
+
+`applications` の返送先情報:
+`shippingAddressEncrypted` / `shippingPhoneEncrypted`
 
 ---
 

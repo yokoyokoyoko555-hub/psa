@@ -42,6 +42,7 @@ const applicationSchema = z.object({
   returnMethod: z.nativeEnum(ReturnMethod),
   cards: z.array(cardSchema).min(1).max(200),
   returnAddress: returnAddressSchema.optional(), // 未指定なら登録住所を使用
+  shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/), // 配送先電話（必須）
   agreementText: z.string().min(1),
   agreementVersion: z.string().min(1),
   ipAddress: z.string(),
@@ -123,6 +124,7 @@ export async function createApplication(
       shippingAddressEncrypted: parsed.data.returnAddress
         ? encrypt(JSON.stringify(parsed.data.returnAddress))
         : null,
+      shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
       totalAmount: fees.totalAmount,
       psaFeeTotal: fees.psaFeeTotal,
       agencyFeeTotal: fees.agencyFeeTotal,

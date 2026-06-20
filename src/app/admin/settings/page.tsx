@@ -13,7 +13,7 @@ export default async function SettingsPage() {
   ]);
 
   return (
-    <div className="p-8 max-w-4xl space-y-8">
+    <div className="p-8 max-w-6xl space-y-8">
       <h1 className="text-2xl font-bold text-gray-900">設定</h1>
 
       {/* Service Prices */}
