@@ -58,7 +58,7 @@
 #### `upsertSubmissionBooking(input)` / `cancelSubmissionBooking(id)`（submission-booking.ts）
 - 認証: 顧客セッション。支払済み申込のみ予約可。
 - in: `{ applicationId, method:"STORE_DROP_OFF"|"SHIPPING", scheduledAt, note? }`
-- 処理: 申込ごとに1件のカード提出予約を作成/更新。キャンセル時は `status=CANCELLED`。
+- 処理: 申込ごとに1件のカード提出予約を作成/更新。予約不可日は作成不可。キャンセル時は `status=CANCELLED`。
 
 #### `deletePaymentMethod(methodId)`（payment.ts）
 - 認証: 顧客セッション（本人のカードのみ）。Stripe detach → DB削除
@@ -78,6 +78,7 @@
 | `getAdminCards(params)` | ADMIN/STAFF | 検索/絞り込み/ページング |
 | `getAdminCustomers(params)` | ADMIN/STAFF | 顧客一覧 |
 | `cancelSubmissionBookingByAdmin(id)` | ADMIN/STAFF | 提出予約をキャンセル |
+| `upsertSubmissionCalendarDay(input)` | ADMIN/STAFF | 予約受付不可日・発送日を設定 |
 
 料金設定の更新は `PUT /api/admin/service-prices`（**ADMINのみ**）。
 

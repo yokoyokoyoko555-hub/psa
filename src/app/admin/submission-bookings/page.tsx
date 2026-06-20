@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import CancelBookingButton from "./CancelBookingButton";
+import DaySettingsButton from "./DaySettingsButton";
 
 export const metadata = { title: "提出予約カレンダー | 管理画面" };
 
@@ -57,29 +58,35 @@ export default async function AdminSubmissionBookingsPage({
   const prevMonth = new Date(month.getFullYear(), month.getMonth() - 1, 1);
   const nextMonth = new Date(month.getFullYear(), month.getMonth() + 1, 1);
 
-  const bookings = await prisma.submissionBooking.findMany({
-    where: {
-      scheduledAt: { gte: monthStart, lt: monthEnd },
-    },
-    include: {
-      customer: { select: { nameEncrypted: true, email: true } },
-      application: {
-        select: {
-          id: true,
-          applicationNo: true,
-          totalAmount: true,
-          _count: { select: { cards: true } },
+  const [bookings, calendarDays] = await Promise.all([
+    prisma.submissionBooking.findMany({
+      where: {
+        scheduledAt: { gte: monthStart, lt: monthEnd },
+      },
+      include: {
+        customer: { select: { nameEncrypted: true, email: true } },
+        application: {
+          select: {
+            id: true,
+            applicationNo: true,
+            totalAmount: true,
+            _count: { select: { cards: true } },
+          },
         },
       },
-    },
-    orderBy: { scheduledAt: "asc" },
-  });
+      orderBy: { scheduledAt: "asc" },
+    }),
+    prisma.submissionCalendarDay.findMany({
+      where: { date: { gte: monthStart, lt: monthEnd } },
+    }),
+  ]);
 
   const grouped = new Map<string, typeof bookings>();
   for (const booking of bookings) {
     const key = toDateKey(new Date(booking.scheduledAt));
     grouped.set(key, [...(grouped.get(key) ?? []), booking]);
   }
+  const settingsByDate = new Map(calendarDays.map((day) => [toDateKey(new Date(day.date)), day]));
 
   const days = makeMonthDays(month);
   const bookedCount = bookings.filter((b) => b.status === "BOOKED").length;
@@ -125,22 +132,46 @@ export default async function AdminSubmissionBookingsPage({
           {days.map((date) => {
             const key = toDateKey(date);
             const dayBookings = grouped.get(key) ?? [];
+            const daySetting = settingsByDate.get(key);
             const inMonth = date.getMonth() === month.getMonth();
             return (
               <div
                 key={key}
                 className={`min-h-36 border-r border-b border-gray-100 p-2 ${
-                  inMonth ? "bg-white" : "bg-gray-50 text-gray-300"
+                  daySetting?.isClosed
+                    ? "bg-red-50"
+                    : inMonth
+                    ? "bg-white"
+                    : "bg-gray-50 text-gray-300"
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold">{date.getDate()}</span>
+                  <DaySettingsButton
+                    date={key}
+                    isClosed={daySetting?.isClosed ?? false}
+                    isShippingDay={daySetting?.isShippingDay ?? false}
+                    note={daySetting?.note ?? ""}
+                  />
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {daySetting?.isClosed && (
+                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700">
+                      受付不可
+                    </span>
+                  )}
+                  {daySetting?.isShippingDay && (
+                    <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
+                      発送日
+                    </span>
+                  )}
                   {dayBookings.length > 0 && (
-                    <span className="rounded-full bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-700">
-                      {dayBookings.length}
+                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-bold text-gray-700">
+                      {dayBookings.length}件
                     </span>
                   )}
                 </div>
+                {daySetting?.note && <p className="mt-1 line-clamp-2 text-[11px] text-gray-500">{daySetting.note}</p>}
                 <div className="mt-2 space-y-2">
                   {dayBookings.map((booking) => {
                     const isCancelled = booking.status === "CANCELLED";

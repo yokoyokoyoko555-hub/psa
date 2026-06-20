@@ -513,6 +513,19 @@ model SubmissionBooking {
   @@map("submission_bookings")
 }
 
+model SubmissionCalendarDay {
+  id            String   @id @default(cuid())
+  date          DateTime @unique
+  isClosed      Boolean  @default(false)
+  isShippingDay Boolean  @default(false)
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([date])
+  @@map("submission_calendar_days")
+}
+
 // ===== OPERATION LOGS (操作ログ) =====
 
 model OperationLog {

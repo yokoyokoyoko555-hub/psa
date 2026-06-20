@@ -15,6 +15,13 @@ const bookingSchema = z.object({
   note: z.string().max(500).optional(),
 });
 
+const calendarDaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  isClosed: z.boolean(),
+  isShippingDay: z.boolean(),
+  note: z.string().max(300).optional(),
+});
+
 async function requireAdminOrStaff() {
   const session = await auth();
   const user = session?.user as { id?: string; role?: string } | undefined;
@@ -25,6 +32,10 @@ async function requireAdminOrStaff() {
 
 function getHeaderIp(hdrs: Headers) {
   return hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? hdrs.get("x-real-ip") ?? "unknown";
+}
+
+function dateKeyToJstDate(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00+09:00`);
 }
 
 export async function upsertSubmissionBooking(
@@ -42,6 +53,13 @@ export async function upsertSubmissionBooking(
   }
   if (scheduledAt.getTime() <= Date.now()) {
     return { success: false, error: "未来の日時を選択してください" };
+  }
+  const dateKey = parsed.data.scheduledAt.slice(0, 10);
+  const calendarDay = await prisma.submissionCalendarDay.findUnique({
+    where: { date: dateKeyToJstDate(dateKey) },
+  });
+  if (calendarDay?.isClosed) {
+    return { success: false, error: "この日は予約受付不可です。別の日を選択してください" };
   }
 
   const application = await prisma.application.findFirst({
@@ -149,5 +167,47 @@ export async function cancelSubmissionBookingByAdmin(
   revalidatePath("/admin/submission-bookings");
   revalidatePath(`/admin/applications/${booking.applicationId}`);
   revalidatePath(`/mypage/applications/${booking.applicationId}`);
+  return { success: true };
+}
+
+export async function upsertSubmissionCalendarDay(
+  input: z.infer<typeof calendarDaySchema>
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdminOrStaff();
+  const parsed = calendarDaySchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "日付設定を確認してください" };
+
+  const date = dateKeyToJstDate(parsed.data.date);
+  const day = await prisma.submissionCalendarDay.upsert({
+    where: { date },
+    update: {
+      isClosed: parsed.data.isClosed,
+      isShippingDay: parsed.data.isShippingDay,
+      note: parsed.data.note?.trim() || null,
+    },
+    create: {
+      date,
+      isClosed: parsed.data.isClosed,
+      isShippingDay: parsed.data.isShippingDay,
+      note: parsed.data.note?.trim() || null,
+    },
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    userId: user.id,
+    ipAddress: getHeaderIp(hdrs),
+    action: "SUBMISSION_CALENDAR_DAY_UPSERT",
+    targetType: "submission_calendar_days",
+    targetId: day.id,
+    after: {
+      date: parsed.data.date,
+      isClosed: parsed.data.isClosed,
+      isShippingDay: parsed.data.isShippingDay,
+    },
+  });
+
+  revalidatePath("/admin/submission-bookings");
+  revalidatePath("/mypage/submission-booking");
   return { success: true };
 }

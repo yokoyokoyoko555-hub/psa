@@ -38,7 +38,7 @@
 - ✅ Stripe Webhook（succeeded/failed/method.attached）
 - ✅ メール送信基盤（nodemailer）+ Upcharge通知テンプレート
 - ✅ お知らせ表示/作成（マイページ表示・詳細・管理画面作成・一時保存・公開/非公開・表示対象選択・編集・削除）
-- ✅ カード提出予約（顧客: `/mypage/submission-booking`、管理: `/admin/submission-bookings`、店頭持込/郵送の月間カレンダー）
+- ✅ カード提出予約（顧客: `/mypage/submission-booking`、管理: `/admin/submission-bookings`、店頭持込/郵送の月間カレンダー、予約受付不可日・発送日設定）
 - ✅ Railway本番デプロイ・稼働（healthcheck `/api/health`）
 
 ---

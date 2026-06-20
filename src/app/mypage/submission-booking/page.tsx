@@ -8,9 +8,15 @@ import BookingCalendar from "./BookingCalendar";
 
 export const metadata = { title: "カード提出予約 | トレカビンクス" };
 
+function toDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export default async function SubmissionBookingPage() {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   const applications = await prisma.application.findMany({
     where: {
@@ -23,6 +29,10 @@ export default async function SubmissionBookingPage() {
       submissionBooking: true,
     },
     orderBy: { createdAt: "desc" },
+  });
+  const calendarDays = await prisma.submissionCalendarDay.findMany({
+    where: { date: { gte: today } },
+    orderBy: { date: "asc" },
   });
 
   const calendarApplications = applications.map((app) => ({
@@ -61,7 +71,15 @@ export default async function SubmissionBookingPage() {
             店頭持込、または郵送予定日を選択できます。予約は申込ごとに1件保存されます。
           </p>
         </div>
-        <BookingCalendar applications={calendarApplications} />
+        <BookingCalendar
+          applications={calendarApplications}
+          closedDates={calendarDays
+            .filter((day) => day.isClosed)
+            .map((day) => toDateKey(day.date))}
+          shippingDates={calendarDays
+            .filter((day) => day.isShippingDay)
+            .map((day) => toDateKey(day.date))}
+        />
       </main>
     </div>
   );

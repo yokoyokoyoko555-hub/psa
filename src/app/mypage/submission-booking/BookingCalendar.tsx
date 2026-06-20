@@ -49,7 +49,15 @@ function formatBooking(iso: string) {
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-export default function BookingCalendar({ applications }: { applications: ApplicationOption[] }) {
+export default function BookingCalendar({
+  applications,
+  closedDates,
+  shippingDates,
+}: {
+  applications: ApplicationOption[];
+  closedDates: string[];
+  shippingDates: string[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [month, setMonth] = useState(() => new Date());
@@ -77,6 +85,10 @@ export default function BookingCalendar({ applications }: { applications: Applic
 
   function submit() {
     if (!applicationId) return;
+    if (closedDates.includes(selectedDate)) {
+      setMessage("この日は予約受付不可です。別の日を選択してください");
+      return;
+    }
     setMessage("");
     startTransition(async () => {
       const result = await upsertSubmissionBooking({
@@ -134,8 +146,10 @@ export default function BookingCalendar({ applications }: { applications: Applic
           {days.map((date) => {
             const key = toDateKey(date);
             const inMonth = date.getMonth() === month.getMonth();
-            const disabled = key < todayKey;
-            const active = key === selectedDate;
+            const isClosed = closedDates.includes(key);
+            const isShippingDay = shippingDates.includes(key);
+            const disabled = key < todayKey || isClosed;
+            const active = key === selectedDate && !isClosed;
             return (
               <button
                 key={key}
@@ -143,7 +157,9 @@ export default function BookingCalendar({ applications }: { applications: Applic
                 disabled={disabled}
                 onClick={() => setSelectedDate(key)}
                 className={`min-h-20 border-r border-b border-gray-100 p-2 text-left transition ${
-                  active
+                  isClosed
+                    ? "bg-red-50 text-red-300"
+                    : active
                     ? "bg-brand-600 text-white"
                     : disabled
                     ? "bg-gray-50 text-gray-300"
@@ -153,6 +169,18 @@ export default function BookingCalendar({ applications }: { applications: Applic
                 }`}
               >
                 <span className="text-sm font-bold">{date.getDate()}</span>
+                <span className="mt-2 flex flex-wrap gap-1">
+                  {isClosed && (
+                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700">
+                      受付不可
+                    </span>
+                  )}
+                  {isShippingDay && (
+                    <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
+                      発送日
+                    </span>
+                  )}
+                </span>
               </button>
             );
           })}

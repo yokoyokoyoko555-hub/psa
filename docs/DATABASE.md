@@ -27,6 +27,7 @@
 | `Agreement` / agreements | 電子同意書 | `applicationId`(uniq), `agreedAt`, `ipAddress`/`userAgent`, `agreementText`, `version` |
 | `Notification` / notifications | お知らせ/通知 | `customerId`(null=全体), `type`, `title`/`body`, `isPublished`, `showOnMypage`, `isRead` |
 | `SubmissionBooking` / submission_bookings | カード提出予約 | `applicationId`(uniq), `method`(STORE_DROP_OFF/SHIPPING), `scheduledAt`, `status`(BOOKED/CANCELLED), `note` |
+| `SubmissionCalendarDay` / submission_calendar_days | 提出予約カレンダー日付設定 | `date`(uniq), `isClosed`(予約不可), `isShippingDay`(発送日), `note` |
 | `OperationLog` / operation_logs | 操作ログ | `userId`/`customerId`, `action`, `targetType`/`targetId`, `before`/`after`(Json), index×3 |
 | `SavedPaymentMethod` / saved_payment_methods | 保存カード | `stripePaymentMethodId`(uniq), `brand`/`last4`, `expMonth`/`expYear`, `isDefault` |
 
@@ -45,6 +46,7 @@ Customer ──< Application ──< Card ──< CardStatusHistory
 PsaSubmissionGroup ──< Card        （提出グループは複数顧客のカードを束ねる）
 Customer ──< Payment / Upcharge / Agreement / Notification / SavedPaymentMethod / SubmissionBooking
 ServicePrice / ShippingRule / InsuranceRule … 料金マスタ（独立）
+SubmissionCalendarDay … 提出予約カレンダーの日付設定（独立）
 ```
 
 - `Card` は `Customer` と `Application` の両方に属する（`customerId` + `applicationId`）。
