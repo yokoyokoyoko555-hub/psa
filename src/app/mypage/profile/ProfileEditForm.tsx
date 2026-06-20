@@ -19,8 +19,10 @@ export default function ProfileEditForm({ profile }: { profile: CustomerProfile 
 
     const fd = new FormData(e.currentTarget);
     const result = await updateCustomerProfile({
-      name: String(fd.get("name") ?? ""),
-      nameKana: String(fd.get("nameKana") ?? ""),
+      lastName: String(fd.get("lastName") ?? ""),
+      firstName: String(fd.get("firstName") ?? ""),
+      lastNameRoman: String(fd.get("lastNameRoman") ?? ""),
+      firstNameRoman: String(fd.get("firstNameRoman") ?? ""),
       phone: String(fd.get("phone") ?? ""),
       postalCode: String(fd.get("postalCode") ?? ""),
       prefecture: String(fd.get("prefecture") ?? ""),
@@ -64,12 +66,20 @@ export default function ProfileEditForm({ profile }: { profile: CustomerProfile 
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs text-gray-500 mb-1">お名前 *</label>
-          <input name="name" defaultValue={profile.name} required className={inputCls} />
+          <label className="block text-xs text-gray-500 mb-1">姓 *</label>
+          <input name="lastName" defaultValue={profile.lastName} required className={inputCls} placeholder="山田" />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">フリガナ *</label>
-          <input name="nameKana" defaultValue={profile.nameKana} required className={inputCls} />
+          <label className="block text-xs text-gray-500 mb-1">名 *</label>
+          <input name="firstName" defaultValue={profile.firstName} required className={inputCls} placeholder="太郎" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">姓（ローマ字） *</label>
+          <input name="lastNameRoman" defaultValue={profile.lastNameRoman} required pattern="[A-Za-z .'\-]+" className={inputCls} placeholder="Yamada" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">名（ローマ字） *</label>
+          <input name="firstNameRoman" defaultValue={profile.firstNameRoman} required pattern="[A-Za-z .'\-]+" className={inputCls} placeholder="Taro" />
         </div>
       </div>
 

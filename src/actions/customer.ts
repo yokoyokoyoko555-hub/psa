@@ -78,9 +78,13 @@ export async function verifyRegistrationToken(
   return { valid: true, email: rec.email };
 }
 
+const romanRe = /^[A-Za-z .'-]+$/;
+
 const registerSchema = z.object({
-  name: z.string().min(1).max(100),
-  nameKana: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(50),
+  firstName: z.string().min(1).max(50),
+  lastNameRoman: z.string().min(1).max(50).regex(romanRe),
+  firstNameRoman: z.string().min(1).max(50).regex(romanRe),
   email: z.string().email(),
   phone: z.string().regex(/^[0-9-+() ]{10,20}$/),
   postalCode: z.string().regex(/^\d{7}$/),
@@ -127,10 +131,13 @@ export async function registerCustomer(
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 12);
 
+  const fullName = `${parsed.data.lastName} ${parsed.data.firstName}`;
+  const fullRoman = `${parsed.data.lastNameRoman} ${parsed.data.firstNameRoman}`;
+
   // Stripeカスタマー作成
   const stripeCustomer = await createStripeCustomer({
     email: parsed.data.email,
-    name: parsed.data.name,
+    name: fullName,
     phone: parsed.data.phone,
   });
 
@@ -139,8 +146,12 @@ export async function registerCustomer(
   const customer = await prisma.customer.create({
     data: {
       memberNo,
-      nameEncrypted: encrypt(parsed.data.name),
-      nameKanaEncrypted: encrypt(parsed.data.nameKana),
+      nameEncrypted: encrypt(fullName),
+      nameKanaEncrypted: encrypt(fullRoman),
+      lastNameEncrypted: encrypt(parsed.data.lastName),
+      firstNameEncrypted: encrypt(parsed.data.firstName),
+      lastNameRomanEncrypted: encrypt(parsed.data.lastNameRoman),
+      firstNameRomanEncrypted: encrypt(parsed.data.firstNameRoman),
       email: parsed.data.email,
       phoneEncrypted: encrypt(parsed.data.phone),
       postalCode: parsed.data.postalCode,
@@ -214,6 +225,10 @@ export interface CustomerProfile {
   memberNo: string | null;
   name: string;
   nameKana: string;
+  lastName: string;
+  firstName: string;
+  lastNameRoman: string;
+  firstNameRoman: string;
   email: string;
   phone: string;
   postalCode: string;
@@ -223,8 +238,10 @@ export interface CustomerProfile {
 }
 
 const updateProfileSchema = z.object({
-  name: z.string().min(1).max(100),
-  nameKana: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(50),
+  firstName: z.string().min(1).max(50),
+  lastNameRoman: z.string().min(1).max(50).regex(romanRe),
+  firstNameRoman: z.string().min(1).max(50).regex(romanRe),
   phone: z.string().regex(/^[0-9-+() ]{10,20}$/),
   postalCode: z.string().regex(/^\d{7}$/),
   prefecture: z.string().min(1),
@@ -246,8 +263,12 @@ export async function updateCustomerProfile(
   await prisma.customer.update({
     where: { id: customer.id },
     data: {
-      nameEncrypted: encrypt(parsed.data.name),
-      nameKanaEncrypted: encrypt(parsed.data.nameKana),
+      nameEncrypted: encrypt(`${parsed.data.lastName} ${parsed.data.firstName}`),
+      nameKanaEncrypted: encrypt(`${parsed.data.lastNameRoman} ${parsed.data.firstNameRoman}`),
+      lastNameEncrypted: encrypt(parsed.data.lastName),
+      firstNameEncrypted: encrypt(parsed.data.firstName),
+      lastNameRomanEncrypted: encrypt(parsed.data.lastNameRoman),
+      firstNameRomanEncrypted: encrypt(parsed.data.firstNameRoman),
       phoneEncrypted: encrypt(parsed.data.phone),
       postalCode: parsed.data.postalCode,
       prefectureEncrypted: encrypt(parsed.data.prefecture),
@@ -279,6 +300,10 @@ export async function getCustomerProfile(): Promise<CustomerProfile | null> {
     memberNo: customer.memberNo,
     name: decrypt(customer.nameEncrypted),
     nameKana: decrypt(customer.nameKanaEncrypted),
+    lastName: customer.lastNameEncrypted ? decrypt(customer.lastNameEncrypted) : "",
+    firstName: customer.firstNameEncrypted ? decrypt(customer.firstNameEncrypted) : "",
+    lastNameRoman: customer.lastNameRomanEncrypted ? decrypt(customer.lastNameRomanEncrypted) : "",
+    firstNameRoman: customer.firstNameRomanEncrypted ? decrypt(customer.firstNameRomanEncrypted) : "",
     email: customer.email,
     phone: decrypt(customer.phoneEncrypted),
     postalCode: customer.postalCode,

@@ -29,8 +29,10 @@ export default function RegisterForm({ email, token }: { email: string; token: s
 
     const fd = new FormData(e.currentTarget);
     const result = await registerCustomer({
-      name: fd.get("name") as string,
-      nameKana: fd.get("nameKana") as string,
+      lastName: fd.get("lastName") as string,
+      firstName: fd.get("firstName") as string,
+      lastNameRoman: fd.get("lastNameRoman") as string,
+      firstNameRoman: fd.get("firstNameRoman") as string,
       email,
       phone: fd.get("phone") as string,
       postalCode: (fd.get("postalCode") as string).replace(/-/g, ""),
@@ -72,12 +74,22 @@ export default function RegisterForm({ email, token }: { email: string; token: s
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">氏名 <span className="text-red-500">*</span></label>
-                <input type="text" name="name" required className={inputCls} placeholder="山田 太郎" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">姓 <span className="text-red-500">*</span></label>
+                <input type="text" name="lastName" required className={inputCls} placeholder="山田" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">フリガナ <span className="text-red-500">*</span></label>
-                <input type="text" name="nameKana" required className={inputCls} placeholder="ヤマダ タロウ" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">名 <span className="text-red-500">*</span></label>
+                <input type="text" name="firstName" required className={inputCls} placeholder="太郎" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">姓（ローマ字） <span className="text-red-500">*</span></label>
+                <input type="text" name="lastNameRoman" required pattern="[A-Za-z .'\-]+" className={inputCls} placeholder="Yamada" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">名（ローマ字） <span className="text-red-500">*</span></label>
+                <input type="text" name="firstNameRoman" required pattern="[A-Za-z .'\-]+" className={inputCls} placeholder="Taro" />
               </div>
             </div>
 

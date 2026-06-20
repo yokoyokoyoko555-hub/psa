@@ -11,7 +11,7 @@
 | モデル / テーブル | 役割 | 主なカラム・ポイント |
 |------------------|------|---------------------|
 | `User` / users | 管理者・スタッフ | `email`(uniq), `passwordHash`, `role`, `twoFactorSecret`/`twoFactorEnabled`, `isActive` |
-| `Customer` / customers | 顧客 | `memberNo`(uniq, 登録時自動発行 B######), PII列=`*Encrypted`(AES-256-GCM), `email`(uniq)/`postalCode`は平文, `stripeCustomerId`(uniq), `emailVerified` |
+| `Customer` / customers | 顧客 | `memberNo`(uniq, B######), 氏名は `lastName`/`firstName`/`lastNameRoman`/`firstNameRoman`(暗号化)+表示用`nameEncrypted`/`nameKanaEncrypted`(自動生成), 他PII=`*Encrypted`, `email`(uniq), `stripeCustomerId`(uniq), `emailVerified` |
 | `CustomerSession` / customer_sessions | 顧客セッション | `sessionToken`(uniq), `expires`, Customterへ Cascade |
 | `EmailVerification` / email_verifications | 新規登録メール認証 | `token`(uniq), `email`, `expiresAt`(24h), `consumedAt` |
 | `CustomerAddress` / customer_addresses | 住所帳（返送先） | PII列=`*Encrypted`, `isDefault`, Customterへ Cascade |

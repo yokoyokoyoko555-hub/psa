@@ -130,8 +130,13 @@ model Customer {
   id                  String    @id @default(cuid())
   memberNo            String?   @unique // 会員番号（登録時に自動発行）
   // 個人情報は暗号化して保存
-  nameEncrypted       String
-  nameKanaEncrypted   String
+  nameEncrypted       String // 表示用フルネーム（姓 名）。下記分割項目から自動生成
+  nameKanaEncrypted   String // 表示用（ローマ字フルネーム）。下記分割項目から自動生成
+  // 氏名（姓・名 / ローマ字 姓・名）
+  lastNameEncrypted        String?
+  firstNameEncrypted       String?
+  lastNameRomanEncrypted   String?
+  firstNameRomanEncrypted  String?
   email               String    @unique
   phoneEncrypted      String
   postalCode          String

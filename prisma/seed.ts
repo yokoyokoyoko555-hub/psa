@@ -104,7 +104,11 @@ async function main() {
     create: {
       memberNo: "B000001",
       nameEncrypted: encrypt("テスト 太郎"),
-      nameKanaEncrypted: encrypt("テスト タロウ"),
+      nameKanaEncrypted: encrypt("Test Taro"),
+      lastNameEncrypted: encrypt("テスト"),
+      firstNameEncrypted: encrypt("太郎"),
+      lastNameRomanEncrypted: encrypt("Test"),
+      firstNameRomanEncrypted: encrypt("Taro"),
       email: "test@example.com",
       phoneEncrypted: encrypt("090-1234-5678"),
       postalCode: "1234567",
