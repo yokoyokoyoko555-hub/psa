@@ -139,12 +139,12 @@ export default async function MypagePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
             href="/apply"
-            className="bg-brand-600 text-white rounded-xl p-6 hover:bg-brand-700 transition flex items-center gap-4"
+            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
           >
-            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center text-2xl">📋</div>
+            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">📋</div>
             <div>
-              <p className="font-bold text-lg">新規PSA申込</p>
-              <p className="text-brand-200 text-sm">カードを申し込む</p>
+              <p className="font-bold text-lg text-gray-900">新規申込</p>
+              <p className="text-gray-500 text-sm">鑑定を申し込む</p>
             </div>
           </Link>
           <Link
