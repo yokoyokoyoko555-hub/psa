@@ -6,9 +6,9 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import { getCustomerProfile } from "@/actions/customer";
 import { getMyAddresses } from "@/actions/address";
-import ProfileEditForm from "../profile/ProfileEditForm";
 import AddressManager from "../addresses/AddressManager";
 import DeletePaymentMethodButton from "../payment-methods/DeletePaymentMethodButton";
+import ProfileSettingsModal from "./ProfileSettingsModal";
 
 export const metadata = { title: "アカウント設定 | トレカビンクス" };
 
@@ -44,13 +44,7 @@ export default async function SettingsPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-        <section id="profile" className="space-y-3">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">登録情報の編集</h2>
-            <p className="text-sm text-gray-500 mt-1">氏名、住所、電話番号を管理します。</p>
-          </div>
-          <ProfileEditForm profile={profile} />
-        </section>
+        <ProfileSettingsModal profile={profile} />
 
         <section id="addresses" className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <div>

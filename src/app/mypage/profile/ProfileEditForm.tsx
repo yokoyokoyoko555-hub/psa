@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { updateCustomerProfile } from "@/actions/customer";
 import type { CustomerProfile } from "@/actions/customer";
 
-export default function ProfileEditForm({ profile }: { profile: CustomerProfile }) {
+export default function ProfileEditForm({
+  profile,
+  framed = true,
+}: {
+  profile: CustomerProfile;
+  framed?: boolean;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -43,7 +49,10 @@ export default function ProfileEditForm({ profile }: { profile: CustomerProfile 
     "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500";
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className={framed ? "bg-white rounded-xl border border-gray-200 p-6 space-y-4" : "space-y-4"}
+    >
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>
       )}
