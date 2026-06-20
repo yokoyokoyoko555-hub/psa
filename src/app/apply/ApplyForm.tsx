@@ -151,6 +151,7 @@ export default function ApplyForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [clientSecret, setClientSecret] = useState("");
+  const [createdApplicationId, setCreatedApplicationId] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
 
   const regionPrices = servicePrices.filter((p) => p.region === region);
@@ -359,6 +360,7 @@ export default function ApplyForm({
         /* ignore */
       }
       setClientSecret(result.clientSecret);
+      setCreatedApplicationId(result.applicationId ?? "");
       setMaxStep(4);
       setStep("payment");
     } else {
@@ -394,7 +396,8 @@ export default function ApplyForm({
       setError(stripeError.message ?? "決済エラーが発生しました");
       setPaymentLoading(false);
     } else {
-      router.push("/mypage?payment=success");
+      const qs = createdApplicationId ? `?applicationId=${encodeURIComponent(createdApplicationId)}` : "";
+      router.push(`/mypage/submission-booking${qs}`);
     }
   }
 

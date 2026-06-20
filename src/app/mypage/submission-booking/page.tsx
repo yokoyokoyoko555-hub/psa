@@ -12,9 +12,14 @@ function toDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export default async function SubmissionBookingPage() {
+export default async function SubmissionBookingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ applicationId?: string }>;
+}) {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
+  const sp = await searchParams;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -73,6 +78,7 @@ export default async function SubmissionBookingPage() {
         </div>
         <BookingCalendar
           applications={calendarApplications}
+          initialApplicationId={sp.applicationId}
           closedDates={calendarDays
             .filter((day) => day.isClosed)
             .map((day) => toDateKey(day.date))}

@@ -51,17 +51,20 @@ function formatBooking(iso: string) {
 
 export default function BookingCalendar({
   applications,
+  initialApplicationId,
   closedDates,
   shippingDates,
 }: {
   applications: ApplicationOption[];
+  initialApplicationId?: string;
   closedDates: string[];
   shippingDates: string[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [month, setMonth] = useState(() => new Date());
-  const [applicationId, setApplicationId] = useState(applications[0]?.id ?? "");
+  const initialApp = applications.find((a) => a.id === initialApplicationId) ?? applications[0];
+  const [applicationId, setApplicationId] = useState(initialApp?.id ?? "");
   const selectedApp = applications.find((a) => a.id === applicationId);
   const existingBooking = selectedApp?.booking?.status === "BOOKED" ? selectedApp.booking : null;
   const [method, setMethod] = useState<BookingMethod>(existingBooking?.method ?? "STORE_DROP_OFF");
@@ -189,10 +192,23 @@ export default function BookingCalendar({
 
       <aside className="bg-white border border-gray-200 rounded-xl p-5 space-y-5">
         <div>
-          <label className="block text-sm font-bold text-gray-900 mb-2">申込</label>
+          <label className="block text-sm font-bold text-gray-900 mb-2">申込ID</label>
           <select
             value={applicationId}
-            onChange={(event) => setApplicationId(event.target.value)}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              setApplicationId(nextId);
+              const nextApp = applications.find((a) => a.id === nextId);
+              if (nextApp?.booking?.status === "BOOKED") {
+                setMethod(nextApp.booking.method);
+                setSelectedDate(toDateKey(new Date(nextApp.booking.scheduledAt)));
+                const date = new Date(nextApp.booking.scheduledAt);
+                setTime(`${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`);
+                setNote(nextApp.booking.note ?? "");
+              } else {
+                setNote("");
+              }
+            }}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           >
             {applications.map((app) => (
@@ -201,6 +217,9 @@ export default function BookingCalendar({
               </option>
             ))}
           </select>
+          <p className="mt-2 text-xs text-gray-500">
+            選択した申込IDに、持ち込み日または発送予定日を紐づけます。
+          </p>
         </div>
 
         {existingBooking && (

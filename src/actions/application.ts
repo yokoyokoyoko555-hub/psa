@@ -212,7 +212,7 @@ export async function createApplication(
     amount: fees.totalAmount,
     customerId: customer.stripeCustomerId,
     applicationId: application.id,
-    description: `PSA申込 ${applicationNo}`,
+    description: `PSA申込 ${application.applicationNo}`,
   });
 
   // Payment レコード作成
@@ -223,7 +223,7 @@ export async function createApplication(
       stripePaymentIntentId: paymentIntent.id,
       amount: fees.totalAmount,
       status: "PENDING",
-      description: `PSA申込 ${applicationNo}`,
+      description: `PSA申込 ${application.applicationNo}`,
     },
   });
 
@@ -234,7 +234,7 @@ export async function createApplication(
     action: "APPLICATION_CREATE",
     targetType: "applications",
     targetId: application.id,
-    after: { applicationNo, totalAmount: fees.totalAmount },
+    after: { applicationNo: application.applicationNo, totalAmount: fees.totalAmount },
   });
 
   return {

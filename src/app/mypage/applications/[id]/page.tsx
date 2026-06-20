@@ -131,7 +131,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </div>
             {isPaid ? (
               <Link
-                href="/mypage/submission-booking"
+                href={`/mypage/submission-booking?applicationId=${application.id}`}
                 className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
               >
                 予約する
