@@ -66,12 +66,16 @@ async function main() {
   ];
   const regions = ["PSA_JP", "PSA_US"] as const;
 
-  await prisma.servicePrice.deleteMany();
-  await prisma.servicePrice.createMany({
-    data: regions.flatMap((region) =>
-      baseLevels.map((l) => ({ ...l, region, agencyFee: 0 }))
-    ),
-  });
+  // 既存の料金は維持し、無い (レベル×地域) のみ追加（管理画面の編集値を消さない）
+  for (const region of regions) {
+    for (const l of baseLevels) {
+      await prisma.servicePrice.upsert({
+        where: { serviceLevel_region: { serviceLevel: l.serviceLevel, region } },
+        update: {},
+        create: { ...l, region, agencyFee: 0 },
+      });
+    }
+  }
 
   // Shipping rules
   await prisma.shippingRule.deleteMany();
