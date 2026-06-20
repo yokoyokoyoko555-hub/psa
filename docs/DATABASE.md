@@ -25,7 +25,7 @@
 | `ShippingRule` / shipping_rules | 送料 | `returnMethod`, `fee`, `minAmount`/`maxAmount`(帯), `sortOrder` |
 | `InsuranceRule` / insurance_rules | 保険料 | `minValue`/`maxValue`(帯), `fee` または `feeRate`(%) |
 | `Agreement` / agreements | 電子同意書 | `applicationId`(uniq), `agreedAt`, `ipAddress`/`userAgent`, `agreementText`, `version` |
-| `Notification` / notifications | お知らせ/通知 | `customerId`(null=全体), `type`, `title`/`body`, `isRead` |
+| `Notification` / notifications | お知らせ/通知 | `customerId`(null=全体), `type`, `title`/`body`, `showOnMypage`, `isRead` |
 | `OperationLog` / operation_logs | 操作ログ | `userId`/`customerId`, `action`, `targetType`/`targetId`, `before`/`after`(Json), index×3 |
 | `SavedPaymentMethod` / saved_payment_methods | 保存カード | `stripePaymentMethodId`(uniq), `brand`/`last4`, `expMonth`/`expYear`, `isDefault` |
 

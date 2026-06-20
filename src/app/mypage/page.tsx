@@ -47,10 +47,11 @@ export default async function MypagePage() {
     getMyApplications(),
     prisma.notification.findMany({
       where: {
+        showOnMypage: true,
         OR: [{ customerId: null }, { customerId: customer.id }],
       },
       orderBy: { createdAt: "desc" },
-      take: 5,
+      take: 2,
     }),
   ]);
   const latestDraft = applications.find((a) => a.status === "DRAFT");
@@ -95,23 +96,40 @@ export default async function MypagePage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {notifications.length > 0 && (
-          <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900">お知らせ</h2>
+          <section className="bg-white border border-gray-200">
+            <div className="bg-[#00315c] text-white px-4 py-3">
+              <h2 className="font-bold">お知らせ</h2>
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 px-6 pt-3">
               {notifications.map((n) => (
                 <Link
                   key={n.id}
                   href={`/mypage/notifications/${n.id}`}
-                  className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-gray-50 transition"
+                  className="flex items-center justify-between gap-4 border-b border-gray-200 py-3 hover:bg-gray-50 transition"
                 >
-                  <span className="font-medium text-gray-900 truncate">{n.title}</span>
-                  <span className="text-sm text-gray-500 shrink-0">
-                    {format(new Date(n.createdAt), "yyyy.MM.dd")}
+                  <span className="min-w-0">
+                    <span className="block text-sm text-gray-900 mb-1">
+                      {format(new Date(n.createdAt), "yyyy年MM月dd日")}
+                    </span>
+                    <span
+                      className={`block font-bold leading-6 ${
+                        n.title.includes("重要") ? "text-red-600" : "text-blue-600"
+                      }`}
+                    >
+                      {n.title}
+                    </span>
                   </span>
+                  <span className="text-3xl leading-none text-blue-600 shrink-0">›</span>
                 </Link>
               ))}
+            </div>
+            <div className="flex justify-end px-4 py-3">
+              <Link
+                href="/mypage/notifications"
+                className="inline-flex items-center gap-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm font-bold text-blue-600 hover:bg-gray-50"
+              >
+                もっと見る <span className="text-xl leading-none">›</span>
+              </Link>
             </div>
           </section>
         )}

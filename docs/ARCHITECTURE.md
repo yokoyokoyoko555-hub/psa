@@ -119,7 +119,7 @@ psa-system/
 | `ShippingRule` | 送料 | 金額帯（`minAmount`/`maxAmount`）ごと |
 | `InsuranceRule` | 保険料 | 申告額帯ごと（`fee` または `feeRate`） |
 | `Agreement` | 電子同意書 | 申込時スナップショット, IP/UA |
-| `Notification` | お知らせ/通知 | 顧客別 or 全体 |
+| `Notification` | お知らせ/通知 | 顧客別 or 全体、マイページ表示対象を選択可 |
 | `OperationLog` | 操作ログ | `before`/`after`(Json), index(userId/customerId/createdAt) |
 | `SavedPaymentMethod` | 保存カード | `stripePaymentMethodId`, `brand`/`last4`, `isDefault` |
 

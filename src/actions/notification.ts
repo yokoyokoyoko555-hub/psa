@@ -10,6 +10,12 @@ import { z } from "zod";
 const notificationSchema = z.object({
   title: z.string().min(1).max(120),
   body: z.string().min(1).max(10000),
+  showOnMypage: z.boolean().default(true),
+});
+
+const visibilitySchema = z.object({
+  id: z.string().min(1),
+  showOnMypage: z.boolean(),
 });
 
 async function requireAdminOrStaff() {
@@ -36,6 +42,7 @@ export async function createNotification(
       type: "SYSTEM",
       title: parsed.data.title,
       body: parsed.data.body,
+      showOnMypage: parsed.data.showOnMypage,
       sentAt: new Date(),
     },
   });
@@ -52,6 +59,38 @@ export async function createNotification(
 
   revalidatePath("/admin/notifications");
   revalidatePath("/mypage");
+
+  return { success: true };
+}
+
+export async function updateNotificationVisibility(
+  input: z.infer<typeof visibilitySchema>
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdminOrStaff();
+
+  const parsed = visibilitySchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "入力内容が正しくありません" };
+  }
+
+  const notification = await prisma.notification.update({
+    where: { id: parsed.data.id },
+    data: { showOnMypage: parsed.data.showOnMypage },
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    userId: user.id,
+    ipAddress: (hdrs as unknown as Headers).get?.("x-forwarded-for") ?? "unknown",
+    action: "NOTIFICATION_VISIBILITY_UPDATE",
+    targetType: "notifications",
+    targetId: notification.id,
+    after: { showOnMypage: notification.showOnMypage },
+  });
+
+  revalidatePath("/admin/notifications");
+  revalidatePath("/mypage");
+  revalidatePath("/mypage/notifications");
 
   return { success: true };
 }

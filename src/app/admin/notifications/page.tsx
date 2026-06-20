@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import NotificationForm from "./NotificationForm";
+import NotificationVisibilityButton from "./NotificationVisibilityButton";
 
 export default async function AdminNotificationsPage() {
   const notifications = await prisma.notification.findMany({
@@ -35,6 +36,7 @@ export default async function AdminNotificationsPage() {
               <tr>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">タイトル</th>
                 <th className="text-left px-6 py-3 text-gray-600 font-medium">作成日</th>
+                <th className="text-left px-6 py-3 text-gray-600 font-medium">マイページ表示</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -43,6 +45,9 @@ export default async function AdminNotificationsPage() {
                   <td className="px-6 py-3 text-gray-900">{n.title}</td>
                   <td className="px-6 py-3 text-gray-500">
                     {format(new Date(n.createdAt), "yyyy.MM.dd")}
+                  </td>
+                  <td className="px-6 py-3">
+                    <NotificationVisibilityButton id={n.id} showOnMypage={n.showOnMypage} />
                   </td>
                 </tr>
               ))}

@@ -12,6 +12,7 @@ export default function NotificationForm() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [showOnMypage, setShowOnMypage] = useState(true);
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -19,10 +20,11 @@ export default function NotificationForm() {
     e.preventDefault();
     setMessage("");
     startTransition(async () => {
-      const result = await createNotification({ title: title.trim(), body: body.trim() });
+      const result = await createNotification({ title: title.trim(), body: body.trim(), showOnMypage });
       if (result.success) {
         setTitle("");
         setBody("");
+        setShowOnMypage(true);
         setMessage("お知らせを作成しました");
         router.refresh();
       } else {
@@ -50,6 +52,15 @@ export default function NotificationForm() {
           onChange={(e) => setBody(e.target.value)}
         />
       </div>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={showOnMypage}
+          onChange={(e) => setShowOnMypage(e.target.checked)}
+          className="h-4 w-4"
+        />
+        マイページに表示する
+      </label>
       {message && <p className="text-sm text-gray-600">{message}</p>}
       <button
         type="submit"
