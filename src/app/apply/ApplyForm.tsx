@@ -762,7 +762,7 @@ export default function ApplyForm({
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-              <h2 className="font-bold text-gray-900">電話番号 <span className="text-red-500">*</span></h2>
+              <h2 className="font-bold text-gray-900">電話番号</h2>
               <input
                 type="tel"
                 value={shippingPhone}
@@ -792,6 +792,10 @@ export default function ApplyForm({
               onClick={() => {
                 if (returnSel !== "registered" && !selectedAddr) {
                   setError("返送先を選択してください");
+                  return;
+                }
+                if (!/^[0-9-+() ]{10,20}$/.test(shippingPhone.trim())) {
+                  setError("電話番号を入力してください");
                   return;
                 }
                 setError("");

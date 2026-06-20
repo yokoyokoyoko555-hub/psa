@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { decrypt } from "@/lib/crypto";
+import { prisma } from "@/lib/prisma";
 import { getMyApplications } from "@/actions/application";
 import { logoutCustomer } from "@/actions/customer";
 import { format } from "date-fns";
@@ -42,7 +43,16 @@ export default async function MypagePage() {
   if (!customer) redirect("/login");
 
   const name = decrypt(customer.nameEncrypted);
-  const applications = await getMyApplications();
+  const [applications, notifications] = await Promise.all([
+    getMyApplications(),
+    prisma.notification.findMany({
+      where: {
+        OR: [{ customerId: null }, { customerId: customer.id }],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+  ]);
   const latestDraft = applications.find((a) => a.status === "DRAFT");
 
   const SERVICE_LABELS: Record<string, string> = {
@@ -84,6 +94,28 @@ export default async function MypagePage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+        {notifications.length > 0 && (
+          <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">お知らせ</h2>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {notifications.map((n) => (
+                <Link
+                  key={n.id}
+                  href={`/mypage/notifications/${n.id}`}
+                  className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-gray-50 transition"
+                >
+                  <span className="font-medium text-gray-900 truncate">{n.title}</span>
+                  <span className="text-sm text-gray-500 shrink-0">
+                    {format(new Date(n.createdAt), "yyyy.MM.dd")}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Quick actions */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
