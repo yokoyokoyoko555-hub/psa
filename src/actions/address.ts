@@ -93,6 +93,7 @@ export async function createAddress(
     },
   });
 
+  revalidatePath("/mypage/settings");
   revalidatePath("/mypage/addresses");
   return { success: true, addresses: await getMyAddresses() };
 }
@@ -127,6 +128,7 @@ export async function updateAddress(
     },
   });
 
+  revalidatePath("/mypage/settings");
   revalidatePath("/mypage/addresses");
   return { success: true, addresses: await getMyAddresses() };
 }
@@ -153,6 +155,7 @@ export async function deleteAddress(
     }
   }
 
+  revalidatePath("/mypage/settings");
   revalidatePath("/mypage/addresses");
   return { success: true, addresses: await getMyAddresses() };
 }
@@ -174,6 +177,7 @@ export async function setDefaultAddress(
     prisma.customerAddress.update({ where: { id }, data: { isDefault: true } }),
   ]);
 
+  revalidatePath("/mypage/settings");
   revalidatePath("/mypage/addresses");
   return { success: true, addresses: await getMyAddresses() };
 }

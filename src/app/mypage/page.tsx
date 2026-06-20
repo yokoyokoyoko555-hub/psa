@@ -158,33 +158,13 @@ export default async function MypagePage() {
             </div>
           </Link>
           <Link
-            href="/mypage/payment-methods"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
-          >
-            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">💳</div>
-            <div>
-              <p className="font-bold text-lg text-gray-900">支払い方法</p>
-              <p className="text-gray-500 text-sm">登録カード管理</p>
-            </div>
-          </Link>
-          <Link
-            href="/mypage/profile"
+            href="/mypage/settings"
             className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
           >
             <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">👤</div>
             <div>
-              <p className="font-bold text-lg text-gray-900">登録情報の編集</p>
-              <p className="text-gray-500 text-sm">氏名・住所・電話番号</p>
-            </div>
-          </Link>
-          <Link
-            href="/mypage/addresses"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
-          >
-            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">📍</div>
-            <div>
-              <p className="font-bold text-lg text-gray-900">返送先情報</p>
-              <p className="text-gray-500 text-sm">返送先住所の管理</p>
+              <p className="font-bold text-lg text-gray-900">アカウント設定</p>
+              <p className="text-gray-500 text-sm">登録情報・返送先・支払い方法</p>
             </div>
           </Link>
           <Link

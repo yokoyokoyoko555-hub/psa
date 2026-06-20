@@ -286,6 +286,7 @@ export async function updateCustomerProfile(
     targetId: customer.id,
   });
 
+  revalidatePath("/mypage/settings");
   revalidatePath("/mypage/profile");
   revalidatePath("/mypage");
   return { success: true };

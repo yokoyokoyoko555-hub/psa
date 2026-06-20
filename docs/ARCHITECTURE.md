@@ -62,7 +62,7 @@ psa-system/
 │   │   ├── mypage/                  # 顧客マイページ（layout=force-dynamic）
 │   │   │   ├── applications/[id]/   # 申込詳細・カード進捗
 │   │   │   ├── submission-booking/  # カード提出予約カレンダー
-│   │   │   └── payment-methods/     # 保存カード管理
+│   │   │   └── settings/            # 登録情報・返送先・保存カード管理
 │   │   ├── admin/                   # 管理画面（layout=force-dynamic + 認証）
 │   │   │   ├── login/ dashboard/
 │   │   │   ├── customers/[id]/ applications/[id]/

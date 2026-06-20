@@ -210,7 +210,7 @@ export default function StoreRequestForm({ profile, addresses, paymentMethods }:
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-bold text-gray-800">発送先情報</h3>
-          <Link href="/mypage/addresses" className="text-sm font-bold text-brand-600 hover:underline">
+          <Link href="/mypage/settings#addresses" className="text-sm font-bold text-brand-600 hover:underline">
             返送先を管理
           </Link>
         </div>
@@ -262,7 +262,7 @@ export default function StoreRequestForm({ profile, addresses, paymentMethods }:
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-bold text-gray-800">支払方法</h3>
-          <Link href="/mypage/payment-methods" className="text-sm font-bold text-brand-600 hover:underline">
+          <Link href="/mypage/settings#payment-methods" className="text-sm font-bold text-brand-600 hover:underline">
             支払い方法を管理
           </Link>
         </div>
