@@ -9,6 +9,10 @@ import { z } from "zod";
 export interface Address {
   id: string;
   name: string;
+  lastName: string;
+  firstName: string;
+  lastNameRoman: string;
+  firstNameRoman: string;
   postalCode: string;
   prefecture: string;
   address: string;
@@ -17,8 +21,13 @@ export interface Address {
   isDefault: boolean;
 }
 
+const romanRe = /^[A-Za-z .'-]+$/;
+
 const addressSchema = z.object({
-  name: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(50),
+  firstName: z.string().min(1).max(50),
+  lastNameRoman: z.string().min(1).max(50).regex(romanRe),
+  firstNameRoman: z.string().min(1).max(50).regex(romanRe),
   postalCode: z.string().regex(/^\d{7}$/),
   prefecture: z.string().min(1),
   address: z.string().min(1),
@@ -35,16 +44,23 @@ export async function getMyAddresses(): Promise<Address[]> {
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
   });
 
-  return rows.map((a) => ({
-    id: a.id,
-    name: decrypt(a.nameEncrypted),
-    postalCode: a.postalCode,
-    prefecture: decrypt(a.prefectureEncrypted),
-    address: decrypt(a.addressEncrypted),
-    address2: a.address2Encrypted ? decrypt(a.address2Encrypted) : undefined,
-    phone: a.phoneEncrypted ? decrypt(a.phoneEncrypted) : undefined,
-    isDefault: a.isDefault,
-  }));
+  return rows.map((a) => {
+    const name = decrypt(a.nameEncrypted);
+    return {
+      id: a.id,
+      name,
+      lastName: a.lastNameEncrypted ? decrypt(a.lastNameEncrypted) : name,
+      firstName: a.firstNameEncrypted ? decrypt(a.firstNameEncrypted) : "",
+      lastNameRoman: a.lastNameRomanEncrypted ? decrypt(a.lastNameRomanEncrypted) : "",
+      firstNameRoman: a.firstNameRomanEncrypted ? decrypt(a.firstNameRomanEncrypted) : "",
+      postalCode: a.postalCode,
+      prefecture: decrypt(a.prefectureEncrypted),
+      address: decrypt(a.addressEncrypted),
+      address2: a.address2Encrypted ? decrypt(a.address2Encrypted) : undefined,
+      phone: a.phoneEncrypted ? decrypt(a.phoneEncrypted) : undefined,
+      isDefault: a.isDefault,
+    };
+  });
 }
 
 export async function createAddress(
@@ -58,11 +74,16 @@ export async function createAddress(
 
   const count = await prisma.customerAddress.count({ where: { customerId: customer.id } });
   const makeDefault = count === 0; // 最初の住所は自動でデフォルト
+  const fullName = `${parsed.data.lastName} ${parsed.data.firstName}`;
 
   await prisma.customerAddress.create({
     data: {
       customerId: customer.id,
-      nameEncrypted: encrypt(parsed.data.name),
+      nameEncrypted: encrypt(fullName),
+      lastNameEncrypted: encrypt(parsed.data.lastName),
+      firstNameEncrypted: encrypt(parsed.data.firstName),
+      lastNameRomanEncrypted: encrypt(parsed.data.lastNameRoman),
+      firstNameRomanEncrypted: encrypt(parsed.data.firstNameRoman),
       postalCode: parsed.data.postalCode,
       prefectureEncrypted: encrypt(parsed.data.prefecture),
       addressEncrypted: encrypt(parsed.data.address),
@@ -88,11 +109,16 @@ export async function updateAddress(
 
   const owned = await prisma.customerAddress.findFirst({ where: { id, customerId: customer.id } });
   if (!owned) return { success: false, error: "住所が見つかりません" };
+  const fullName = `${parsed.data.lastName} ${parsed.data.firstName}`;
 
   await prisma.customerAddress.update({
     where: { id },
     data: {
-      nameEncrypted: encrypt(parsed.data.name),
+      nameEncrypted: encrypt(fullName),
+      lastNameEncrypted: encrypt(parsed.data.lastName),
+      firstNameEncrypted: encrypt(parsed.data.firstName),
+      lastNameRomanEncrypted: encrypt(parsed.data.lastNameRoman),
+      firstNameRomanEncrypted: encrypt(parsed.data.firstNameRoman),
       postalCode: parsed.data.postalCode,
       prefectureEncrypted: encrypt(parsed.data.prefecture),
       addressEncrypted: encrypt(parsed.data.address),

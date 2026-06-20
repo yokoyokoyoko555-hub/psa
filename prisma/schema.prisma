@@ -166,15 +166,19 @@ model Customer {
 model CustomerAddress {
   id                  String   @id @default(cuid())
   customerId          String
-  nameEncrypted       String
-  postalCode          String
-  prefectureEncrypted String
-  addressEncrypted    String
-  address2Encrypted   String?
-  phoneEncrypted      String?
-  isDefault           Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  nameEncrypted           String
+  lastNameEncrypted       String?
+  firstNameEncrypted      String?
+  lastNameRomanEncrypted  String?
+  firstNameRomanEncrypted String?
+  postalCode              String
+  prefectureEncrypted     String
+  addressEncrypted        String
+  address2Encrypted       String?
+  phoneEncrypted          String?
+  isDefault               Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 

@@ -107,6 +107,7 @@ psa-system/
 |--------|------|-------------|
 | `User` | 管理者/スタッフ | `role`(ADMIN/STAFF/…), `passwordHash`, 2FA項目 |
 | `Customer` | 顧客 | PII列は `*Encrypted`（AES-256-GCM）, `email`/`postalCode`は平文, `stripeCustomerId` |
+| `CustomerAddress` | 返送先情報 | 姓名/ローマ字/住所を暗号化保存 |
 | `CustomerSession` | 顧客セッション | `sessionToken`(cookie), `expires` |
 | `Application` | 申込 | `applicationNo`(APP-…), 返送先住所/電話（暗号化）, 料金内訳, `status` |
 | `Card` | カード（最重要） | `cardNo`(CARD-…), PSA各種ID/grade, 画像S3キー, `status`(17段階), 料金 |

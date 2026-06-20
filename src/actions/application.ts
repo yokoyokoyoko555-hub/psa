@@ -29,6 +29,10 @@ const cardSchema = z.object({
 
 const returnAddressSchema = z.object({
   name: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(50).optional(),
+  firstName: z.string().min(1).max(50).optional(),
+  lastNameRoman: z.string().min(1).max(50).optional(),
+  firstNameRoman: z.string().min(1).max(50).optional(),
   postalCode: z.string().regex(/^\d{7}$/),
   prefecture: z.string().min(1),
   address: z.string().min(1),

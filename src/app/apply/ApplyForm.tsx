@@ -335,6 +335,10 @@ export default function ApplyForm({
         returnSel !== "registered" && selectedAddr
           ? {
               name: selectedAddr.name,
+              lastName: selectedAddr.lastName,
+              firstName: selectedAddr.firstName,
+              lastNameRoman: selectedAddr.lastNameRoman,
+              firstNameRoman: selectedAddr.firstNameRoman,
               postalCode: selectedAddr.postalCode,
               prefecture: selectedAddr.prefecture,
               address: selectedAddr.address,

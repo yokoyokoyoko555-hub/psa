@@ -10,7 +10,10 @@ import {
 } from "@/actions/address";
 
 type FormState = {
-  name: string;
+  lastName: string;
+  firstName: string;
+  lastNameRoman: string;
+  firstNameRoman: string;
   postalCode: string;
   prefecture: string;
   address: string;
@@ -18,7 +21,10 @@ type FormState = {
 };
 
 const emptyForm: FormState = {
-  name: "",
+  lastName: "",
+  firstName: "",
+  lastNameRoman: "",
+  firstNameRoman: "",
   postalCode: "",
   prefecture: "",
   address: "",
@@ -62,7 +68,10 @@ export default function AddressManager({
 
   function openEdit(a: Address) {
     setForm({
-      name: a.name,
+      lastName: a.lastName,
+      firstName: a.firstName,
+      lastNameRoman: a.lastNameRoman,
+      firstNameRoman: a.firstNameRoman,
       postalCode: a.postalCode,
       prefecture: a.prefecture,
       address: a.address,
@@ -82,7 +91,14 @@ export default function AddressManager({
   }
 
   function validate(): string | null {
-    if (!form.name.trim()) return "お名前を入力してください";
+    if (!form.lastName.trim()) return "姓を入力してください";
+    if (!form.firstName.trim()) return "名を入力してください";
+    if (!/^[A-Za-z .'-]+$/.test(form.lastNameRoman.trim())) {
+      return "姓（ローマ字）は半角英字で入力してください";
+    }
+    if (!/^[A-Za-z .'-]+$/.test(form.firstNameRoman.trim())) {
+      return "名（ローマ字）は半角英字で入力してください";
+    }
     if (!/^\d{7}$/.test(form.postalCode)) return "郵便番号は7桁の数字で入力してください";
     if (!form.prefecture.trim()) return "都道府県を入力してください";
     if (!form.address.trim()) return "住所を入力してください";
@@ -98,7 +114,10 @@ export default function AddressManager({
     setBusy(true);
     setError("");
     const payload = {
-      name: form.name,
+      lastName: form.lastName.trim(),
+      firstName: form.firstName.trim(),
+      lastNameRoman: form.lastNameRoman.trim(),
+      firstNameRoman: form.firstNameRoman.trim(),
       postalCode: form.postalCode,
       prefecture: form.prefecture,
       address: form.address,
@@ -169,6 +188,11 @@ export default function AddressManager({
                   </span>
                 )}
               </p>
+              {(a.lastNameRoman || a.firstNameRoman) && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {a.lastNameRoman} {a.firstNameRoman}
+                </p>
+              )}
               <p className="text-sm text-gray-600 mt-0.5">
                 〒{a.postalCode}　{a.prefecture}
                 {a.address}
@@ -283,7 +307,10 @@ function AddressFields({
 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <input className={inputCls} placeholder="お名前 *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      <input className={inputCls} placeholder="姓 *" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
+      <input className={inputCls} placeholder="名 *" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
+      <input className={inputCls} placeholder="姓（ローマ字） *" value={form.lastNameRoman} onChange={(e) => setForm({ ...form, lastNameRoman: e.target.value })} />
+      <input className={inputCls} placeholder="名（ローマ字） *" value={form.firstNameRoman} onChange={(e) => setForm({ ...form, firstNameRoman: e.target.value })} />
       <input className={inputCls} placeholder="郵便番号（7桁） *" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value.replace(/-/g, "") })} />
       <input className={inputCls} placeholder="都道府県 *" value={form.prefecture} onChange={(e) => setForm({ ...form, prefecture: e.target.value })} />
       <input className={inputCls} placeholder="住所（市区町村・番地） *" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
