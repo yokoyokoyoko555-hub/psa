@@ -469,6 +469,7 @@ model Notification {
   type       NotificationType @default(SYSTEM)
   title      String
   body       String
+  isPublished Boolean       @default(true)
   showOnMypage Boolean       @default(true)
   isRead     Boolean          @default(false)
   sentAt     DateTime?

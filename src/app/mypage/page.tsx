@@ -47,6 +47,7 @@ export default async function MypagePage() {
     getMyApplications(),
     prisma.notification.findMany({
       where: {
+        isPublished: true,
         showOnMypage: true,
         OR: [{ customerId: null }, { customerId: customer.id }],
       },

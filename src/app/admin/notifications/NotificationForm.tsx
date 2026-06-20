@@ -1,40 +1,64 @@
 "use client";
 
-import type { FormEvent } from "react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createNotification } from "@/actions/notification";
+import { createNotification, updateNotification } from "@/actions/notification";
 
 const inputCls =
   "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500";
 
-export default function NotificationForm() {
+export default function NotificationForm({
+  initial,
+}: {
+  initial?: {
+    id: string;
+    title: string;
+    body: string;
+    showOnMypage: boolean;
+    isPublished: boolean;
+  };
+}) {
   const router = useRouter();
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [showOnMypage, setShowOnMypage] = useState(true);
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [body, setBody] = useState(initial?.body ?? "");
+  const [showOnMypage, setShowOnMypage] = useState(initial?.showOnMypage ?? true);
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+  const isEdit = Boolean(initial);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  function save(isPublished: boolean) {
     setMessage("");
     startTransition(async () => {
-      const result = await createNotification({ title: title.trim(), body: body.trim(), showOnMypage });
+      const payload = {
+        id: initial?.id,
+        title: title.trim(),
+        body: body.trim(),
+        showOnMypage,
+        isPublished,
+      };
+      const result = isEdit ? await updateNotification(payload) : await createNotification(payload);
       if (result.success) {
-        setTitle("");
-        setBody("");
-        setShowOnMypage(true);
-        setMessage("お知らせを作成しました");
+        if (!isEdit) {
+          setTitle("");
+          setBody("");
+          setShowOnMypage(true);
+        }
+        setMessage(isPublished ? "お知らせを公開しました" : "お知らせを一時保存しました");
         router.refresh();
       } else {
-        setMessage(result.error ?? "作成に失敗しました");
+        setMessage(result.error ?? "保存に失敗しました");
       }
     });
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        save(true);
+      }}
+      className="space-y-4"
+    >
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">タイトル</label>
         <input
@@ -62,13 +86,23 @@ export default function NotificationForm() {
         マイページに表示する
       </label>
       {message && <p className="text-sm text-gray-600">{message}</p>}
-      <button
-        type="submit"
-        disabled={isPending}
-        className="bg-brand-600 text-white font-bold px-5 py-2.5 rounded-lg hover:bg-brand-700 transition disabled:opacity-50"
-      >
-        {isPending ? "作成中..." : "お知らせを作成"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={isPending}
+          onClick={() => save(false)}
+          className="border border-gray-300 text-gray-700 font-bold px-5 py-2.5 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+        >
+          {isPending ? "保存中..." : "一時保存"}
+        </button>
+        <button
+          type="submit"
+          disabled={isPending}
+          className="bg-brand-600 text-white font-bold px-5 py-2.5 rounded-lg hover:bg-brand-700 transition disabled:opacity-50"
+        >
+          {isPending ? "保存中..." : isEdit ? "公開して更新" : "公開する"}
+        </button>
+      </div>
     </form>
   );
 }

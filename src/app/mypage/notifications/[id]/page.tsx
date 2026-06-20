@@ -18,6 +18,7 @@ export default async function NotificationDetailPage({
   const notification = await prisma.notification.findFirst({
     where: {
       id,
+      isPublished: true,
       showOnMypage: true,
       OR: [{ customerId: null }, { customerId: customer.id }],
     },
