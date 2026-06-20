@@ -22,6 +22,9 @@ import AddressManager from "../mypage/addresses/AddressManager";
 
 const SERVICE_LABELS: Record<ServiceLevel, string> = {
   VALUE: "バリュー",
+  VALUE_BULK: "バリューバルク",
+  VALUE_PLUS: "バリュープラス",
+  VALUE_MAX: "バリューマックス",
   REGULAR: "レギュラー",
   EXPRESS: "エクスプレス",
   SUPER_EXPRESS: "スーパー・エクスプレス",

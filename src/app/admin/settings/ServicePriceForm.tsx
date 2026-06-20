@@ -6,6 +6,9 @@ import type { ServicePrice } from "@prisma/client";
 
 const SERVICE_LABELS: Record<string, string> = {
   VALUE: "バリュー",
+  VALUE_BULK: "バリューバルク",
+  VALUE_PLUS: "バリュープラス",
+  VALUE_MAX: "バリューマックス",
   REGULAR: "レギュラー",
   EXPRESS: "エクスプレス",
   SUPER_EXPRESS: "スーパー・エクスプレス",
@@ -40,6 +43,7 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
         pricePerCard: parseInt(fd.get(`price_${sp.id}`) as string),
         agencyFee: parseInt(fd.get(`agency_${sp.id}`) as string),
         maxDeclaredValue: maxRaw === "" ? null : parseInt(maxRaw),
+        isActive: fd.get(`active_${sp.id}`) !== null,
       };
     });
 
@@ -69,6 +73,7 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
                 <th className="text-left px-3 py-2 text-gray-600 font-medium">鑑定料（/枚）</th>
                 <th className="text-left px-3 py-2 text-gray-600 font-medium">代行手数料（/枚）</th>
                 <th className="text-left px-3 py-2 text-gray-600 font-medium">申告価格上限（空欄=なし）</th>
+                <th className="text-left px-3 py-2 text-gray-600 font-medium">表示</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -106,6 +111,12 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
                         placeholder="なし"
                         className="w-36 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
                       />
+                    </td>
+                    <td className="px-3 py-3">
+                      <label className="inline-flex items-center gap-1 text-xs text-gray-600">
+                        <input type="checkbox" name={`active_${sp.id}`} defaultChecked={sp.isActive} />
+                        表示
+                      </label>
                     </td>
                   </tr>
                 ))}

@@ -7,6 +7,9 @@ import { CardLanguage, ServiceLevel } from "@prisma/client";
 import type { ServicePrice } from "@prisma/client";
 
 const SERVICE_LABELS: Record<string, string> = {
+  VALUE_BULK: "バリューバルク",
+  VALUE_PLUS: "バリュープラス",
+  VALUE_MAX: "バリューマックス",
   REGULAR: "レギュラー",
   EXPRESS: "エクスプレス",
   SUPER_EXPRESS: "スーパー・エクスプレス",

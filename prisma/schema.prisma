@@ -46,6 +46,9 @@ enum ApplicationStatus {
 
 enum ServiceLevel {
   VALUE // 旧プラン（未使用・互換のため残置）
+  VALUE_BULK
+  VALUE_PLUS
+  VALUE_MAX
   REGULAR
   EXPRESS
   SUPER_EXPRESS

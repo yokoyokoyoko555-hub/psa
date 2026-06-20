@@ -28,10 +28,19 @@ const CARD_STATUS_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 const SERVICE_LABELS: Record<string, string> = {
-  VALUE: "Value",
-  REGULAR: "Regular",
-  EXPRESS: "Express",
-  SUPER_EXPRESS: "Super Express",
+  VALUE: "バリュー",
+  VALUE_BULK: "バリューバルク",
+  VALUE_PLUS: "バリュープラス",
+  VALUE_MAX: "バリューマックス",
+  REGULAR: "レギュラー",
+  EXPRESS: "エクスプレス",
+  SUPER_EXPRESS: "スーパー・エクスプレス",
+  WALK_THROUGH: "ウォーク・スルー",
+  PREMIUM_1: "プレミアム 1",
+  PREMIUM_2: "プレミアム 2",
+  PREMIUM_3: "プレミアム 3",
+  PREMIUM_5: "プレミアム 5",
+  PREMIUM_10: "プレミアム 10",
 };
 
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
