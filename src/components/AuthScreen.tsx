@@ -72,8 +72,8 @@ export default function AuthScreen({ initialTab = "signup" }: { initialTab?: "si
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* ロゴ・タグライン */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-12 pb-6">
-        <p className="text-sm text-gray-500 mb-2">大切なカードのPSA鑑定を、安心・確実に。</p>
+      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-6 pb-3">
+        <p className="text-base font-bold text-gray-700 mb-1">PSA鑑定始めるならトレカビンクス！</p>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.jpg" alt="トレカビンクス" className="h-16 w-auto" />
       </div>
@@ -155,7 +155,10 @@ export default function AuthScreen({ initialTab = "signup" }: { initialTab?: "si
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          利用規約・個人情報保護方針に同意の上、ご利用ください
+          <Link href="/terms" className="text-brand-600 hover:underline">利用規約</Link>
+          ・
+          <Link href="/privacy" className="text-brand-600 hover:underline">個人情報保護方針</Link>
+          に同意の上、ご利用ください
         </p>
       </div>
     </div>

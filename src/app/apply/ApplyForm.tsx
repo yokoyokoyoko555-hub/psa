@@ -503,14 +503,14 @@ export default function ApplyForm({
             {/* Card entry form */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h2 className="font-bold text-gray-800">
-                {editingIndex !== null ? "カードを編集" : "カード情報を入力"}
+                {editingIndex !== null ? "カードを編集" : "カード情報入力"}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">タイトル *</label>
                   <input
                     className={inputCls}
-                    placeholder="例: ポケモンカードゲーム"
+                    placeholder="例: ワンピースカードゲーム"
                     value={draft.tcgTitle}
                     onChange={(e) => setDraftField("tcgTitle", e.target.value)}
                   />
@@ -529,7 +529,7 @@ export default function ApplyForm({
                   <label className="block text-xs text-gray-500 mb-1">カード番号</label>
                   <input
                     className={inputCls}
-                    placeholder="例: 003/102"
+                    placeholder="例: OP01-003"
                     value={draft.cardNumber}
                     onChange={(e) => setDraftField("cardNumber", e.target.value)}
                   />
@@ -538,7 +538,7 @@ export default function ApplyForm({
                   <label className="block text-xs text-gray-500 mb-1">カード名 *</label>
                   <input
                     className={inputCls}
-                    placeholder="例: リザードン"
+                    placeholder="例: モンキー・D・ルフィ"
                     value={draft.cardName}
                     onChange={(e) => setDraftField("cardName", e.target.value)}
                   />
@@ -547,7 +547,7 @@ export default function ApplyForm({
                   <label className="block text-xs text-gray-500 mb-1">レアリティ</label>
                   <input
                     className={inputCls}
-                    placeholder="例: SR"
+                    placeholder="例: Lパラレル"
                     value={draft.rarity}
                     onChange={(e) => setDraftField("rarity", e.target.value)}
                   />
