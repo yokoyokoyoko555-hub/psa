@@ -247,6 +247,9 @@ export async function createApplication(
 const storeRequestSchema = z.object({
   region: z.nativeEnum(ServiceRegion),
   returnMethod: z.nativeEnum(ReturnMethod),
+  returnAddress: returnAddressSchema,
+  shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/),
+  savedPaymentMethodId: z.string().min(1),
   agreementText: z.string().min(1),
   agreementVersion: z.string().min(1),
   ipAddress: z.string(),
@@ -267,6 +270,13 @@ export async function createStoreRequest(
   const parsed = storeRequestSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
 
+  const savedPaymentMethod = await prisma.savedPaymentMethod.findFirst({
+    where: { id: parsed.data.savedPaymentMethodId, customerId: customer.id },
+  });
+  if (!savedPaymentMethod) {
+    return { success: false, error: "支払い方法を選択してください" };
+  }
+
   const applicationNo = await generateApplicationNo();
 
   const application = await prisma.$transaction(async (tx) => {
@@ -278,6 +288,9 @@ export async function createStoreRequest(
         region: parsed.data.region,
         source: "STORE",
         returnMethod: parsed.data.returnMethod,
+        shippingAddressEncrypted: encrypt(JSON.stringify(parsed.data.returnAddress)),
+        shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
+        savedPaymentMethodId: savedPaymentMethod.id,
         status: "DRAFT",
       },
     });

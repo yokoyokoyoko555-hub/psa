@@ -15,6 +15,14 @@ type Props = {
   insuranceRules: InsuranceRule[];
   profile: CustomerProfile | null;
   addresses: Address[];
+  paymentMethods: {
+    id: string;
+    brand: string;
+    last4: string;
+    expMonth: number;
+    expYear: number;
+    isDefault: boolean;
+  }[];
   initialDraft?: InitialDraft | null;
 };
 
@@ -35,7 +43,11 @@ export default function ApplyEntry(props: Props) {
         >
           ← 入力方法の選択へ戻る
         </button>
-        <StoreRequestForm />
+        <StoreRequestForm
+          profile={props.profile}
+          addresses={props.addresses}
+          paymentMethods={props.paymentMethods}
+        />
       </div>
     );
   }

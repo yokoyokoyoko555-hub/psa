@@ -236,6 +236,8 @@ model Application {
   shippingAddressEncrypted String?
   // 配送先電話番号（暗号化・申込ごとに入力）
   shippingPhoneEncrypted   String?
+  // 代理申込時に顧客が選択した保存カード
+  savedPaymentMethodId String?
   // 下書き保存中の入力内容（カード配列・返送先選択など）。確定時にクリア
   draftData      Json?
   status         ApplicationStatus @default(DRAFT)

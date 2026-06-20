@@ -51,6 +51,10 @@
 - out: `{ success, clientSecret?, applicationId?, error? }`
 - ⚠️ 前段に `customer.stripeCustomerId` 必須。フロントの決済確定UIは未完（[TASKS.md]）
 
+#### `createStoreRequest(input)` — 代理申込依頼
+- in: `region` / `returnMethod` / 返送先住所 / 電話番号 / `savedPaymentMethodId` / 同意情報
+- 処理: `source=STORE, status=DRAFT` の申込を作成。返送先住所・電話番号を暗号化保存し、選択された保存カードIDを保持する。
+
 #### `getMyApplications()` / `getApplicationDetail(id)`
 - 認証: 顧客セッション（詳細は自分の申込のみ）
 - out: Application（+Cards/Payments、詳細はStatusHistory/Agreement）
