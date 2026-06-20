@@ -57,7 +57,7 @@ export default async function ApplicationsPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">申込センター</h1>
+          <h1 className="text-3xl font-bold text-gray-900">申込一覧</h1>
           <Link
             href="/apply"
             className="bg-gray-900 text-white font-bold px-5 py-3 rounded-full hover:bg-gray-700 transition flex items-center gap-2"
