@@ -20,110 +20,167 @@ const SERVICE_LABELS: Record<string, string> = {
   PREMIUM_10: "プレミアム 10",
 };
 
-const REGION_LABELS: Record<string, string> = {
-  PSA_JP: "PSA 日本",
-  PSA_US: "PSA US",
+type Cell = {
+  id: string;
+  pricePerCard: string;
+  maxDeclaredValue: string;
+  isActive: boolean;
+  agencyFee: number;
 };
+
+type Row = { serviceLevel: string; order: number; jp?: Cell; us?: Cell };
+
+const inputCls = "w-28 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900";
 
 export default function ServicePriceForm({ servicePrices }: { servicePrices: ServicePrice[] }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [rows, setRows] = useState<Row[]>(() => {
+    const map = new Map<string, Row>();
+    for (const sp of servicePrices) {
+      const cell: Cell = {
+        id: sp.id,
+        pricePerCard: String(sp.pricePerCard),
+        maxDeclaredValue: sp.maxDeclaredValue === null ? "" : String(sp.maxDeclaredValue),
+        isActive: sp.isActive,
+        agencyFee: sp.agencyFee,
+      };
+      const row = map.get(sp.serviceLevel) ?? { serviceLevel: sp.serviceLevel, order: sp.pricePerCard };
+      if (sp.region === "PSA_JP") {
+        row.jp = cell;
+        row.order = sp.pricePerCard;
+      } else if (sp.region === "PSA_US") {
+        row.us = cell;
+      }
+      map.set(sp.serviceLevel, row);
+    }
+    return Array.from(map.values()).sort((a, b) => a.order - b.order);
+  });
+
+  function updateCell(serviceLevel: string, region: "jp" | "us", patch: Partial<Cell>) {
+    setRows((prev) =>
+      prev.map((r) =>
+        r.serviceLevel === serviceLevel && r[region] ? { ...r, [region]: { ...r[region]!, ...patch } } : r
+      )
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setSaved(false);
-    const fd = new FormData(e.currentTarget);
 
-    const updates = servicePrices.map((sp) => {
-      const maxRaw = fd.get(`max_${sp.id}`) as string;
-      return {
-        id: sp.id,
-        pricePerCard: parseInt(fd.get(`price_${sp.id}`) as string),
-        agencyFee: parseInt(fd.get(`agency_${sp.id}`) as string),
-        maxDeclaredValue: maxRaw === "" ? null : parseInt(maxRaw),
-        isActive: fd.get(`active_${sp.id}`) !== null,
-      };
-    });
+    const updates: {
+      id: string;
+      pricePerCard: number;
+      agencyFee: number;
+      maxDeclaredValue: number | null;
+      isActive: boolean;
+    }[] = [];
+    for (const r of rows) {
+      for (const cell of [r.jp, r.us]) {
+        if (!cell) continue;
+        updates.push({
+          id: cell.id,
+          pricePerCard: parseInt(cell.pricePerCard) || 0,
+          agencyFee: cell.agencyFee,
+          maxDeclaredValue: cell.maxDeclaredValue === "" ? null : parseInt(cell.maxDeclaredValue),
+          isActive: cell.isActive,
+        });
+      }
+    }
 
-    await fetch("/api/admin/service-prices", {
+    const res = await fetch("/api/admin/service-prices", {
       method: "PUT",
       body: JSON.stringify(updates),
       headers: { "Content-Type": "application/json" },
     });
 
-    router.refresh();
     setLoading(false);
-    setSaved(true);
+    if (res.ok) {
+      setSaved(true);
+      router.refresh();
+    } else {
+      alert("保存に失敗しました");
+    }
   }
 
-  // 地域ごとにグループ化
-  const regions = Array.from(new Set(servicePrices.map((p) => p.region)));
+  function CellInputs({ serviceLevel, region, cell }: { serviceLevel: string; region: "jp" | "us"; cell?: Cell }) {
+    if (!cell) {
+      return (
+        <>
+          <td className="px-3 py-3 text-gray-300">—</td>
+          <td className="px-3 py-3 text-gray-300">—</td>
+          <td className="px-3 py-3 text-gray-300">—</td>
+        </>
+      );
+    }
+    return (
+      <>
+        <td className="px-3 py-3">
+          <input
+            type="number"
+            min={0}
+            value={cell.pricePerCard}
+            onChange={(e) => updateCell(serviceLevel, region, { pricePerCard: e.target.value })}
+            className={inputCls}
+          />
+        </td>
+        <td className="px-3 py-3">
+          <input
+            type="number"
+            min={0}
+            placeholder="なし"
+            value={cell.maxDeclaredValue}
+            onChange={(e) => updateCell(serviceLevel, region, { maxDeclaredValue: e.target.value })}
+            className={inputCls}
+          />
+        </td>
+        <td className="px-3 py-3 text-center">
+          <input
+            type="checkbox"
+            checked={cell.isActive}
+            onChange={(e) => updateCell(serviceLevel, region, { isActive: e.target.checked })}
+          />
+        </td>
+      </>
+    );
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
-      {regions.map((region) => (
-        <div key={region}>
-          <h3 className="font-bold text-gray-900 mb-2">{REGION_LABELS[region] ?? region}</h3>
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">サービス</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">鑑定料（/枚）</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">代行手数料（/枚）</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">申告価格上限（空欄=なし）</th>
-                <th className="text-left px-3 py-2 text-gray-600 font-medium">表示</th>
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50">
+              <th rowSpan={2} className="text-left px-3 py-2 text-gray-600 font-medium align-bottom">サービス</th>
+              <th colSpan={3} className="text-center px-3 py-2 text-gray-700 font-bold border-l border-gray-200">PSA 日本</th>
+              <th colSpan={3} className="text-center px-3 py-2 text-gray-700 font-bold border-l border-gray-200">PSA US</th>
+            </tr>
+            <tr className="bg-gray-50">
+              <th className="text-left px-3 py-2 text-gray-500 font-medium border-l border-gray-200">鑑定料</th>
+              <th className="text-left px-3 py-2 text-gray-500 font-medium">上限</th>
+              <th className="text-center px-3 py-2 text-gray-500 font-medium">表示</th>
+              <th className="text-left px-3 py-2 text-gray-500 font-medium border-l border-gray-200">鑑定料</th>
+              <th className="text-left px-3 py-2 text-gray-500 font-medium">上限</th>
+              <th className="text-center px-3 py-2 text-gray-500 font-medium">表示</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {rows.map((r) => (
+              <tr key={r.serviceLevel}>
+                <td className="px-3 py-3 font-medium text-gray-900 whitespace-nowrap">
+                  {SERVICE_LABELS[r.serviceLevel] ?? r.serviceLevel}
+                </td>
+                <CellInputs serviceLevel={r.serviceLevel} region="jp" cell={r.jp} />
+                <CellInputs serviceLevel={r.serviceLevel} region="us" cell={r.us} />
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {servicePrices
-                .filter((sp) => sp.region === region)
-                .map((sp) => (
-                  <tr key={sp.id}>
-                    <td className="px-3 py-3 font-medium text-gray-900">
-                      {SERVICE_LABELS[sp.serviceLevel] ?? sp.serviceLevel}
-                    </td>
-                    <td className="px-3 py-3">
-                      <input
-                        type="number"
-                        name={`price_${sp.id}`}
-                        defaultValue={sp.pricePerCard}
-                        min={0}
-                        className="w-32 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <input
-                        type="number"
-                        name={`agency_${sp.id}`}
-                        defaultValue={sp.agencyFee}
-                        min={0}
-                        className="w-32 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <input
-                        type="number"
-                        name={`max_${sp.id}`}
-                        defaultValue={sp.maxDeclaredValue ?? ""}
-                        min={0}
-                        placeholder="なし"
-                        className="w-36 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <label className="inline-flex items-center gap-1 text-xs text-gray-600">
-                        <input type="checkbox" name={`active_${sp.id}`} defaultChecked={sp.isActive} />
-                        表示
-                      </label>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="flex items-center gap-3">
         <button
