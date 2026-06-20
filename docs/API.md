@@ -55,6 +55,11 @@
 - 認証: 顧客セッション（詳細は自分の申込のみ）
 - out: Application（+Cards/Payments、詳細はStatusHistory/Agreement）
 
+#### `upsertSubmissionBooking(input)` / `cancelSubmissionBooking(id)`（submission-booking.ts）
+- 認証: 顧客セッション。支払済み申込のみ予約可。
+- in: `{ applicationId, method:"STORE_DROP_OFF"|"SHIPPING", scheduledAt, note? }`
+- 処理: 申込ごとに1件のカード提出予約を作成/更新。キャンセル時は `status=CANCELLED`。
+
 #### `deletePaymentMethod(methodId)`（payment.ts）
 - 認証: 顧客セッション（本人のカードのみ）。Stripe detach → DB削除
 
@@ -72,6 +77,7 @@
 | `createUpcharge(input)` | ADMIN/STAFF | Upcharge作成→メール通知→保存カードへ自動課金→PAID/FAILED |
 | `getAdminCards(params)` | ADMIN/STAFF | 検索/絞り込み/ページング |
 | `getAdminCustomers(params)` | ADMIN/STAFF | 顧客一覧 |
+| `cancelSubmissionBookingByAdmin(id)` | ADMIN/STAFF | 提出予約をキャンセル |
 
 料金設定の更新は `PUT /api/admin/service-prices`（**ADMINのみ**）。
 

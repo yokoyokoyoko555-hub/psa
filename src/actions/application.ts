@@ -453,6 +453,7 @@ export async function getApplicationDetail(applicationId: string) {
       cards: { include: { statusHistory: { orderBy: { changedAt: "desc" } } } },
       payments: true,
       agreement: true,
+      submissionBooking: true,
     },
   });
 }

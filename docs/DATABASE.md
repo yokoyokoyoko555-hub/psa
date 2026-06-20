@@ -26,6 +26,7 @@
 | `InsuranceRule` / insurance_rules | 保険料 | `minValue`/`maxValue`(帯), `fee` または `feeRate`(%) |
 | `Agreement` / agreements | 電子同意書 | `applicationId`(uniq), `agreedAt`, `ipAddress`/`userAgent`, `agreementText`, `version` |
 | `Notification` / notifications | お知らせ/通知 | `customerId`(null=全体), `type`, `title`/`body`, `isPublished`, `showOnMypage`, `isRead` |
+| `SubmissionBooking` / submission_bookings | カード提出予約 | `applicationId`(uniq), `method`(STORE_DROP_OFF/SHIPPING), `scheduledAt`, `status`(BOOKED/CANCELLED), `note` |
 | `OperationLog` / operation_logs | 操作ログ | `userId`/`customerId`, `action`, `targetType`/`targetId`, `before`/`after`(Json), index×3 |
 | `SavedPaymentMethod` / saved_payment_methods | 保存カード | `stripePaymentMethodId`(uniq), `brand`/`last4`, `expMonth`/`expYear`, `isDefault` |
 
@@ -39,9 +40,10 @@ Customer ──< CustomerSession
 Customer ──< Application ──< Card ──< CardStatusHistory
                   │            └──< Upcharge
                   ├──< Payment
-                  └──1 Agreement
+                  ├──1 Agreement
+                  └──1 SubmissionBooking
 PsaSubmissionGroup ──< Card        （提出グループは複数顧客のカードを束ねる）
-Customer ──< Payment / Upcharge / Agreement / Notification / SavedPaymentMethod
+Customer ──< Payment / Upcharge / Agreement / Notification / SavedPaymentMethod / SubmissionBooking
 ServicePrice / ShippingRule / InsuranceRule … 料金マスタ（独立）
 ```
 
@@ -82,6 +84,8 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 - `PaymentStatus`: PENDING / SUCCEEDED / FAILED / REFUNDED / PARTIALLY_REFUNDED
 - `UpchargeStatus`: PENDING / PAID / FAILED / WAIVED
 - `NotificationType`: EMAIL / SYSTEM
+- `SubmissionBookingMethod`: STORE_DROP_OFF / SHIPPING
+- `SubmissionBookingStatus`: BOOKED / CANCELLED
 
 ---
 

@@ -61,6 +61,7 @@ export default async function AdminApplicationDetailPage({
       cards: { orderBy: { createdAt: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
       agreement: true,
+      submissionBooking: true,
     },
   });
 
@@ -255,6 +256,40 @@ export default async function AdminApplicationDetailPage({
               className="mt-4 block text-sm text-brand-600 hover:underline"
             >
               顧客詳細を見る →
+            </Link>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="font-bold text-gray-900 mb-3">カード提出予約</h2>
+            {application.submissionBooking?.status === "BOOKED" ? (
+              <dl className="space-y-2 text-sm">
+                <div>
+                  <dt className="text-gray-500 text-xs">予約日時</dt>
+                  <dd className="font-bold text-gray-900">
+                    {format(new Date(application.submissionBooking.scheduledAt), "yyyy/M/d HH:mm", { locale: ja })}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 text-xs">方法</dt>
+                  <dd className="font-medium text-gray-900">
+                    {application.submissionBooking.method === "STORE_DROP_OFF" ? "店頭持込" : "郵送予定"}
+                  </dd>
+                </div>
+                {application.submissionBooking.note && (
+                  <div>
+                    <dt className="text-gray-500 text-xs">備考</dt>
+                    <dd className="text-gray-900 whitespace-pre-wrap">{application.submissionBooking.note}</dd>
+                  </div>
+                )}
+              </dl>
+            ) : (
+              <p className="text-sm text-gray-500">予約はまだありません。</p>
+            )}
+            <Link
+              href="/admin/submission-bookings"
+              className="mt-4 block text-sm text-brand-600 hover:underline"
+            >
+              予約カレンダーを見る →
             </Link>
           </div>
 

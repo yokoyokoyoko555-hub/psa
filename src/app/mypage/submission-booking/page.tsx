@@ -1,0 +1,68 @@
+export const dynamic = "force-dynamic";
+
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCustomerSession } from "@/lib/customer-auth";
+import { prisma } from "@/lib/prisma";
+import BookingCalendar from "./BookingCalendar";
+
+export const metadata = { title: "カード提出予約 | トレカビンクス" };
+
+export default async function SubmissionBookingPage() {
+  const customer = await getCustomerSession();
+  if (!customer) redirect("/login");
+
+  const applications = await prisma.application.findMany({
+    where: {
+      customerId: customer.id,
+      status: { notIn: ["DRAFT", "CANCELLED"] },
+      payments: { some: { status: "SUCCEEDED" } },
+    },
+    include: {
+      _count: { select: { cards: true } },
+      submissionBooking: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const calendarApplications = applications.map((app) => ({
+    id: app.id,
+    applicationNo: app.applicationNo,
+    totalAmount: app.totalAmount,
+    cardCount: app._count.cards,
+    booking: app.submissionBooking
+      ? {
+          id: app.submissionBooking.id,
+          applicationId: app.submissionBooking.applicationId,
+          method: app.submissionBooking.method,
+          scheduledAt: app.submissionBooking.scheduledAt.toISOString(),
+          status: app.submissionBooking.status,
+          note: app.submissionBooking.note,
+        }
+      : null,
+  }));
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3">
+        <div className="max-w-6xl mx-auto flex items-center gap-3">
+          <Link href="/mypage" className="shrink-0 hover:opacity-70 transition">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
+          </Link>
+          <h1 className="font-bold text-gray-900">カード提出予約</h1>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <p className="font-bold text-gray-900">お支払い後のカード提出日時を予約してください</p>
+          <p className="text-sm text-gray-500 mt-1">
+            店頭持込、または郵送予定日を選択できます。予約は申込ごとに1件保存されます。
+          </p>
+        </div>
+        <BookingCalendar applications={calendarApplications} />
+      </main>
+    </div>
+  );
+}

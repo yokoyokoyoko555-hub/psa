@@ -105,6 +105,16 @@ enum NotificationType {
   SYSTEM
 }
 
+enum SubmissionBookingMethod {
+  STORE_DROP_OFF
+  SHIPPING
+}
+
+enum SubmissionBookingStatus {
+  BOOKED
+  CANCELLED
+}
+
 // ===== USERS (管理者・スタッフ・経理) =====
 
 model User {
@@ -158,6 +168,7 @@ model Customer {
   sessions      CustomerSession[]
   cards         Card[]
   addresses     CustomerAddress[]
+  submissionBookings SubmissionBooking[]
 
   @@map("customers")
 }
@@ -244,6 +255,7 @@ model Application {
   cards     Card[]
   payments  Payment[]
   agreement Agreement?
+  submissionBooking SubmissionBooking?
 
   @@map("applications")
 }
@@ -478,6 +490,27 @@ model Notification {
   customer Customer? @relation(fields: [customerId], references: [id])
 
   @@map("notifications")
+}
+
+// ===== SUBMISSION BOOKINGS (持込・郵送予約) =====
+
+model SubmissionBooking {
+  id            String                  @id @default(cuid())
+  customerId    String
+  applicationId String                  @unique
+  method        SubmissionBookingMethod
+  scheduledAt   DateTime
+  status        SubmissionBookingStatus @default(BOOKED)
+  note          String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  customer    Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([scheduledAt])
+  @@map("submission_bookings")
 }
 
 // ===== OPERATION LOGS (操作ログ) =====

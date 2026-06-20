@@ -50,6 +50,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
 
   const application = await getApplicationDetail(id);
   if (!application) notFound();
+  const isPaid = application.payments.some((p) => p.status === "SUCCEEDED");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -108,6 +109,36 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
               <span>合計</span><span>¥{application.totalAmount.toLocaleString()}</span>
             </div>
+          </div>
+        </div>
+
+        {/* Submission booking */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="font-bold text-gray-900">カード提出予約</h2>
+              {application.submissionBooking?.status === "BOOKED" ? (
+                <p className="text-sm text-gray-600 mt-1">
+                  {format(new Date(application.submissionBooking.scheduledAt), "yyyy/MM/dd HH:mm", { locale: ja })}
+                  {" / "}
+                  {application.submissionBooking.method === "STORE_DROP_OFF" ? "店頭持込" : "郵送予定"}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500 mt-1">
+                  お支払い後、カードの店頭持込または郵送予定を予約できます。
+                </p>
+              )}
+            </div>
+            {isPaid ? (
+              <Link
+                href="/mypage/submission-booking"
+                className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
+              >
+                予約する
+              </Link>
+            ) : (
+              <span className="text-sm font-bold text-gray-400">決済完了後に予約できます</span>
+            )}
           </div>
         </div>
 

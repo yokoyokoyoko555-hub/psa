@@ -61,10 +61,12 @@ psa-system/
 │   │   ├── apply/                   # PSA申込フォーム(多ステップ) + ApplyForm.tsx
 │   │   ├── mypage/                  # 顧客マイページ（layout=force-dynamic）
 │   │   │   ├── applications/[id]/   # 申込詳細・カード進捗
+│   │   │   ├── submission-booking/  # カード提出予約カレンダー
 │   │   │   └── payment-methods/     # 保存カード管理
 │   │   ├── admin/                   # 管理画面（layout=force-dynamic + 認証）
 │   │   │   ├── login/ dashboard/
 │   │   │   ├── customers/[id]/ applications/[id]/
+│   │   │   ├── submission-bookings/ # 提出予約カレンダー
 │   │   │   ├── cards/[id]/          # ステータス更新/グレード登録/Upcharge
 │   │   │   ├── psa-groups/          # PSA提出グループ
 │   │   │   └── settings/            # 料金/送料/保険料設定（ADMINのみ）
@@ -73,6 +75,7 @@ psa-system/
 │   │   ├── customer.ts      # 登録/ログイン/ログアウト/プロフィール
 │   │   ├── application.ts   # 申込作成/一覧/詳細
 │   │   ├── admin.ts         # カード/PSAグループ/グレード/Upcharge/集計
+│   │   ├── submission-booking.ts # カード提出予約
 │   │   └── payment.ts       # 保存カード削除
 │   ├── lib/                 # 横断ロジック
 │   │   ├── prisma.ts        # PrismaClient（PrismaPgアダプタ、シングルトン）
@@ -124,7 +127,7 @@ psa-system/
 | `SavedPaymentMethod` | 保存カード | `stripePaymentMethodId`, `brand`/`last4`, `isDefault` |
 
 ### 主なEnum
-`UserRole`(ADMIN/STAFF/ACCOUNTING/CUSTOMER), `CardStatus`(17値), `ApplicationStatus`, `ServiceLevel`(VALUE/REGULAR/EXPRESS/SUPER_EXPRESS), `ReturnMethod`(STORE_PICKUP/SHIPPING), `CardLanguage`, `PaymentStatus`, `UpchargeStatus`, `NotificationType`。
+`UserRole`(ADMIN/STAFF/ACCOUNTING/CUSTOMER), `CardStatus`(17値), `ApplicationStatus`, `ServiceLevel`(VALUE/REGULAR/EXPRESS/SUPER_EXPRESS), `ReturnMethod`(STORE_PICKUP/SHIPPING), `CardLanguage`, `PaymentStatus`, `UpchargeStatus`, `NotificationType`, `SubmissionBookingMethod`, `SubmissionBookingStatus`。
 
 > 補足: モデル詳細・リレーション・ER図は [docs/DATABASE.md](DATABASE.md) を参照。
 
@@ -163,6 +166,7 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 | customer.ts | registerCustomer / loginCustomer / logoutCustomer / getCustomerProfile | 顧客 |
 | application.ts | createApplication / getMyApplications / getApplicationDetail | 顧客 |
 | admin.ts | getDashboardStats / updateCardStatus / createPsaSubmissionGroup / submitPsaGroup / recordGrade / createUpcharge / getAdminCards / getAdminCustomers | ADMIN or STAFF |
+| submission-booking.ts | upsertSubmissionBooking / cancelSubmissionBooking / cancelSubmissionBookingByAdmin | 顧客 / ADMIN or STAFF |
 | payment.ts | deletePaymentMethod | 顧客 |
 
 ---
