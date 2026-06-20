@@ -10,6 +10,7 @@ import { logOperation, getClientIp } from "@/lib/operation-log";
 import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
 import { z } from "zod";
 import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 
 const cardSchema = z.object({
   tcgTitle: z.string().min(1).max(200),
@@ -276,6 +277,28 @@ export async function createStoreRequest(
     targetId: application.id,
   });
 
+  return { success: true };
+}
+
+/** 下書き(DRAFT)の申込を削除する（本人のもののみ） */
+export async function deleteApplication(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const app = await prisma.application.findFirst({ where: { id, customerId: customer.id } });
+  if (!app) return { success: false, error: "申込が見つかりません" };
+  if (app.status !== "DRAFT") return { success: false, error: "提出済みの申込は削除できません" };
+
+  await prisma.$transaction([
+    prisma.card.deleteMany({ where: { applicationId: id } }),
+    prisma.payment.deleteMany({ where: { applicationId: id } }),
+    prisma.agreement.deleteMany({ where: { applicationId: id } }),
+    prisma.application.delete({ where: { id } }),
+  ]);
+
+  revalidatePath("/mypage/applications");
   return { success: true };
 }
 

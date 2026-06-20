@@ -4,15 +4,22 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getMyApplications } from "@/actions/application";
-import { format } from "date-fns";
-import { ja } from "date-fns/locale";
+import ApplicationCenter, { type AppRow } from "./ApplicationCenter";
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
-  SUBMITTED: { label: "申込済", color: "bg-brand-100 text-brand-700" },
-  IN_PROGRESS: { label: "処理中", color: "bg-yellow-100 text-yellow-700" },
-  COMPLETED: { label: "完了", color: "bg-green-100 text-green-700" },
-  CANCELLED: { label: "キャンセル", color: "bg-red-100 text-red-700" },
+const SERVICE_LABELS: Record<string, string> = {
+  VALUE: "バリュー",
+  VALUE_BULK: "バリューバルク",
+  VALUE_PLUS: "バリュープラス",
+  VALUE_MAX: "バリューマックス",
+  REGULAR: "レギュラー",
+  EXPRESS: "エクスプレス",
+  SUPER_EXPRESS: "スーパー・エクスプレス",
+  WALK_THROUGH: "ウォーク・スルー",
+  PREMIUM_1: "プレミアム 1",
+  PREMIUM_2: "プレミアム 2",
+  PREMIUM_3: "プレミアム 3",
+  PREMIUM_5: "プレミアム 5",
+  PREMIUM_10: "プレミアム 10",
 };
 
 export default async function ApplicationsPage() {
@@ -21,64 +28,38 @@ export default async function ApplicationsPage() {
 
   const applications = await getMyApplications();
 
+  const rows: AppRow[] = applications.map((app) => ({
+    id: app.id,
+    applicationNo: app.applicationNo,
+    cardCount: app.cards.length,
+    serviceLevel: app.cards.length > 0 ? (SERVICE_LABELS[app.serviceLevel] ?? app.serviceLevel) : "-",
+    createdAt: new Date(app.createdAt).toISOString(),
+    status: app.status,
+    isDraft: app.status === "DRAFT",
+  }));
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-4 py-4">
+      <header className="bg-white border-b border-gray-200 px-4 py-1.5">
         <div className="max-w-4xl mx-auto flex items-center gap-4">
           <Link href="/mypage" className="shrink-0 hover:opacity-70 transition">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.jpg" alt="トレカビンクス" className="h-10 w-auto" />
           </Link>
-          <h1 className="font-bold text-gray-900">申込一覧</h1>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        {applications.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
-            <p className="text-gray-500 mb-4">まだ申込がありません</p>
-            <Link href="/apply" className="bg-brand-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-brand-700 transition">
-              PSA申込を始める
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {applications.map((app) => {
-              const statusInfo = STATUS_LABELS[app.status] ?? { label: app.status, color: "bg-gray-100 text-gray-600" };
-              const payment = app.payments[0];
-              return (
-                <Link
-                  key={app.id}
-                  href={`/mypage/applications/${app.id}`}
-                  className="bg-white rounded-xl border border-gray-200 p-6 hover:border-brand-300 transition block"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-mono text-sm text-gray-500 mb-1">{app.applicationNo}</p>
-                      <p className="font-bold text-gray-900">{app.cards.length}枚のカード</p>
-                      <p className="text-gray-500 text-sm mt-1">
-                        {format(new Date(app.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                        {statusInfo.label}
-                      </span>
-                      <p className="text-lg font-bold text-gray-900 mt-2">
-                        ¥{app.totalAmount.toLocaleString()}
-                      </p>
-                      {payment && (
-                        <p className={`text-xs mt-1 ${payment.status === "SUCCEEDED" ? "text-green-600" : "text-red-500"}`}>
-                          {payment.status === "SUCCEEDED" ? "支払済" : "未払い"}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">申込センター</h1>
+          <Link
+            href="/apply"
+            className="bg-gray-900 text-white font-bold px-5 py-3 rounded-full hover:bg-gray-700 transition flex items-center gap-2"
+          >
+            ＋ 新規申込
+          </Link>
+        </div>
+        <ApplicationCenter apps={rows} />
       </main>
     </div>
   );
