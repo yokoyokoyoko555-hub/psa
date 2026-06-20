@@ -28,15 +28,21 @@ export default async function ApplicationsPage() {
 
   const applications = await getMyApplications();
 
-  const rows: AppRow[] = applications.map((app) => ({
-    id: app.id,
-    applicationNo: app.applicationNo,
-    cardCount: app.cards.length,
-    serviceLevel: app.cards.length > 0 ? (SERVICE_LABELS[app.serviceLevel] ?? app.serviceLevel) : "-",
-    createdAt: new Date(app.createdAt).toISOString(),
-    status: app.status,
-    isDraft: app.status === "DRAFT",
-  }));
+  const rows: AppRow[] = applications.map((app) => {
+    const draftCards =
+      app.status === "DRAFT" && app.draftData
+        ? ((app.draftData as { cards?: unknown[] }).cards?.length ?? 0)
+        : 0;
+    return {
+      id: app.id,
+      applicationNo: app.applicationNo,
+      cardCount: app.status === "DRAFT" ? draftCards : app.cards.length,
+      serviceLevel: SERVICE_LABELS[app.serviceLevel] ?? app.serviceLevel,
+      createdAt: new Date(app.createdAt).toISOString(),
+      status: app.status,
+      isDraft: app.status === "DRAFT",
+    };
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">

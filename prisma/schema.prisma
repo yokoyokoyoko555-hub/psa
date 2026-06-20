@@ -214,6 +214,8 @@ model Application {
   returnMethod   ReturnMethod
   // 返送先住所（暗号化JSON）。null の場合は顧客の登録住所を使用
   shippingAddressEncrypted String?
+  // 下書き保存中の入力内容（カード配列・返送先選択など）。確定時にクリア
+  draftData      Json?
   status         ApplicationStatus @default(DRAFT)
   totalAmount    Int               @default(0) // 円
   psaFeeTotal    Int               @default(0)

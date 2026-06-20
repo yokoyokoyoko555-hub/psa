@@ -11,7 +11,24 @@ declare global {
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createApplication } from "@/actions/application";
+import { createApplication, saveDraft as saveDraftServer } from "@/actions/application";
+
+export type InitialDraft = {
+  draftId: string;
+  serviceLevel: ServiceLevel;
+  region: ServiceRegion;
+  returnMethod: ReturnMethod;
+  cards: {
+    tcgTitle: string;
+    releaseYear: string;
+    cardNumber: string;
+    cardName: string;
+    rarity: string;
+    quantity: number;
+    declaredValue: number;
+  }[];
+  returnSel: string;
+};
 
 const DRAFT_KEY = "psa-apply-draft";
 import { ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
@@ -83,6 +100,7 @@ type Props = {
   insuranceRules: InsuranceRule[];
   profile: CustomerProfile | null;
   addresses: Address[];
+  initialDraft?: InitialDraft | null;
 };
 
 const STEPS = [
@@ -101,23 +119,29 @@ export default function ApplyForm({
   stripePublishableKey,
   profile,
   addresses,
+  initialDraft,
 }: Props) {
   const router = useRouter();
-  const [step, setStep] = useState<StepKey>("service");
-  const [maxStep, setMaxStep] = useState(0); // 到達済みの最大ステップindex（パンくずのリンク可否）
+  const [step, setStep] = useState<StepKey>(initialDraft ? "cards" : "service");
+  const [maxStep, setMaxStep] = useState(initialDraft ? 1 : 0); // 到達済みの最大ステップindex
+  const [draftId, setDraftId] = useState<string | null>(initialDraft?.draftId ?? null);
 
-  const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
-  const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(null);
-  const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
+  const [region, setRegion] = useState<ServiceRegion>(initialDraft?.region ?? "PSA_JP");
+  const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(
+    initialDraft?.serviceLevel ?? null
+  );
+  const [returnMethod, setReturnMethod] = useState<ReturnMethod>(
+    initialDraft?.returnMethod ?? "SHIPPING"
+  );
 
-  const [cards, setCards] = useState<CardItem[]>([]);
+  const [cards, setCards] = useState<CardItem[]>(initialDraft?.cards ?? []);
   const [draft, setDraft] = useState<CardItem>(emptyCard());
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   // 返送先住所（"registered"＝登録住所 / それ以外は住所帳のID）
   const [addrList, setAddrList] = useState<Address[]>(addresses);
   const [returnSel, setReturnSel] = useState<string>(
-    addresses.find((a) => a.isDefault)?.id ?? "registered"
+    initialDraft?.returnSel ?? addresses.find((a) => a.isDefault)?.id ?? "registered"
   );
   const selectedAddr = addrList.find((a) => a.id === returnSel);
 
@@ -213,6 +237,7 @@ export default function ApplyForm({
   // 一時保存（localStorage）からの復元。意図的に effect 内で state を設定する。
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    if (initialDraft) return; // サーバー下書きを再開中はlocalStorage復元しない
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (!raw) return;
@@ -240,8 +265,28 @@ export default function ApplyForm({
     }
   }
 
-  function handleSaveAndExit() {
+  async function handleSaveAndExit() {
     saveDraftToStorage();
+    // サービス選択済みならサーバーにも下書き保存（端末をまたいで再開可能に）
+    if (serviceLevel) {
+      const res = await saveDraftServer({
+        draftId: draftId ?? undefined,
+        serviceLevel,
+        region,
+        returnMethod,
+        returnSel,
+        cards: cards.map((c) => ({
+          tcgTitle: c.tcgTitle,
+          releaseYear: c.releaseYear,
+          cardNumber: c.cardNumber,
+          cardName: c.cardName,
+          rarity: c.rarity,
+          quantity: c.quantity,
+          declaredValue: c.declaredValue,
+        })),
+      });
+      if (res.success && res.draftId) setDraftId(res.draftId);
+    }
     router.push("/mypage");
   }
 
@@ -264,6 +309,7 @@ export default function ApplyForm({
     setError("");
 
     const result = await createApplication({
+      draftId: draftId ?? undefined,
       serviceLevel,
       region,
       returnMethod,

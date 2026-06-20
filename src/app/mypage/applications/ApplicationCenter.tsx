@@ -129,7 +129,7 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
                           🗑
                         </button>
                         <button
-                          onClick={() => router.push(`/mypage/applications/${a.id}`)}
+                          onClick={() => router.push(`/apply?draft=${a.id}`)}
                           className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                         >
                           続行

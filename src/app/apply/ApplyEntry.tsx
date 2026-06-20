@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import ApplyForm from "./ApplyForm";
+import ApplyForm, { type InitialDraft } from "./ApplyForm";
 import StoreRequestForm from "./StoreRequestForm";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
 import type { CustomerProfile } from "@/actions/customer";
@@ -15,10 +15,13 @@ type Props = {
   insuranceRules: InsuranceRule[];
   profile: CustomerProfile | null;
   addresses: Address[];
+  initialDraft?: InitialDraft | null;
 };
 
 export default function ApplyEntry(props: Props) {
-  const [mode, setMode] = useState<"choose" | "self" | "store">("choose");
+  const [mode, setMode] = useState<"choose" | "self" | "store">(
+    props.initialDraft ? "self" : "choose"
+  );
 
   if (mode === "self") {
     return <ApplyForm {...props} />;

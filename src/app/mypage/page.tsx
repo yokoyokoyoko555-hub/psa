@@ -43,6 +43,23 @@ export default async function MypagePage() {
 
   const name = decrypt(customer.nameEncrypted);
   const applications = await getMyApplications();
+  const latestDraft = applications.find((a) => a.status === "DRAFT");
+
+  const SERVICE_LABELS: Record<string, string> = {
+    VALUE: "バリュー",
+    VALUE_BULK: "バリューバルク",
+    VALUE_PLUS: "バリュープラス",
+    VALUE_MAX: "バリューマックス",
+    REGULAR: "レギュラー",
+    EXPRESS: "エクスプレス",
+    SUPER_EXPRESS: "スーパー・エクスプレス",
+    WALK_THROUGH: "ウォーク・スルー",
+    PREMIUM_1: "プレミアム 1",
+    PREMIUM_2: "プレミアム 2",
+    PREMIUM_3: "プレミアム 3",
+    PREMIUM_5: "プレミアム 5",
+    PREMIUM_10: "プレミアム 10",
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -121,59 +138,42 @@ export default async function MypagePage() {
           </Link>
         </div>
 
-        {/* Recent applications */}
+        {/* この申込を続ける（直近の作業中） */}
         <div>
-          <h2 className="text-lg font-bold text-gray-900 mb-4">最近の申込</h2>
-          {applications.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-500">
-              申込がありません
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {applications.slice(0, 5).map((app) => (
-                <Link
-                  key={app.id}
-                  href={`/mypage/applications/${app.id}`}
-                  className="bg-white rounded-xl border border-gray-200 p-5 hover:border-brand-300 transition block"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <span className="font-mono text-sm text-gray-500">{app.applicationNo}</span>
-                      <p className="font-bold text-gray-900">{app.cards.length}枚</p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                        app.status === "COMPLETED" ? "bg-green-100 text-green-700" :
-                        app.status === "CANCELLED" ? "bg-gray-100 text-gray-600" :
-                        "bg-brand-100 text-brand-700"
-                      }`}>
-                        {STATUS_LABELS[app.status] ?? app.status}
-                      </span>
-                      <p className="text-sm font-bold text-gray-900 mt-1">
-                        ¥{app.totalAmount.toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {app.cards.slice(0, 3).map((card) => (
-                      <span
-                        key={card.id}
-                        className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded"
-                      >
-                        {card.cardName} — {CARD_STATUS_LABELS[card.status] ?? card.status}
-                      </span>
-                    ))}
-                    {app.cards.length > 3 && (
-                      <span className="text-xs text-gray-400">他{app.cards.length - 3}枚</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-2">
-                    {format(new Date(app.createdAt), "yyyy年M月d日", { locale: ja })}
+          <h2 className="text-lg font-bold text-gray-900 mb-4">この申込を続ける</h2>
+          <div className="bg-white rounded-2xl border border-gray-200">
+            {latestDraft ? (
+              <div className="p-6">
+                <p className="text-gray-700 mb-4">この申込の続きから再開します。</p>
+                <div className="border border-gray-200 rounded-xl p-5">
+                  <p className="text-gray-900">
+                    {SERVICE_LABELS[latestDraft.serviceLevel] ?? latestDraft.serviceLevel}
                   </p>
+                  <p className="text-gray-500 text-sm mt-1">
+                    {format(new Date(latestDraft.createdAt), "yyyy年M月d日", { locale: ja })}
+                  </p>
+                  <p className="text-red-500 text-sm mt-1">下書き</p>
+                </div>
+                <Link
+                  href={`/apply?draft=${latestDraft.id}`}
+                  className="inline-flex items-center gap-2 text-gray-700 hover:text-brand-700 mt-4 text-sm"
+                >
+                  ✏️ 下書きの編集
                 </Link>
-              ))}
-            </div>
-          )}
+              </div>
+            ) : (
+              <div className="p-6 text-center text-gray-400 text-sm">作業中の申込はありません</div>
+            )}
+            <Link
+              href="/mypage/applications"
+              className="flex items-center justify-between p-5 border-t border-gray-100 hover:bg-gray-50"
+            >
+              <span className="font-medium text-gray-900">すべての作業中の申込を表示</span>
+              <span className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-400">
+                ›
+              </span>
+            </Link>
+          </div>
         </div>
       </main>
     </div>

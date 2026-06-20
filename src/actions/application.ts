@@ -7,7 +7,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
 import { createPaymentIntent } from "@/lib/stripe";
 import { logOperation, getClientIp } from "@/lib/operation-log";
-import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
+import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -36,6 +36,7 @@ const returnAddressSchema = z.object({
 });
 
 const applicationSchema = z.object({
+  draftId: z.string().optional(), // 下書きから確定する場合
   serviceLevel: z.nativeEnum(ServiceLevel),
   region: z.nativeEnum(ServiceRegion),
   returnMethod: z.nativeEnum(ReturnMethod),
@@ -102,29 +103,48 @@ export async function createApplication(
     applyAgencyFee: false,
   });
 
-  const applicationNo = await generateApplicationNo();
+  // 下書きから確定する場合は既存の申込を再利用
+  let existingDraftId: string | null = null;
+  if (parsed.data.draftId) {
+    const d = await prisma.application.findFirst({
+      where: { id: parsed.data.draftId, customerId: customer.id, status: "DRAFT" },
+    });
+    if (d) existingDraftId = d.id;
+  }
+
+  const applicationNo = existingDraftId ? null : await generateApplicationNo();
 
   const application = await prisma.$transaction(async (tx) => {
-    const app = await tx.application.create({
-      data: {
-        applicationNo,
-        customerId: customer.id,
-        serviceLevel: parsed.data.serviceLevel,
-        region: parsed.data.region,
-        source: "CUSTOMER",
-        returnMethod: parsed.data.returnMethod,
-        shippingAddressEncrypted: parsed.data.returnAddress
-          ? encrypt(JSON.stringify(parsed.data.returnAddress))
-          : null,
-        status: "DRAFT",
-        totalAmount: fees.totalAmount,
-        psaFeeTotal: fees.psaFeeTotal,
-        agencyFeeTotal: fees.agencyFeeTotal,
-        shippingFee: fees.shippingFee,
-        insuranceFee: fees.insuranceFee,
-        taxAmount: fees.taxAmount,
-      },
-    });
+    const commonData = {
+      serviceLevel: parsed.data.serviceLevel,
+      region: parsed.data.region,
+      source: "CUSTOMER" as const,
+      returnMethod: parsed.data.returnMethod,
+      shippingAddressEncrypted: parsed.data.returnAddress
+        ? encrypt(JSON.stringify(parsed.data.returnAddress))
+        : null,
+      totalAmount: fees.totalAmount,
+      psaFeeTotal: fees.psaFeeTotal,
+      agencyFeeTotal: fees.agencyFeeTotal,
+      shippingFee: fees.shippingFee,
+      insuranceFee: fees.insuranceFee,
+      taxAmount: fees.taxAmount,
+    };
+
+    const app = existingDraftId
+      ? await tx.application.update({
+          where: { id: existingDraftId },
+          data: { ...commonData, draftData: Prisma.DbNull },
+        })
+      : await tx.application.create({
+          data: {
+            applicationNo: applicationNo!,
+            customerId: customer.id,
+            status: "DRAFT",
+            ...commonData,
+            draftData: Prisma.DbNull,
+          },
+        });
 
     // カード作成（顧客入力のため代行手数料は0）
     const servicePriceData = servicePrice;
@@ -278,6 +298,105 @@ export async function createStoreRequest(
   });
 
   return { success: true };
+}
+
+const draftCardSchema = z.object({
+  tcgTitle: z.string().default(""),
+  releaseYear: z.string().default(""),
+  cardNumber: z.string().default(""),
+  cardName: z.string().default(""),
+  rarity: z.string().default(""),
+  quantity: z.number().int().default(1),
+  declaredValue: z.number().int().default(0),
+});
+
+const saveDraftSchema = z.object({
+  draftId: z.string().optional(),
+  serviceLevel: z.nativeEnum(ServiceLevel),
+  region: z.nativeEnum(ServiceRegion),
+  returnMethod: z.nativeEnum(ReturnMethod),
+  returnSel: z.string().default("registered"),
+  cards: z.array(draftCardSchema).default([]),
+});
+
+export type DraftData = {
+  cards: z.infer<typeof draftCardSchema>[];
+  returnSel: string;
+};
+
+/** 申込を下書き保存（サーバー側）。決済は行わない。既存draftIdがあれば上書き。 */
+export async function saveDraft(
+  input: z.infer<typeof saveDraftSchema>
+): Promise<{ success: boolean; error?: string; draftId?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const parsed = saveDraftSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
+
+  const draftData = { cards: parsed.data.cards, returnSel: parsed.data.returnSel };
+
+  if (parsed.data.draftId) {
+    const owned = await prisma.application.findFirst({
+      where: { id: parsed.data.draftId, customerId: customer.id, status: "DRAFT" },
+    });
+    if (!owned) return { success: false, error: "下書きが見つかりません" };
+    await prisma.application.update({
+      where: { id: owned.id },
+      data: {
+        serviceLevel: parsed.data.serviceLevel,
+        region: parsed.data.region,
+        returnMethod: parsed.data.returnMethod,
+        draftData,
+      },
+    });
+    revalidatePath("/mypage");
+    revalidatePath("/mypage/applications");
+    return { success: true, draftId: owned.id };
+  }
+
+  const applicationNo = await generateApplicationNo();
+  const app = await prisma.application.create({
+    data: {
+      applicationNo,
+      customerId: customer.id,
+      serviceLevel: parsed.data.serviceLevel,
+      region: parsed.data.region,
+      source: "CUSTOMER",
+      returnMethod: parsed.data.returnMethod,
+      status: "DRAFT",
+      draftData,
+    },
+  });
+  revalidatePath("/mypage");
+  revalidatePath("/mypage/applications");
+  return { success: true, draftId: app.id };
+}
+
+/** 下書きの内容を取得（再開用） */
+export async function getDraft(id: string): Promise<{
+  draftId: string;
+  serviceLevel: ServiceLevel;
+  region: ServiceRegion;
+  returnMethod: ReturnMethod;
+  cards: z.infer<typeof draftCardSchema>[];
+  returnSel: string;
+} | null> {
+  const customer = await getCustomerSession();
+  if (!customer) return null;
+  const app = await prisma.application.findFirst({
+    where: { id, customerId: customer.id, status: "DRAFT", source: "CUSTOMER" },
+  });
+  if (!app) return null;
+  const data = (app.draftData as DraftData | null) ?? { cards: [], returnSel: "registered" };
+  return {
+    draftId: app.id,
+    serviceLevel: app.serviceLevel,
+    region: app.region,
+    returnMethod: app.returnMethod,
+    cards: data.cards ?? [],
+    returnSel: data.returnSel ?? "registered",
+  };
 }
 
 /** 下書き(DRAFT)の申込を削除する（本人のもののみ） */

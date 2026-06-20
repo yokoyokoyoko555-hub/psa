@@ -4,12 +4,20 @@ import { redirect } from "next/navigation";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getCustomerProfile } from "@/actions/customer";
 import { getMyAddresses } from "@/actions/address";
+import { getDraft } from "@/actions/application";
 import ApplyEntry from "./ApplyEntry";
 import { prisma } from "@/lib/prisma";
 
-export default async function ApplyPage() {
+export default async function ApplyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ draft?: string }>;
+}) {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
+
+  const { draft: draftId } = await searchParams;
+  const initialDraft = draftId ? await getDraft(draftId) : null;
 
   const [servicePrices, shippingRules, insuranceRules, profile, addresses] = await Promise.all([
     prisma.servicePrice.findMany({ where: { isActive: true }, orderBy: { pricePerCard: "asc" } }),
@@ -28,6 +36,7 @@ export default async function ApplyPage() {
       insuranceRules={insuranceRules}
       profile={profile}
       addresses={addresses}
+      initialDraft={initialDraft}
     />
   );
 }
