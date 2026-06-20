@@ -33,7 +33,7 @@ export default async function NotificationsPage() {
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         <section className="bg-white border border-gray-200">
-          <div className="bg-[#00315c] text-white px-4 py-3">
+          <div className="bg-brand-600 text-white px-4 py-3">
             <h2 className="font-bold">お知らせ</h2>
           </div>
           <div className="divide-y divide-gray-200 px-6">
@@ -52,13 +52,13 @@ export default async function NotificationsPage() {
                     </span>
                     <span
                       className={`block font-bold leading-6 ${
-                        n.title.includes("重要") ? "text-red-600" : "text-blue-600"
+                        n.title.includes("重要") ? "text-brand-700" : "text-brand-600"
                       }`}
                     >
                       {n.title}
                     </span>
                   </span>
-                  <span className="text-3xl leading-none text-blue-600 shrink-0">›</span>
+                  <span className="text-3xl leading-none text-brand-600 shrink-0">›</span>
                 </Link>
               ))
             )}

@@ -98,7 +98,7 @@ export default async function MypagePage() {
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {notifications.length > 0 && (
           <section className="bg-white border border-gray-200">
-            <div className="bg-[#00315c] text-white px-4 py-3">
+            <div className="bg-brand-600 text-white px-4 py-3">
               <h2 className="font-bold">お知らせ</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 px-6 pt-3">
@@ -114,20 +114,20 @@ export default async function MypagePage() {
                     </span>
                     <span
                       className={`block font-bold leading-6 ${
-                        n.title.includes("重要") ? "text-red-600" : "text-blue-600"
+                        n.title.includes("重要") ? "text-brand-700" : "text-brand-600"
                       }`}
                     >
                       {n.title}
                     </span>
                   </span>
-                  <span className="text-3xl leading-none text-blue-600 shrink-0">›</span>
+                  <span className="text-3xl leading-none text-brand-600 shrink-0">›</span>
                 </Link>
               ))}
             </div>
             <div className="flex justify-end px-4 py-3">
               <Link
                 href="/mypage/notifications"
-                className="inline-flex items-center gap-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm font-bold text-blue-600 hover:bg-gray-50"
+                className="inline-flex items-center gap-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm font-bold text-brand-600 hover:bg-brand-50"
               >
                 もっと見る <span className="text-xl leading-none">›</span>
               </Link>
