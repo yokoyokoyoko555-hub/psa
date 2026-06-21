@@ -169,6 +169,8 @@ model Customer {
   cards         Card[]
   addresses     CustomerAddress[]
   submissionBookings SubmissionBooking[]
+  subscriptions Subscription[]
+  centeringMeasurements CenteringMeasurement[]
 
   @@map("customers")
 }
@@ -221,6 +223,53 @@ model PasswordReset {
 
   @@index([email])
   @@map("password_resets")
+}
+
+// 継続課金（汎用サブスク。現状はセンタリング測定ツール用）。詳細: docs/CENTERING_TOOL.md / ADR-0012
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  customerId           String
+  stripeSubscriptionId String             @unique
+  stripePriceId        String
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("subscriptions")
+}
+
+// センタリング測定結果（数値のみ。撮影画像は保存しない＝ADR-0012）
+model CenteringMeasurement {
+  id             String   @id @default(cuid())
+  customerId     String
+  cardId         String? // 任意で登録カードに紐付け（relationは持たない＝疎結合）
+  frontLR        Float // フロント左右（大きい側%。例 58 = 58/42）
+  frontTB        Float // フロント上下（大きい側%）
+  backLR         Float? // バック左右（撮影は任意）
+  backTB         Float? // バック上下
+  estimatedGrade String? // 参考上限グレード（"10"〜"5" / null）
+  note           String?
+  createdAt      DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("centering_measurements")
 }
 
 model CustomerSession {

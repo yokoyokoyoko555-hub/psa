@@ -2,7 +2,7 @@
 
 > Codex / Claude Code 共有用の自己完結ドキュメント。この1枚で機能の全体像・確定方針・実装タスクを把握できる。
 > 関連: [ADR-0012](DECISIONS.md) / 規約は [AGENTS.md](../AGENTS.md) / 全体像は [PROJECT_BRIEF.md](PROJECT_BRIEF.md)
-> 状態: **設計確定（未実装）** / 最終更新: 2026-06-21
+> 状態: **Phase 1 実装済 / Phase 0 課金配線は残** / 最終更新: 2026-06-21
 
 ---
 
@@ -168,21 +168,23 @@ iOS Safari注意: `getUserMedia` はHTTPS必須（本番は充足）、`<video p
 
 ## 8. 実装タスク（Phase別）
 ### Phase 0 — 課金基盤＋導線（測定なし）
-- [ ] `schema.prisma`: `SubscriptionStatus` enum・`Subscription` モデル追加、`Customer` に relation
+- [x] `schema.prisma`: `SubscriptionStatus` enum・`Subscription` モデル追加、`Customer` に relation（モデルのみ先行）
 - [ ] `lib/stripe.ts`: `createCheckoutSubscriptionSession()` / `createBillingPortalSession()`
-- [ ] `actions/subscription.ts`: 加入・Portal・`getCenteringSubscription()` / `requireActiveSubscription()`
+- [ ] `actions/subscription.ts`: 加入・Portal（`hasCenteringAccess()` は `actions/centering.ts` に実装済）
 - [ ] `/api/stripe/webhook`: subscription/invoice イベント追記
-- [ ] `/mypage/centering`: 未加入/加入済の出し分け（加入ボタン・Portalボタン）
-- [ ] `/mypage`: クイックアクションに導線＋状態バッジ
+- [x] `/mypage/centering`: 未加入/加入済の出し分け（**加入ボタンは現状 disabled「まもなく提供」**。Stripe配線で有効化）
+- [x] `/mypage`: クイックアクションに導線
 - [ ] env `STRIPE_CENTERING_PRICE_ID`、操作ログ（加入/解約）
 
-### Phase 1 — 撮影＋測定
-- [ ] `/mypage/centering/measure`（client）: カメラ・ガイド枠・撮影・フォールバックアップロード
-- [ ] 画像処理: 外周検出→warp→内枠検出→手動ガイド線補正→余白算出（軽量CV、必要なら OpenCV.js 遅延ロード）
-- [ ] 参考グレード対応表（定数）＋判定
-- [ ] `actions/centering.ts`: `saveCenteringMeasurement()`（数値のみ）
-- [ ] `/mypage/centering/[id]` 結果詳細＋免責、履歴一覧
-- [ ] ゲート（requireActiveSubscription）を全エンドポイントに適用
+### Phase 1 — 撮影＋測定（実装済）
+- [x] `/mypage/centering/measure`（client）: カメラ・ガイド枠・撮影・フォールバックアップロード
+- [x] 画像処理: 外周/内枠の**手動ガイド線補正**→余白算出（MVP。自動検出・warpはPhase2）
+- [x] 参考グレード対応表（`lib/centering.ts` 定数）＋判定（純関数）
+- [x] `actions/centering.ts`: `saveCenteringMeasurement()`（数値のみ）
+- [x] `/mypage/centering/[id]` 結果詳細＋免責、履歴一覧
+- [x] ゲート（`hasCenteringAccess`）を全ページ/Actionに適用。**Stripe未配線のため `CENTERING_DEV_UNLOCK=true` で開放**
+
+> Phase 1 はMVPとして**手動ガイド線補正方式**で実装（外周の自動CV検出・透視補正はPhase 2送り）。利用ゲートは現状 `CENTERING_DEV_UNLOCK=true` を要求（本番開放は Phase 0 のサブスク配線で）。
 
 ### Phase 2 — 付加価値（将来・任意）
 - [ ] 内枠自動検出の精度向上（ML/セグメンテーション検討は新ADR）
@@ -195,7 +197,8 @@ iOS Safari注意: `getUserMedia` はHTTPS必須（本番は充足）、`<video p
 ## 9. 環境変数（追加）
 | 変数 | 説明 |
 |------|------|
-| `STRIPE_CENTERING_PRICE_ID` | ¥550/月の継続Price ID（Stripeで作成） |
+| `STRIPE_CENTERING_PRICE_ID` | ¥550/月の継続Price ID（Stripeで作成・Phase 0で使用） |
+| `CENTERING_DEV_UNLOCK` | `true` でサブスク判定をスキップし測定ツールを開放（Stripe配線前の動作確認用）。本番でサブスク運用開始時は外す |
 
 既存の `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `APP_URL`(or `NEXTAUTH_URL`) を利用。**本番Stripeキーが未設定なら継続課金は動かない**（遅延初期化のため起動は可）。
 
