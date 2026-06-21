@@ -37,11 +37,11 @@ export default function MeasureClient() {
   useEffect(() => {
     if (!capturing) return;
     let stream: MediaStream | null = null;
-    setCamError(false);
     navigator.mediaDevices
       ?.getUserMedia({ video: { facingMode: "environment" } })
       .then((s) => {
         stream = s;
+        setCamError(false);
         if (videoRef.current) {
           videoRef.current.srcObject = s;
           videoRef.current.play().catch(() => {});
