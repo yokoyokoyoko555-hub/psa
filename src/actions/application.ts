@@ -2,10 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCustomerSession } from "@/lib/customer-auth";
-import { encrypt } from "@/lib/crypto";
+import { decrypt, encrypt } from "@/lib/crypto";
 import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
-import { createPaymentIntent, getStripe } from "@/lib/stripe";
+import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe } from "@/lib/stripe";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -55,6 +55,50 @@ const applicationSchema = z.object({
 
 export type ApplicationInput = z.infer<typeof applicationSchema>;
 
+function isStripeMissingCustomerError(err: unknown) {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: string }).code === "resource_missing"
+  );
+}
+
+function paymentSetupErrorMessage(err: unknown) {
+  if (err instanceof Error && err.message === "STRIPE_SECRET_KEY is not set") {
+    return "決済設定が未完了です。管理者にお問い合わせください。";
+  }
+  return "決済情報の確認に失敗しました。時間をおいて再度お試しください。";
+}
+
+async function ensureStripeCustomer(customer: NonNullable<Awaited<ReturnType<typeof getCustomerSession>>>) {
+  const stripe = getStripe();
+
+  if (customer.stripeCustomerId) {
+    try {
+      const stripeCustomer = await stripe.customers.retrieve(customer.stripeCustomerId);
+      if (!("deleted" in stripeCustomer && stripeCustomer.deleted)) {
+        return customer.stripeCustomerId;
+      }
+    } catch (err) {
+      if (!isStripeMissingCustomerError(err)) throw err;
+    }
+  }
+
+  const stripeCustomer = await createStripeCustomer({
+    email: customer.email,
+    name: decrypt(customer.nameEncrypted),
+    phone: decrypt(customer.phoneEncrypted),
+  });
+
+  await prisma.customer.update({
+    where: { id: customer.id },
+    data: { stripeCustomerId: stripeCustomer.id },
+  });
+
+  return stripeCustomer.id;
+}
+
 export async function createApplication(
   input: ApplicationInput
 ): Promise<{ success: boolean; clientSecret?: string; applicationId?: string; error?: string }> {
@@ -63,10 +107,6 @@ export async function createApplication(
 
   const parsed = applicationSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
-
-  if (!customer.stripeCustomerId) {
-    return { success: false, error: "Stripe顧客情報が見つかりません" };
-  }
 
   // 申告価格上限のバリデーション（選択サービスレベル×地域の上限を超えるカードは不可）
   const servicePrice = await prisma.servicePrice.findUnique({
@@ -107,6 +147,14 @@ export async function createApplication(
     totalDeclaredValue,
     applyAgencyFee: false,
   });
+
+  let stripeCustomerId: string;
+  try {
+    stripeCustomerId = await ensureStripeCustomer(customer);
+  } catch (err) {
+    console.error("Failed to ensure Stripe customer:", err);
+    return { success: false, error: paymentSetupErrorMessage(err) };
+  }
 
   // 下書きから確定する場合は既存の申込を再利用
   let existingDraftId: string | null = null;
@@ -208,12 +256,18 @@ export async function createApplication(
   });
 
   // Stripe PaymentIntent作成
-  const paymentIntent = await createPaymentIntent({
-    amount: fees.totalAmount,
-    customerId: customer.stripeCustomerId,
-    applicationId: application.id,
-    description: `PSA申込 ${application.applicationNo}`,
-  });
+  let paymentIntent;
+  try {
+    paymentIntent = await createPaymentIntent({
+      amount: fees.totalAmount,
+      customerId: stripeCustomerId,
+      applicationId: application.id,
+      description: `PSA申込 ${application.applicationNo}`,
+    });
+  } catch (err) {
+    console.error("Failed to create Stripe PaymentIntent:", err);
+    return { success: false, error: paymentSetupErrorMessage(err) };
+  }
 
   // Payment レコード作成
   await prisma.payment.create({
