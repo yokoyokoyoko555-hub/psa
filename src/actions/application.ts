@@ -5,7 +5,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { encrypt } from "@/lib/crypto";
 import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
-import { createPaymentIntent } from "@/lib/stripe";
+import { createPaymentIntent, getStripe } from "@/lib/stripe";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -242,6 +242,114 @@ export async function createApplication(
     clientSecret: paymentIntent.client_secret!,
     applicationId: application.id,
   };
+}
+
+const confirmPaymentSchema = z.object({
+  applicationId: z.string().min(1),
+  paymentIntentId: z.string().min(1),
+});
+
+export async function confirmApplicationPayment(
+  input: z.infer<typeof confirmPaymentSchema>
+): Promise<{ success: boolean; error?: string; status?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const parsed = confirmPaymentSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "決済情報を確認してください" };
+
+  const application = await prisma.application.findFirst({
+    where: { id: parsed.data.applicationId, customerId: customer.id },
+    include: { payments: true },
+  });
+  if (!application) return { success: false, error: "申込が見つかりません" };
+
+  const payment = application.payments.find(
+    (p) => p.stripePaymentIntentId === parsed.data.paymentIntentId
+  );
+  if (!payment) return { success: false, error: "決済レコードが見つかりません" };
+  if (payment.status === "SUCCEEDED") {
+    return { success: true, status: "succeeded" };
+  }
+
+  const stripe = getStripe();
+  const paymentIntent = await stripe.paymentIntents.retrieve(parsed.data.paymentIntentId, {
+    expand: ["payment_method"],
+  });
+
+  if (paymentIntent.status !== "succeeded") {
+    if (paymentIntent.status === "processing") {
+      return { success: false, status: "processing", error: "決済処理中です。少し待ってから予約へ進んでください" };
+    }
+    return { success: false, status: paymentIntent.status, error: "決済が完了していません" };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "SUCCEEDED",
+        stripePaymentMethodId:
+          typeof paymentIntent.payment_method === "string"
+            ? paymentIntent.payment_method
+            : paymentIntent.payment_method?.id,
+        paidAt: new Date(),
+      },
+    });
+
+    await tx.application.update({
+      where: { id: application.id },
+      data: { status: "SUBMITTED", submittedAt: application.submittedAt ?? new Date() },
+    });
+
+    await tx.card.updateMany({
+      where: { applicationId: application.id },
+      data: { status: "SUBMITTED_BY_CUSTOMER" },
+    });
+  });
+
+  const paymentMethod = paymentIntent.payment_method;
+  if (
+    typeof paymentMethod === "object" &&
+    paymentMethod?.id &&
+    paymentMethod.card &&
+    customer.stripeCustomerId
+  ) {
+    const existing = await prisma.savedPaymentMethod.findFirst({
+      where: { stripePaymentMethodId: paymentMethod.id },
+    });
+    if (!existing) {
+      const hasDefault = await prisma.savedPaymentMethod.findFirst({
+        where: { customerId: customer.id, isDefault: true },
+      });
+      await prisma.savedPaymentMethod.create({
+        data: {
+          customerId: customer.id,
+          stripePaymentMethodId: paymentMethod.id,
+          brand: paymentMethod.card.brand,
+          last4: paymentMethod.card.last4,
+          expMonth: paymentMethod.card.exp_month,
+          expYear: paymentMethod.card.exp_year,
+          isDefault: !hasDefault,
+        },
+      });
+    }
+  }
+
+  const hdrs = await headers();
+  await logOperation({
+    customerId: customer.id,
+    ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
+    action: "APPLICATION_PAYMENT_CONFIRMED",
+    targetType: "applications",
+    targetId: application.id,
+    after: { paymentIntentId: paymentIntent.id, status: paymentIntent.status },
+  });
+
+  revalidatePath("/mypage");
+  revalidatePath("/mypage/submission-booking");
+  revalidatePath(`/mypage/applications/${application.id}`);
+  return { success: true, status: paymentIntent.status };
 }
 
 const storeRequestSchema = z.object({

@@ -2,16 +2,14 @@
 
 declare global {
   interface Window {
-    Stripe?: (key: string) => {
-      confirmCardPayment: (secret: string, opts: object) => Promise<{ error?: { message?: string } }>;
-    };
+    Stripe?: (key: string) => StripeClient;
   }
 }
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createApplication, saveDraft as saveDraftServer } from "@/actions/application";
+import { confirmApplicationPayment, createApplication, saveDraft as saveDraftServer } from "@/actions/application";
 
 export type InitialDraft = {
   draftId: string;
@@ -112,6 +110,33 @@ const STEPS = [
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
 
+type StripeCardElement = {
+  mount: (selector: string | HTMLElement) => void;
+  destroy: () => void;
+  on: (event: "change", handler: (event: { error?: { message?: string } }) => void) => void;
+};
+
+type StripeElements = {
+  create: (
+    type: "card",
+    options?: {
+      style?: Record<string, Record<string, string>>;
+      hidePostalCode?: boolean;
+    }
+  ) => StripeCardElement;
+};
+
+type StripeClient = {
+  elements: (options?: { clientSecret?: string }) => StripeElements;
+  confirmCardPayment: (
+    secret: string,
+    opts: { payment_method: { card: StripeCardElement; billing_details?: { name?: string } } }
+  ) => Promise<{
+    error?: { message?: string };
+    paymentIntent?: { id: string; status: string };
+  }>;
+};
+
 export default function ApplyForm({
   servicePrices,
   shippingRules,
@@ -153,6 +178,11 @@ export default function ApplyForm({
   const [clientSecret, setClientSecret] = useState("");
   const [createdApplicationId, setCreatedApplicationId] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [stripeReady, setStripeReady] = useState(false);
+  const [cardError, setCardError] = useState("");
+  const cardElementContainerRef = useRef<HTMLDivElement | null>(null);
+  const stripeRef = useRef<StripeClient | null>(null);
+  const cardElementRef = useRef<StripeCardElement | null>(null);
 
   const regionPrices = servicePrices.filter((p) => p.region === region);
   const servicePrice = regionPrices.find((p) => p.serviceLevel === serviceLevel);
@@ -256,6 +286,72 @@ export default function ApplyForm({
     }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (step !== "payment" || !clientSecret || !cardElementContainerRef.current) return;
+
+    let cancelled = false;
+
+    async function loadStripeJs() {
+      if (!window.Stripe) {
+        await new Promise<void>((resolve, reject) => {
+          const existing = document.querySelector<HTMLScriptElement>('script[src="https://js.stripe.com/v3/"]');
+          if (existing) {
+            const wait = window.setInterval(() => {
+              if (window.Stripe) {
+                window.clearInterval(wait);
+                resolve();
+              }
+            }, 50);
+            window.setTimeout(() => {
+              window.clearInterval(wait);
+              if (window.Stripe) resolve();
+              else reject(new Error("Stripe.js の読み込みに失敗しました"));
+            }, 5000);
+            return;
+          }
+          const script = document.createElement("script");
+          script.src = "https://js.stripe.com/v3/";
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Stripe.js の読み込みに失敗しました"));
+          document.head.appendChild(script);
+        });
+      }
+
+      if (cancelled || !window.Stripe || !cardElementContainerRef.current) return;
+
+      cardElementRef.current?.destroy();
+      const stripe = window.Stripe(stripePublishableKey);
+      const elements = stripe.elements({ clientSecret });
+      const card = elements.create("card", {
+        hidePostalCode: true,
+        style: {
+          base: {
+            color: "#111827",
+            fontSize: "16px",
+            "::placeholder": { color: "#9ca3af" },
+          },
+          invalid: { color: "#b91c1c" },
+        },
+      });
+      card.on("change", (event) => setCardError(event.error?.message ?? ""));
+      card.mount(cardElementContainerRef.current);
+      stripeRef.current = stripe;
+      cardElementRef.current = card;
+      setStripeReady(true);
+    }
+
+    setStripeReady(false);
+    setCardError("");
+    loadStripeJs().catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : "Stripe.js の読み込みに失敗しました");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clientSecret, step, stripePublishableKey]);
 
   function saveDraftToStorage() {
     try {
@@ -371,34 +467,47 @@ export default function ApplyForm({
 
   async function handlePayment() {
     if (!clientSecret) return;
-    setPaymentLoading(true);
-    setError("");
-    if (!window.Stripe) {
-      const script = document.createElement("script");
-      script.src = "https://js.stripe.com/v3/";
-      await new Promise<void>((resolve) => {
-        script.onload = () => resolve();
-        document.head.appendChild(script);
-      });
-    }
-    const stripe = window.Stripe?.(stripePublishableKey) as {
-      confirmCardPayment: (secret: string, opts: object) => Promise<{ error?: { message?: string } }>;
-    } | null;
-    if (!stripe) {
-      setError("Stripeの初期化に失敗しました");
-      setPaymentLoading(false);
+    if (!stripeRef.current || !cardElementRef.current) {
+      setError("カード入力欄の読み込みが完了していません");
       return;
     }
-    const { error: stripeError } = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: { card: { token: "tok_visa" }, billing_details: { name: "Customer" } },
+    setPaymentLoading(true);
+    setError("");
+
+    const { error: stripeError, paymentIntent } = await stripeRef.current.confirmCardPayment(clientSecret, {
+      payment_method: {
+        card: cardElementRef.current,
+        billing_details: { name: profile?.name ?? "Customer" },
+      },
     });
     if (stripeError) {
       setError(stripeError.message ?? "決済エラーが発生しました");
       setPaymentLoading(false);
-    } else {
-      const qs = createdApplicationId ? `?applicationId=${encodeURIComponent(createdApplicationId)}` : "";
-      router.push(`/mypage/submission-booking${qs}`);
+      return;
     }
+
+    const paymentIntentId = paymentIntent?.id ?? clientSecret.split("_secret_")[0];
+    if (!createdApplicationId || !paymentIntentId) {
+      setError("決済は完了しましたが、申込情報の確認に失敗しました。申込一覧から予約へ進んでください。");
+      setPaymentLoading(false);
+      return;
+    }
+
+    const confirmed = await confirmApplicationPayment({
+      applicationId: createdApplicationId,
+      paymentIntentId,
+    });
+
+    if (!confirmed.success) {
+      setError(
+        confirmed.error ??
+          "決済は完了しましたが、反映に時間がかかっています。少し待ってからカード提出予約へ進んでください。"
+      );
+      setPaymentLoading(false);
+      return;
+    }
+
+    router.push(`/mypage/submission-booking?applicationId=${encodeURIComponent(createdApplicationId)}`);
   }
 
   const currentIdx = STEPS.findIndex((s) => s.key === step);
@@ -881,24 +990,32 @@ export default function ApplyForm({
           </div>
         )}
 
-        {/* STEP 4: Payment (placeholder) */}
+        {/* STEP 4: Payment */}
         {step === "payment" && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h2 className="font-bold text-gray-900">お支払い</h2>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-                ※ 決済機能（Stripe Elements）は統合準備中です。clientSecret:{" "}
-                <code className="break-all">{clientSecret.slice(0, 24)}...</code>
+              <div>
+                <h2 className="font-bold text-gray-900">お支払い</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  カード情報を入力して決済を完了してください。決済後、カード提出予約へ進みます。
+                </p>
               </div>
+              <div className="rounded-lg border border-gray-300 bg-white px-3 py-3 focus-within:ring-2 focus-within:ring-brand-500">
+                <div ref={cardElementContainerRef} className="min-h-6" />
+              </div>
+              {cardError && <p className="text-sm text-red-600">{cardError}</p>}
+              {!stripeReady && (
+                <p className="text-sm text-brand-700">カード入力欄を読み込んでいます...</p>
+              )}
               <button
                 onClick={handlePayment}
-                disabled={paymentLoading}
+                disabled={paymentLoading || !stripeReady || !!cardError}
                 className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
               >
                 {paymentLoading ? "決済処理中..." : `¥${totalAmount.toLocaleString()} を支払う`}
               </button>
               <p className="text-xs text-gray-400 text-center">
-                カード情報はStripeのサーバーで安全に処理されます。
+                カード情報はStripe上で安全に処理され、このサービスには保存されません。
               </p>
             </div>
           </div>
