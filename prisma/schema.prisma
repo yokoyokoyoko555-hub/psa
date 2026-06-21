@@ -210,6 +210,19 @@ model EmailVerification {
   @@map("email_verifications")
 }
 
+// パスワード再設定（メール入力→再設定リンク→新パスワード）
+model PasswordReset {
+  id         String    @id @default(cuid())
+  email      String
+  token      String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email])
+  @@map("password_resets")
+}
+
 model CustomerSession {
   id           String   @id @default(cuid())
   customerId   String

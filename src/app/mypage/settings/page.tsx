@@ -8,7 +8,9 @@ import { getMyAddresses } from "@/actions/address";
 import AddressManager from "../addresses/AddressManager";
 import DeletePaymentMethodButton from "../payment-methods/DeletePaymentMethodButton";
 import ProfileSettingsModal from "./ProfileSettingsModal";
+import ChangePasswordForm from "./ChangePasswordForm";
 import CustomerHeader from "@/components/CustomerHeader";
+import { logoutCustomer } from "@/actions/customer";
 
 export const metadata = { title: "アカウント設定 | トレカビンクス" };
 
@@ -92,6 +94,33 @@ export default async function SettingsPage() {
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-xs text-gray-500">
             <p>カードの追加は通常申込の決済時に行われます。不要なカードはいつでも削除できます。</p>
             <p>決済情報はStripeによって安全に管理されています。</p>
+          </div>
+        </section>
+
+        <section id="password" className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">パスワードの変更</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              ログインに使用するパスワードを変更します。
+            </p>
+          </div>
+          <ChangePasswordForm />
+        </section>
+
+        <section id="logout" className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">ログアウト</h2>
+              <p className="text-sm text-gray-500 mt-1">この端末からログアウトします。</p>
+            </div>
+            <form action={logoutCustomer}>
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50"
+              >
+                ログアウト
+              </button>
+            </form>
           </div>
         </section>
       </main>

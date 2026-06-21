@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { requestRegistration, loginCustomer } from "@/actions/customer";
+import { requestRegistration, loginCustomer, requestPasswordReset } from "@/actions/customer";
 
 const inputCls =
   "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500";
@@ -14,7 +14,13 @@ const SOCIALS = [
   { key: "line", label: "LINEで登録", cls: "bg-[#06C755] text-white" },
 ];
 
-export default function AuthScreen({ initialTab = "signup" }: { initialTab?: "signup" | "login" }) {
+export default function AuthScreen({
+  initialTab = "signup",
+  withHeader = true,
+}: {
+  initialTab?: "signup" | "login";
+  withHeader?: boolean;
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<"signup" | "login">(initialTab);
   const [showEmail, setShowEmail] = useState(false);
@@ -26,12 +32,37 @@ export default function AuthScreen({ initialTab = "signup" }: { initialTab?: "si
   const [sent, setSent] = useState(false);
   const [devLink, setDevLink] = useState<string | null>(null);
 
+  // パスワード再設定
+  const [forgot, setForgot] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetDevLink, setResetDevLink] = useState<string | null>(null);
+
   function switchTab(t: "signup" | "login") {
     setTab(t);
     setShowEmail(false);
     setInfo("");
     setError("");
     setSent(false);
+    setForgot(false);
+    setResetSent(false);
+  }
+
+  async function handleForgot(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const fd = new FormData(e.currentTarget);
+    const res = await requestPasswordReset({
+      email: fd.get("email") as string,
+      hp: (fd.get("company") as string) || undefined,
+    });
+    setLoading(false);
+    if (res.success) {
+      setResetSent(true);
+      setResetDevLink(res.devLink ?? null);
+    } else {
+      setError("送信に失敗しました");
+    }
   }
 
   async function handleSignupEmail(e: React.FormEvent<HTMLFormElement>) {
@@ -70,18 +101,26 @@ export default function AuthScreen({ initialTab = "signup" }: { initialTab?: "si
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      <header className="bg-white border-b border-gray-200 px-4 py-3">
-        <div className="max-w-6xl mx-auto">
-          <Link href="/" className="inline-block hover:opacity-70 transition">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
-          </Link>
-        </div>
-      </header>
+    <div className="min-h-[100dvh] bg-white flex flex-col">
+      {withHeader && (
+        <header className="bg-white border-b border-gray-200 px-4 py-3">
+          <div className="max-w-6xl mx-auto">
+            <Link href="/" className="inline-block hover:opacity-70 transition">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
+            </Link>
+          </div>
+        </header>
+      )}
 
       {/* ロゴ・タグライン */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pt-6 pb-3">
+        {!withHeader && (
+          <Link href="/" className="inline-block mb-3 hover:opacity-70 transition">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="トレカビンクス" className="h-16 w-auto" />
+          </Link>
+        )}
         <p className="text-base font-bold text-gray-700 mb-1">PSA鑑定始めるならトレカビンクス！</p>
       </div>
 
@@ -150,12 +189,57 @@ export default function AuthScreen({ initialTab = "signup" }: { initialTab?: "si
                 </button>
               </form>
             )
+          ) : forgot ? (
+            resetSent ? (
+              <div className="space-y-3">
+                <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-4 text-sm">
+                  ご登録のメールアドレス宛に、パスワード再設定のリンク（1時間有効）をお送りしました。メールをご確認ください。
+                </div>
+                {resetDevLink && (
+                  <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4 text-xs space-y-2">
+                    <p>※ メール送信（SMTP）が未設定のため、テスト用にリンクを表示しています。</p>
+                    <Link href={resetDevLink} className="text-brand-600 underline break-all">{resetDevLink}</Link>
+                  </div>
+                )}
+                <button
+                  onClick={() => { setForgot(false); setResetSent(false); }}
+                  className="w-full text-sm text-gray-500 hover:text-gray-700"
+                >
+                  ← ログインに戻る
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgot} className="space-y-3 pt-1">
+                <p className="text-sm text-gray-600">
+                  ご登録のメールアドレスを入力してください。パスワード再設定用のリンクをお送りします。
+                </p>
+                <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hidden" />
+                <input type="email" name="email" required placeholder="メールアドレス" className={inputCls} />
+                <button type="submit" disabled={loading} className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50">
+                  {loading ? "送信中..." : "再設定リンクを送信"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForgot(false)}
+                  className="w-full text-sm text-gray-500 hover:text-gray-700"
+                >
+                  ← ログインに戻る
+                </button>
+              </form>
+            )
           ) : (
             <form onSubmit={handleLogin} className="space-y-3 pt-1">
               <input type="email" name="email" required placeholder="メールアドレス" className={inputCls} />
               <input type="password" name="password" required placeholder="パスワード" className={inputCls} />
               <button type="submit" disabled={loading} className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50">
                 {loading ? "ログイン中..." : "ログイン"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setForgot(true); setError(""); }}
+                className="w-full text-center text-sm text-brand-600 hover:underline"
+              >
+                パスワードをお忘れの方
               </button>
             </form>
           )}

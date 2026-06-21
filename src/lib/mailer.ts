@@ -38,6 +38,21 @@ export function registrationVerificationHtml(params: { verifyUrl: string }): str
   `;
 }
 
+export function passwordResetHtml(params: { resetUrl: string }): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>パスワード再設定のご案内</h2>
+      <p>パスワード再設定のリクエストを受け付けました。</p>
+      <p>下記のボタンから1時間以内に新しいパスワードをご設定ください。</p>
+      <p style="text-align:center; margin: 24px 0;">
+        <a href="${params.resetUrl}" style="background:#6b0505;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;">パスワードを再設定する</a>
+      </p>
+      <p style="font-size:12px;color:#888;">このリンクは1時間有効です。心当たりがない場合はこのメールを破棄してください。パスワードは変更されません。</p>
+      <p style="font-size:12px;color:#888;">${params.resetUrl}</p>
+    </div>
+  `;
+}
+
 export function upchargeNotificationHtml(params: {
   customerName: string;
   cardName: string;

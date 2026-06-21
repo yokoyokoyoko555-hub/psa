@@ -1,8 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getCustomerSession } from "@/lib/customer-auth";
-import { decrypt } from "@/lib/crypto";
-import { logoutCustomer } from "@/actions/customer";
 
 type Props = {
   title?: string;
@@ -11,7 +9,6 @@ type Props = {
 
 export default async function CustomerHeader({ title, actions }: Props) {
   const customer = await getCustomerSession();
-  const name = customer ? decrypt(customer.nameEncrypted) : null;
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3">
@@ -24,24 +21,14 @@ export default async function CustomerHeader({ title, actions }: Props) {
         <div className="flex-1" />
         {actions}
         {customer && (
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline text-sm text-gray-600">
-              {customer.memberNo ? `${customer.memberNo}　` : ""}{name} 様
-            </span>
-            <Link
-              href="/mypage/settings"
-              aria-label="アカウント設定"
-              title="アカウント設定"
-              className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-lg hover:border-brand-500 hover:bg-brand-50 transition"
-            >
-              👤
-            </Link>
-            <form action={logoutCustomer}>
-              <button type="submit" className="text-sm text-gray-500 hover:text-gray-700">
-                ログアウト
-              </button>
-            </form>
-          </div>
+          <Link
+            href="/mypage/settings"
+            aria-label="アカウント設定"
+            title="アカウント設定"
+            className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-lg hover:border-brand-500 hover:bg-brand-50 transition"
+          >
+            👤
+          </Link>
         )}
       </div>
     </header>

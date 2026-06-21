@@ -183,6 +183,118 @@ export async function registerCustomer(
   return { success: true };
 }
 
+// ===== パスワード再設定（ログイン用パスワードを忘れた場合）=====
+
+/**
+ * メールアドレスを受け取り、再設定リンクを送信する（1時間有効）。
+ * メール存在の有無を漏らさないため、未登録でも success を返す。
+ * SMTP未設定時はテスト用に devLink を返す。
+ */
+export async function requestPasswordReset(
+  input: z.infer<typeof emailSchema>
+): Promise<{ success: boolean; sent?: boolean; devLink?: string }> {
+  const parsed = emailSchema.safeParse(input);
+  if (!parsed.success) return { success: true, sent: false };
+
+  // ハニーポット
+  if (parsed.data.hp && parsed.data.hp.trim() !== "") {
+    return { success: true, sent: false };
+  }
+
+  const email = parsed.data.email.toLowerCase();
+  const customer = await prisma.customer.findUnique({ where: { email } });
+
+  // 未登録・無効アカウントでも同じレスポンス（存在の有無を秘匿）
+  if (!customer || !customer.isActive) {
+    return { success: true, sent: true };
+  }
+
+  const { randomBytes } = await import("crypto");
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1時間
+
+  await prisma.passwordReset.create({ data: { email, token, expiresAt } });
+
+  const base = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "";
+  const resetUrl = `${base}/reset-password?token=${token}`;
+
+  if (!process.env.SMTP_HOST) {
+    return { success: true, sent: false, devLink: resetUrl };
+  }
+
+  try {
+    const { sendMail, passwordResetHtml } = await import("@/lib/mailer");
+    await sendMail({
+      to: email,
+      subject: "【トレカビンクス】パスワード再設定のご案内",
+      html: passwordResetHtml({ resetUrl }),
+    });
+    return { success: true, sent: true };
+  } catch {
+    return { success: true, sent: false, devLink: resetUrl };
+  }
+}
+
+/** 再設定トークンを検証（再設定ページの表示用） */
+export async function verifyPasswordResetToken(
+  token: string
+): Promise<{ valid: boolean }> {
+  const rec = await prisma.passwordReset.findUnique({ where: { token } });
+  if (!rec || rec.consumedAt || rec.expiresAt < new Date()) {
+    return { valid: false };
+  }
+  return { valid: true };
+}
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8).max(100),
+});
+
+export async function resetPassword(
+  input: z.infer<typeof resetPasswordSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const parsed = resetPasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "パスワードは8文字以上で入力してください" };
+  }
+
+  const rec = await prisma.passwordReset.findUnique({ where: { token: parsed.data.token } });
+  if (!rec || rec.consumedAt || rec.expiresAt < new Date()) {
+    return { success: false, error: "リンクが無効か期限切れです。お手数ですが再度お試しください。" };
+  }
+
+  const customer = await prisma.customer.findUnique({ where: { email: rec.email } });
+  if (!customer) {
+    return { success: false, error: "アカウントが見つかりません。" };
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  await prisma.customer.update({
+    where: { id: customer.id },
+    data: { passwordHash },
+  });
+
+  await prisma.passwordReset.update({
+    where: { id: rec.id },
+    data: { consumedAt: new Date() },
+  });
+
+  // 既存のログインセッションを無効化（安全のため）
+  await prisma.customerSession.deleteMany({ where: { customerId: customer.id } });
+
+  const hdrs = await headers();
+  await logOperation({
+    customerId: customer.id,
+    ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
+    action: "CUSTOMER_PASSWORD_RESET",
+    targetType: "customers",
+    targetId: customer.id,
+  });
+
+  return { success: true };
+}
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -218,6 +330,43 @@ export async function loginCustomer(
 export async function logoutCustomer(): Promise<void> {
   await deleteCustomerSession();
   redirect("/login");
+}
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(100),
+});
+
+export async function changeCustomerPassword(
+  input: z.infer<typeof changePasswordSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const parsed = changePasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "新しいパスワードは8文字以上で入力してください" };
+  }
+
+  const valid = await bcrypt.compare(parsed.data.currentPassword, customer.passwordHash);
+  if (!valid) return { success: false, error: "現在のパスワードが正しくありません" };
+
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+  await prisma.customer.update({
+    where: { id: customer.id },
+    data: { passwordHash },
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    customerId: customer.id,
+    ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
+    action: "CUSTOMER_PASSWORD_CHANGE",
+    targetType: "customers",
+    targetId: customer.id,
+  });
+
+  return { success: true };
 }
 
 export interface CustomerProfile {
