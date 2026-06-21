@@ -39,7 +39,9 @@ export default function ApplyEntry(props: Props) {
           title="アカウント設定"
           className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-lg hover:border-brand-500 hover:bg-brand-50 transition"
         >
-          👤
+          <svg className="h-5 w-5 text-brand-600" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.69-8 6v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1c0-3.31-3.58-6-8-6Z" />
+          </svg>
         </Link>
       </div>
     </header>
