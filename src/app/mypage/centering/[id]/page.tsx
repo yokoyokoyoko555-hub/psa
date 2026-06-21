@@ -58,6 +58,9 @@ export default async function MeasurementDetailPage({
             <p className="text-sm text-gray-500">参考上限グレード</p>
             <p className="text-3xl font-bold text-gray-900 mt-1">
               PSA {m.estimatedGrade ?? "—"} <span className="text-base font-normal text-gray-400">相当</span>
+              {m.method === "AI" && (
+                <span className="ml-2 align-middle text-xs font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">AI</span>
+              )}
             </p>
             <p className="text-xs text-gray-400 mt-1">
               {format(new Date(m.createdAt), "yyyy年MM月dd日 HH:mm")}
@@ -74,9 +77,14 @@ export default async function MeasurementDetailPage({
           </div>
         </div>
 
+        <Link href="/apply" className="block bg-brand-600 text-white rounded-2xl p-5 hover:bg-brand-700 transition">
+          <p className="font-bold">📨 このカードをPSA鑑定に申し込む</p>
+          <p className="text-sm text-white/80 mt-1">トレカビンクスがPSA提出を代行します。センタリングが良ければ高グレードのチャンス。</p>
+        </Link>
+
         <Link
           href="/mypage/centering/measure"
-          className="block text-center w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 transition"
+          className="block text-center w-full border-2 border-brand-600 text-brand-700 font-bold py-3 rounded-lg hover:bg-brand-50 transition"
         >
           もう一度測定する
         </Link>

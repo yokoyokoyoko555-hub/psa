@@ -154,7 +154,7 @@ export default async function MypagePage() {
             <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">◎</div>
             <div>
               <p className="font-bold text-lg text-gray-900">センタリング測定</p>
-              <p className="text-gray-500 text-sm">カードの傾きをカメラで測定</p>
+              <p className="text-gray-500 text-sm">無料・カメラでセンタリングを測定</p>
             </div>
           </Link>
         </div>

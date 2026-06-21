@@ -253,18 +253,25 @@ model Subscription {
   @@map("subscriptions")
 }
 
+// 測定手段（ライト=手動 / AI=自動検出）。ADR-0013
+enum CenteringMethod {
+  MANUAL
+  AI
+}
+
 // センタリング測定結果（数値のみ。撮影画像は保存しない＝ADR-0012）
 model CenteringMeasurement {
-  id             String   @id @default(cuid())
+  id             String          @id @default(cuid())
   customerId     String
   cardId         String? // 任意で登録カードに紐付け（relationは持たない＝疎結合）
+  method         CenteringMethod @default(MANUAL)
   frontLR        Float // フロント左右（大きい側%。例 58 = 58/42）
   frontTB        Float // フロント上下（大きい側%）
   backLR         Float? // バック左右（撮影は任意）
   backTB         Float? // バック上下
   estimatedGrade String? // 参考上限グレード（"10"〜"5" / null）
   note           String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime        @default(now())
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 

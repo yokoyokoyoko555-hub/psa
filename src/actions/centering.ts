@@ -33,6 +33,7 @@ export async function getCenteringAccess(): Promise<boolean> {
 }
 
 const saveSchema = z.object({
+  method: z.enum(["MANUAL", "AI"]).optional(),
   frontLR: z.number().min(0).max(100),
   frontTB: z.number().min(0).max(100),
   backLR: z.number().min(0).max(100).optional(),
@@ -48,16 +49,21 @@ export async function saveCenteringMeasurement(
   const customer = await getCustomerSession();
   if (!customer) return { success: false, error: "ログインが必要です" };
 
-  const allowed = await hasCenteringAccess(customer.id);
-  if (!allowed) return { success: false, error: "ご利用にはプランへの加入が必要です" };
-
   const parsed = saveSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "測定データが不正です" };
+
+  // 手動（ライト）は全ログインユーザー無料。AI（自動検出）はサブスク加入者のみ（ADR-0013）。
+  const method = parsed.data.method ?? "MANUAL";
+  if (method === "AI") {
+    const allowed = await hasCenteringAccess(customer.id);
+    if (!allowed) return { success: false, error: "AI測定のご利用にはAIプランへの加入が必要です" };
+  }
 
   const m = await prisma.centeringMeasurement.create({
     data: {
       customerId: customer.id,
       cardId: parsed.data.cardId ?? null,
+      method,
       frontLR: parsed.data.frontLR,
       frontTB: parsed.data.frontTB,
       backLR: parsed.data.backLR ?? null,

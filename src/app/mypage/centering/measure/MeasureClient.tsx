@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { centeringFromQuads, estimateGrade, formatRatio, type Quad, type Centering } from "@/lib/centering";
 import { saveCenteringMeasurement } from "@/actions/centering";
@@ -21,7 +22,7 @@ const OUTER_COLOR = "#185FA5";
 const INNER_COLOR = "#BA7517";
 const CORNERS: Corner[] = ["tl", "tr", "br", "bl"];
 
-export default function MeasureClient() {
+export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("cap-front");
   const [target, setTarget] = useState<Target>("outer");
@@ -155,6 +156,7 @@ export default function MeasureClient() {
     setSaving(true);
     setError("");
     const res = await saveCenteringMeasurement({
+      method: "MANUAL",
       frontLR: front.lr,
       frontTB: front.tb,
       backLR: back?.lr,
@@ -182,6 +184,9 @@ export default function MeasureClient() {
       <div className="space-y-4">
         <StepBadge step={step} />
         <p className="text-center text-sm text-gray-600">{isFront ? "表面" : "裏面"}を枠に合わせて撮影してください</p>
+        {aiEnabled && (
+          <p className="text-center text-xs text-brand-600">✨ AIプラン有効（枠の自動検出は順次提供）</p>
+        )}
         {camError ? (
           <div className="space-y-3">
             <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4 text-sm">
@@ -335,11 +340,17 @@ export default function MeasureClient() {
           ⚠️ 本測定は参考値であり、PSA等の鑑定会社による公式判定を保証するものではありません。
         </div>
       </div>
+
+      <Link href="/apply" className="block bg-brand-600 text-white rounded-2xl p-5 hover:bg-brand-700 transition">
+        <p className="font-bold">📨 このカードをPSA鑑定に申し込む</p>
+        <p className="text-sm text-white/80 mt-1">トレカビンクスがPSA提出を代行します。センタリングが良ければ高グレードのチャンス。</p>
+      </Link>
+
       <div className="flex gap-3">
         <button onClick={restart} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm text-gray-700 hover:bg-gray-50">
           もう一度
         </button>
-        <button onClick={save} disabled={saving || !front} className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50">
+        <button onClick={save} disabled={saving || !front} className="flex-1 border-2 border-brand-600 text-brand-700 font-bold py-3 rounded-lg hover:bg-brand-50 disabled:opacity-50">
           {saving ? "保存中..." : "保存する"}
         </button>
       </div>
