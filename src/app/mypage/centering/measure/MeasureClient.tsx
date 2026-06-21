@@ -2,23 +2,33 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { centeringFromRects, estimateGrade, formatRatio, type NormRect, type Centering } from "@/lib/centering";
+import { centeringFromQuads, estimateGrade, formatRatio, type Quad, type Centering } from "@/lib/centering";
 import { saveCenteringMeasurement } from "@/actions/centering";
 
 type Step = "cap-front" | "adj-front" | "cap-back" | "adj-back" | "result";
+type Target = "outer" | "inner";
+type Corner = keyof Quad;
 
-const DEFAULT_OUTER: NormRect = { l: 0.08, r: 0.92, t: 0.06, b: 0.94 };
-const DEFAULT_INNER: NormRect = { l: 0.2, r: 0.8, t: 0.18, b: 0.82 };
+const DEFAULT_OUTER: Quad = {
+  tl: { x: 0.1, y: 0.08 }, tr: { x: 0.9, y: 0.08 },
+  br: { x: 0.9, y: 0.92 }, bl: { x: 0.1, y: 0.92 },
+};
+const DEFAULT_INNER: Quad = {
+  tl: { x: 0.22, y: 0.18 }, tr: { x: 0.78, y: 0.18 },
+  br: { x: 0.78, y: 0.82 }, bl: { x: 0.22, y: 0.82 },
+};
 const OUTER_COLOR = "#185FA5";
 const INNER_COLOR = "#BA7517";
+const CORNERS: Corner[] = ["tl", "tr", "br", "bl"];
 
 export default function MeasureClient() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("cap-front");
+  const [target, setTarget] = useState<Target>("outer");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const active = useRef<{ rect: "outer" | "inner"; edge: keyof NormRect } | null>(null);
+  const active = useRef<{ target: Target; corner: Corner } | null>(null);
 
   const [camError, setCamError] = useState(false);
   const [frontImg, setFrontImg] = useState<string | null>(null);
@@ -26,13 +36,16 @@ export default function MeasureClient() {
   const [front, setFront] = useState<Centering | null>(null);
   const [back, setBack] = useState<Centering | null>(null);
 
-  const [outer, setOuter] = useState<NormRect>(DEFAULT_OUTER);
-  const [inner, setInner] = useState<NormRect>(DEFAULT_INNER);
+  const [outer, setOuter] = useState<Quad>(DEFAULT_OUTER);
+  const [inner, setInner] = useState<Quad>(DEFAULT_INNER);
+  const [loupe, setLoupe] = useState<{ nx: number; ny: number; w: number; h: number } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const capturing = step === "cap-front" || step === "cap-back";
+  const adjusting = step === "adj-front" || step === "adj-back";
+  const curImg = step === "adj-front" ? frontImg : backImg;
 
   useEffect(() => {
     if (!capturing) return;
@@ -53,19 +66,20 @@ export default function MeasureClient() {
     };
   }, [capturing, step]);
 
-  function resetRects() {
+  function startAdjust() {
     setOuter(DEFAULT_OUTER);
     setInner(DEFAULT_INNER);
+    setTarget("outer");
   }
 
   function acceptImage(url: string) {
     if (step === "cap-front") {
       setFrontImg(url);
-      resetRects();
+      startAdjust();
       setStep("adj-front");
     } else {
       setBackImg(url);
-      resetRects();
+      startAdjust();
       setStep("adj-back");
     }
   }
@@ -77,7 +91,7 @@ export default function MeasureClient() {
     c.width = v.videoWidth;
     c.height = v.videoHeight;
     c.getContext("2d")?.drawImage(v, 0, 0);
-    acceptImage(c.toDataURL("image/jpeg", 0.9));
+    acceptImage(c.toDataURL("image/jpeg", 0.92));
   }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -88,17 +102,9 @@ export default function MeasureClient() {
     reader.readAsDataURL(f);
   }
 
-  function updateEdge(rectName: "outer" | "inner", edge: keyof NormRect, n: number) {
-    const setter = rectName === "outer" ? setOuter : setInner;
-    setter((prev) => {
-      const min = 0.04;
-      const next = { ...prev };
-      if (edge === "l") next.l = Math.min(n, prev.r - min);
-      else if (edge === "r") next.r = Math.max(n, prev.l + min);
-      else if (edge === "t") next.t = Math.min(n, prev.b - min);
-      else next.b = Math.max(n, prev.t + min);
-      return next;
-    });
+  function setCorner(t: Target, corner: Corner, x: number, y: number) {
+    const setter = t === "outer" ? setOuter : setInner;
+    setter((prev) => ({ ...prev, [corner]: { x, y } }));
   }
 
   function onMove(e: PointerEvent) {
@@ -106,28 +112,34 @@ export default function MeasureClient() {
     const cont = containerRef.current;
     if (!a || !cont) return;
     const r = cont.getBoundingClientRect();
-    const horiz = a.edge === "l" || a.edge === "r";
-    const n = horiz ? (e.clientX - r.left) / r.width : (e.clientY - r.top) / r.height;
-    updateEdge(a.rect, a.edge, Math.max(0, Math.min(1, n)));
+    const nx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    const ny = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+    setCorner(a.target, a.corner, nx, ny);
+    setLoupe({ nx, ny, w: r.width, h: r.height });
   }
 
   function endDrag() {
     active.current = null;
+    setLoupe(null);
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", endDrag);
   }
 
-  function startDrag(rect: "outer" | "inner", edge: keyof NormRect) {
+  function startCornerDrag(corner: Corner) {
     return (e: React.PointerEvent) => {
       e.preventDefault();
-      active.current = { rect, edge };
+      active.current = { target, corner };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", endDrag);
     };
   }
 
-  function confirmAdjust() {
-    const cen = centeringFromRects(outer, inner);
+  function confirmStep() {
+    if (target === "outer") {
+      setTarget("inner");
+      return;
+    }
+    const cen = centeringFromQuads(outer, inner);
     if (step === "adj-front") {
       setFront(cen);
       setStep("cap-back");
@@ -150,11 +162,8 @@ export default function MeasureClient() {
       estimatedGrade: grade,
     });
     setSaving(false);
-    if (res.success && res.id) {
-      router.push(`/mypage/centering/${res.id}`);
-    } else {
-      setError(res.error ?? "保存に失敗しました");
-    }
+    if (res.success && res.id) router.push(`/mypage/centering/${res.id}`);
+    else setError(res.error ?? "保存に失敗しました");
   }
 
   function restart() {
@@ -162,7 +171,7 @@ export default function MeasureClient() {
     setBack(null);
     setFrontImg(null);
     setBackImg(null);
-    resetRects();
+    startAdjust();
     setStep("cap-front");
   }
 
@@ -172,10 +181,7 @@ export default function MeasureClient() {
     return (
       <div className="space-y-4">
         <StepBadge step={step} />
-        <p className="text-center text-sm text-gray-600">
-          {isFront ? "表面" : "裏面"}を枠に合わせて撮影してください
-        </p>
-
+        <p className="text-center text-sm text-gray-600">{isFront ? "表面" : "裏面"}を枠に合わせて撮影してください</p>
         {camError ? (
           <div className="space-y-3">
             <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4 text-sm">
@@ -190,9 +196,7 @@ export default function MeasureClient() {
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="border-2 border-dashed border-white/70 rounded-lg" style={{ width: "62%", height: "82%" }} />
               </div>
-              <p className="absolute top-3 left-0 right-0 text-center text-white/85 text-xs">
-                白/黒の紙の上・真上から
-              </p>
+              <p className="absolute top-3 left-0 right-0 text-center text-white/85 text-xs">白/黒の紙の上・真上から・反射に注意</p>
             </div>
             <div className="flex items-center justify-center gap-6">
               {step === "cap-back" && (
@@ -200,11 +204,7 @@ export default function MeasureClient() {
                   裏面をスキップ
                 </button>
               )}
-              <button
-                onClick={capture}
-                aria-label="撮影"
-                className="w-16 h-16 rounded-full border-4 border-brand-600 flex items-center justify-center"
-              >
+              <button onClick={capture} aria-label="撮影" className="w-16 h-16 rounded-full border-4 border-brand-600 flex items-center justify-center">
                 <span className="w-11 h-11 rounded-full bg-brand-600 block" />
               </button>
               <FileButton onFile={onFile} compact />
@@ -215,36 +215,100 @@ export default function MeasureClient() {
     );
   }
 
-  // ===== ガイド線補正 =====
-  if (step === "adj-front" || step === "adj-back") {
-    const img = step === "adj-front" ? frontImg : backImg;
+  // ===== ガイド四隅補正（外周→内枠の2ステップ）=====
+  if (adjusting) {
+    const color = target === "outer" ? OUTER_COLOR : INNER_COLOR;
+    const curQuad = target === "outer" ? outer : inner;
+    const Z = 2.6;
+    const LO = 120;
     return (
       <div className="space-y-4">
         <StepBadge step={step} />
-        <p className="text-center text-sm text-gray-600">
-          <span style={{ color: OUTER_COLOR }} className="font-bold">外周（青）</span>と
-          <span style={{ color: INNER_COLOR }} className="font-bold">内枠（黄破線）</span>に合わせてください
-        </p>
+        <div className="text-center space-y-1">
+          <p className="text-sm font-bold" style={{ color }}>
+            {target === "outer" ? "① 外周（カードの縁）" : "② 内枠（絵柄・フレームの縁）"}
+          </p>
+          <p className="text-xs text-gray-500">4つの隅を実際のカードの角にドラッグして合わせてください</p>
+        </div>
 
-        <div ref={containerRef} className="relative w-full select-none rounded-xl overflow-hidden bg-gray-100" style={{ touchAction: "none" }}>
+        <div
+          ref={containerRef}
+          className="relative w-full select-none rounded-xl overflow-hidden bg-gray-100"
+          style={{ touchAction: "none" }}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {img && <img src={img} alt="撮影画像" className="block w-full" />}
-          {renderRect("outer", outer, OUTER_COLOR, false, startDrag)}
-          {renderRect("inner", inner, INNER_COLOR, true, startDrag)}
+          {curImg && <img src={curImg} alt="撮影画像" className="block w-full" draggable={false} />}
+
+          <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="absolute inset-0 w-full h-full" style={{ pointerEvents: "none" }}>
+            <polygon points={quadPoints(outer)} fill="none" stroke={OUTER_COLOR} strokeWidth={target === "outer" ? 2.5 : 1.5} vectorEffect="non-scaling-stroke" opacity={target === "outer" ? 1 : 0.4} />
+            <polygon points={quadPoints(inner)} fill="none" stroke={INNER_COLOR} strokeWidth={target === "inner" ? 2.5 : 1.5} vectorEffect="non-scaling-stroke" opacity={target === "inner" ? 1 : 0.4} />
+          </svg>
+
+          {CORNERS.map((corner) => (
+            <div
+              key={corner}
+              onPointerDown={startCornerDrag(corner)}
+              style={{
+                position: "absolute",
+                left: `${curQuad[corner].x * 100}%`,
+                top: `${curQuad[corner].y * 100}%`,
+                width: 34,
+                height: 34,
+                marginLeft: -17,
+                marginTop: -17,
+                borderRadius: "50%",
+                background: target === "outer" ? "rgba(24,95,165,0.35)" : "rgba(186,117,23,0.4)",
+                border: "2px solid #fff",
+                boxShadow: "0 0 0 1px rgba(0,0,0,0.25)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                touchAction: "none",
+                zIndex: 5,
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: color }} />
+            </div>
+          ))}
+
+          {loupe && curImg && (
+            <div
+              style={{
+                position: "absolute",
+                top: 10,
+                left: loupe.nx > 0.5 ? 10 : "auto",
+                right: loupe.nx > 0.5 ? "auto" : 10,
+                width: LO,
+                height: LO,
+                borderRadius: "50%",
+                border: "2px solid #fff",
+                boxShadow: "0 1px 6px rgba(0,0,0,0.4)",
+                backgroundImage: `url(${curImg})`,
+                backgroundRepeat: "no-repeat",
+                backgroundSize: `${loupe.w * Z}px ${loupe.h * Z}px`,
+                backgroundPosition: `${-(loupe.nx * loupe.w * Z - LO / 2)}px ${-(loupe.ny * loupe.h * Z - LO / 2)}px`,
+                pointerEvents: "none",
+                zIndex: 10,
+              }}
+            >
+              <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: color, opacity: 0.8 }} />
+              <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: 1, background: color, opacity: 0.8 }} />
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3">
-          <button
-            onClick={() => setStep(step === "adj-front" ? "cap-front" : "cap-back")}
-            className="flex-1 border border-gray-300 rounded-lg py-3 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            撮り直す
-          </button>
-          <button
-            onClick={confirmAdjust}
-            className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700"
-          >
-            確定して{step === "adj-front" ? "裏面へ" : "測定"}
+          {target === "inner" ? (
+            <button onClick={() => setTarget("outer")} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm text-gray-700 hover:bg-gray-50">
+              ← 外周へ戻る
+            </button>
+          ) : (
+            <button onClick={() => setStep(step === "adj-front" ? "cap-front" : "cap-back")} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm text-gray-700 hover:bg-gray-50">
+              撮り直す
+            </button>
+          )}
+          <button onClick={confirmStep} className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700">
+            {target === "outer" ? "次へ（内枠）" : step === "adj-front" ? "確定して裏面へ" : "確定して測定"}
           </button>
         </div>
       </div>
@@ -255,9 +319,7 @@ export default function MeasureClient() {
   const grade = front ? estimateGrade(front, back) : "—";
   return (
     <div className="space-y-5">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>
-      )}
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>}
       <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">
         <div className="text-center">
           <p className="text-sm text-gray-500">参考上限グレード</p>
@@ -277,16 +339,16 @@ export default function MeasureClient() {
         <button onClick={restart} className="flex-1 border border-gray-300 rounded-lg py-3 text-sm text-gray-700 hover:bg-gray-50">
           もう一度
         </button>
-        <button
-          onClick={save}
-          disabled={saving || !front}
-          className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50"
-        >
+        <button onClick={save} disabled={saving || !front} className="flex-1 bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50">
           {saving ? "保存中..." : "保存する"}
         </button>
       </div>
     </div>
   );
+}
+
+function quadPoints(q: Quad): string {
+  return `${q.tl.x},${q.tl.y} ${q.tr.x},${q.tr.y} ${q.br.x},${q.br.y} ${q.bl.x},${q.bl.y}`;
 }
 
 function StepBadge({ step }: { step: Step }) {
@@ -327,50 +389,6 @@ function ResultRow({ label, cen }: { label: string; cen: Centering | null }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function renderRect(
-  name: "outer" | "inner",
-  r: NormRect,
-  color: string,
-  dashed: boolean,
-  startDrag: (rect: "outer" | "inner", edge: keyof NormRect) => (e: React.PointerEvent) => void,
-) {
-  const box: React.CSSProperties = {
-    position: "absolute",
-    left: `${r.l * 100}%`,
-    top: `${r.t * 100}%`,
-    width: `${(r.r - r.l) * 100}%`,
-    height: `${(r.b - r.t) * 100}%`,
-    border: `2px ${dashed ? "dashed" : "solid"} ${color}`,
-    pointerEvents: "none",
-  };
-  const cx = ((r.l + r.r) / 2) * 100;
-  const cy = ((r.t + r.b) / 2) * 100;
-  const handle = (leftPct: number, topPct: number, cursor: string): React.CSSProperties => ({
-    position: "absolute",
-    left: `${leftPct}%`,
-    top: `${topPct}%`,
-    width: 22,
-    height: 22,
-    marginLeft: -11,
-    marginTop: -11,
-    borderRadius: "50%",
-    background: color,
-    border: "2px solid #fff",
-    touchAction: "none",
-    cursor,
-    zIndex: 5,
-  });
-  return (
-    <div key={name}>
-      <div style={box} />
-      <div style={handle(r.l * 100, cy, "ew-resize")} onPointerDown={startDrag(name, "l")} />
-      <div style={handle(r.r * 100, cy, "ew-resize")} onPointerDown={startDrag(name, "r")} />
-      <div style={handle(cx, r.t * 100, "ns-resize")} onPointerDown={startDrag(name, "t")} />
-      <div style={handle(cx, r.b * 100, "ns-resize")} onPointerDown={startDrag(name, "b")} />
     </div>
   );
 }
