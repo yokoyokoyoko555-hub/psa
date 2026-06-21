@@ -13,7 +13,7 @@ import { z } from "zod";
  *   ※サブスク加入フロー自体は Phase 0（docs/CENTERING_TOOL.md）で配線。
  */
 export async function hasCenteringAccess(customerId: string): Promise<boolean> {
-  if (process.env.CENTERING_DEV_UNLOCK === "true") return true;
+  if (process.env.CENTERING_DEV_UNLOCK?.trim() === "true") return true;
 
   const sub = await prisma.subscription.findFirst({
     where: {
