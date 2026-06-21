@@ -120,7 +120,7 @@ type StripeElements = {
   create: (
     type: "card",
     options?: {
-      style?: Record<string, Record<string, string>>;
+      style?: Record<string, Record<string, string | Record<string, string>>>;
       hidePostalCode?: boolean;
     }
   ) => StripeCardElement;
