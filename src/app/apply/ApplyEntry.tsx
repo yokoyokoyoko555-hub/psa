@@ -15,14 +15,6 @@ type Props = {
   insuranceRules: InsuranceRule[];
   profile: CustomerProfile | null;
   addresses: Address[];
-  paymentMethods: {
-    id: string;
-    brand: string;
-    last4: string;
-    expMonth: number;
-    expYear: number;
-    isDefault: boolean;
-  }[];
   initialDraft?: InitialDraft | null;
 };
 
@@ -46,7 +38,6 @@ export default function ApplyEntry(props: Props) {
         <StoreRequestForm
           profile={props.profile}
           addresses={props.addresses}
-          paymentMethods={props.paymentMethods}
         />
       </div>
     );

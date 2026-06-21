@@ -357,7 +357,6 @@ const storeRequestSchema = z.object({
   returnMethod: z.nativeEnum(ReturnMethod),
   returnAddress: returnAddressSchema,
   shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/),
-  savedPaymentMethodId: z.string().min(1),
   agreementText: z.string().min(1),
   agreementVersion: z.string().min(1),
   ipAddress: z.string(),
@@ -367,7 +366,7 @@ const storeRequestSchema = z.object({
 /**
  * 代理申込（当社入力）の依頼を顧客が作成する。
  * カード明細は入れず、提出先・返却方法・同意のみ。管理画面に「要対応」(source=STORE, status=DRAFT)として表示される。
- * 料金確定と決済は店舗の入力完了時（completeStoreApplication）に行う。
+ * 料金確定後、管理画面から顧客へ請求し、顧客が決済する。
  */
 export async function createStoreRequest(
   input: z.infer<typeof storeRequestSchema>
@@ -377,13 +376,6 @@ export async function createStoreRequest(
 
   const parsed = storeRequestSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
-
-  const savedPaymentMethod = await prisma.savedPaymentMethod.findFirst({
-    where: { id: parsed.data.savedPaymentMethodId, customerId: customer.id },
-  });
-  if (!savedPaymentMethod) {
-    return { success: false, error: "支払い方法を選択してください" };
-  }
 
   const applicationNo = await generateApplicationNo();
 
@@ -398,7 +390,6 @@ export async function createStoreRequest(
         returnMethod: parsed.data.returnMethod,
         shippingAddressEncrypted: encrypt(JSON.stringify(parsed.data.returnAddress)),
         shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
-        savedPaymentMethodId: savedPaymentMethod.id,
         status: "DRAFT",
       },
     });

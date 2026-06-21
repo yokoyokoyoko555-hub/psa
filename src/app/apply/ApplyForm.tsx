@@ -412,57 +412,63 @@ export default function ApplyForm({
     setLoading(true);
     setError("");
 
-    const result = await createApplication({
-      draftId: draftId ?? undefined,
-      serviceLevel,
-      region,
-      returnMethod,
-      cards: cards.map((c) => ({
-        tcgTitle: c.tcgTitle,
-        releaseYear: c.releaseYear ? parseInt(c.releaseYear) : undefined,
-        cardName: c.cardName,
-        cardNumber: c.cardNumber || undefined,
-        rarity: c.rarity || undefined,
-        language: "JAPANESE" as const,
-        declaredValue: c.declaredValue,
-        quantity: c.quantity,
-        damageImageKeys: [],
-      })),
-      returnAddress:
-        returnSel !== "registered" && selectedAddr
-          ? {
-              name: selectedAddr.name,
-              lastName: selectedAddr.lastName || undefined,
-              firstName: selectedAddr.firstName || undefined,
-              lastNameRoman: selectedAddr.lastNameRoman || undefined,
-              firstNameRoman: selectedAddr.firstNameRoman || undefined,
-              postalCode: selectedAddr.postalCode,
-              prefecture: selectedAddr.prefecture,
-              address: selectedAddr.address,
-              address2: selectedAddr.address2 || undefined,
-            }
-          : undefined,
-      shippingPhone: normalizedShippingPhone,
-      agreementText: AGREEMENT_TEXT,
-      agreementVersion: AGREEMENT_VERSION,
-      ipAddress: "client",
-      userAgent: navigator.userAgent,
-    });
+    try {
+      const result = await createApplication({
+        draftId: draftId ?? undefined,
+        serviceLevel,
+        region,
+        returnMethod,
+        cards: cards.map((c) => ({
+          tcgTitle: c.tcgTitle,
+          releaseYear: c.releaseYear ? parseInt(c.releaseYear) : undefined,
+          cardName: c.cardName,
+          cardNumber: c.cardNumber || undefined,
+          rarity: c.rarity || undefined,
+          language: "JAPANESE" as const,
+          declaredValue: c.declaredValue,
+          quantity: c.quantity,
+          damageImageKeys: [],
+        })),
+        returnAddress:
+          returnSel !== "registered" && selectedAddr
+            ? {
+                name: selectedAddr.name,
+                lastName: selectedAddr.lastName || undefined,
+                firstName: selectedAddr.firstName || undefined,
+                lastNameRoman: selectedAddr.lastNameRoman || undefined,
+                firstNameRoman: selectedAddr.firstNameRoman || undefined,
+                postalCode: selectedAddr.postalCode,
+                prefecture: selectedAddr.prefecture,
+                address: selectedAddr.address,
+                address2: selectedAddr.address2 || undefined,
+              }
+            : undefined,
+        shippingPhone: normalizedShippingPhone,
+        agreementText: AGREEMENT_TEXT,
+        agreementVersion: AGREEMENT_VERSION,
+        ipAddress: "client",
+        userAgent: navigator.userAgent,
+      });
 
-    if (result.success && result.clientSecret) {
-      try {
-        localStorage.removeItem(DRAFT_KEY);
-      } catch {
-        /* ignore */
+      if (result.success && result.clientSecret) {
+        try {
+          localStorage.removeItem(DRAFT_KEY);
+        } catch {
+          /* ignore */
+        }
+        setClientSecret(result.clientSecret);
+        setCreatedApplicationId(result.applicationId ?? "");
+        setMaxStep(4);
+        setStep("payment");
+      } else {
+        setError(result.error ?? "エラーが発生しました");
       }
-      setClientSecret(result.clientSecret);
-      setCreatedApplicationId(result.applicationId ?? "");
-      setMaxStep(4);
-      setStep("payment");
-    } else {
-      setError(result.error ?? "エラーが発生しました");
+    } catch (err) {
+      console.error(err);
+      setError("申込処理中にエラーが発生しました。時間をおいて再度お試しください。");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function handlePayment() {
@@ -474,40 +480,44 @@ export default function ApplyForm({
     setPaymentLoading(true);
     setError("");
 
-    const { error: stripeError, paymentIntent } = await stripeRef.current.confirmCardPayment(clientSecret, {
-      payment_method: {
-        card: cardElementRef.current,
-        billing_details: { name: profile?.name ?? "Customer" },
-      },
-    });
-    if (stripeError) {
-      setError(stripeError.message ?? "決済エラーが発生しました");
+    try {
+      const { error: stripeError, paymentIntent } = await stripeRef.current.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardElementRef.current,
+          billing_details: { name: profile?.name ?? "Customer" },
+        },
+      });
+      if (stripeError) {
+        setError(stripeError.message ?? "決済エラーが発生しました");
+        return;
+      }
+
+      const paymentIntentId = paymentIntent?.id ?? clientSecret.split("_secret_")[0];
+      if (!createdApplicationId || !paymentIntentId) {
+        setError("決済は完了しましたが、申込情報の確認に失敗しました。申込一覧から予約へ進んでください。");
+        return;
+      }
+
+      const confirmed = await confirmApplicationPayment({
+        applicationId: createdApplicationId,
+        paymentIntentId,
+      });
+
+      if (!confirmed.success) {
+        setError(
+          confirmed.error ??
+            "決済は完了しましたが、反映に時間がかかっています。少し待ってからカード提出予約へ進んでください。"
+        );
+        return;
+      }
+
+      router.push(`/mypage/submission-booking?applicationId=${encodeURIComponent(createdApplicationId)}`);
+    } catch (err) {
+      console.error(err);
+      setError("決済処理中にエラーが発生しました。時間をおいて再度お試しください。");
+    } finally {
       setPaymentLoading(false);
-      return;
     }
-
-    const paymentIntentId = paymentIntent?.id ?? clientSecret.split("_secret_")[0];
-    if (!createdApplicationId || !paymentIntentId) {
-      setError("決済は完了しましたが、申込情報の確認に失敗しました。申込一覧から予約へ進んでください。");
-      setPaymentLoading(false);
-      return;
-    }
-
-    const confirmed = await confirmApplicationPayment({
-      applicationId: createdApplicationId,
-      paymentIntentId,
-    });
-
-    if (!confirmed.success) {
-      setError(
-        confirmed.error ??
-          "決済は完了しましたが、反映に時間がかかっています。少し待ってからカード提出予約へ進んでください。"
-      );
-      setPaymentLoading(false);
-      return;
-    }
-
-    router.push(`/mypage/submission-booking?applicationId=${encodeURIComponent(createdApplicationId)}`);
   }
 
   const currentIdx = STEPS.findIndex((s) => s.key === step);
