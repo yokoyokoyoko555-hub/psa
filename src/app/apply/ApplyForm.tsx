@@ -104,7 +104,7 @@ type Props = {
 const STEPS = [
   { key: "service", label: "サービス選択" },
   { key: "cards", label: "カード情報" },
-  { key: "shipping", label: "発送先・請求" },
+  { key: "shipping", label: "発送先" },
   { key: "confirm", label: "確認・同意" },
   { key: "payment", label: "お支払い" },
 ] as const;
@@ -432,10 +432,10 @@ export default function ApplyForm({
         returnSel !== "registered" && selectedAddr
           ? {
               name: selectedAddr.name,
-              lastName: selectedAddr.lastName,
-              firstName: selectedAddr.firstName,
-              lastNameRoman: selectedAddr.lastNameRoman,
-              firstNameRoman: selectedAddr.firstNameRoman,
+              lastName: selectedAddr.lastName || undefined,
+              firstName: selectedAddr.firstName || undefined,
+              lastNameRoman: selectedAddr.lastNameRoman || undefined,
+              firstNameRoman: selectedAddr.firstNameRoman || undefined,
               postalCode: selectedAddr.postalCode,
               prefecture: selectedAddr.prefecture,
               address: selectedAddr.address,
@@ -818,7 +818,7 @@ export default function ApplyForm({
               }}
               className="w-full bg-brand-600 text-white font-bold py-3 rounded-xl hover:bg-brand-700 transition"
             >
-              発送先・請求へ進む
+              発送先へ進む
             </button>
           </div>
         )}
@@ -887,19 +887,6 @@ export default function ApplyForm({
                 className={inputCls}
               />
               <p className="text-xs text-gray-400">配送・連絡に使用します。</p>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-              <h2 className="font-bold text-gray-900">支払い方法</h2>
-              <div className="rounded-lg border border-brand-200 bg-brand-50 p-4 text-sm text-brand-900">
-                <p className="font-bold">お支払いは⑤「お支払い」ステップで行います。</p>
-                <p className="mt-1">
-                  申込内容と合計金額を確認したあと、Stripeのカード入力欄で決済してください。
-                </p>
-              </div>
-              <p className="text-xs text-gray-500">
-                決済に使用したカードはStripeで安全に管理され、次回以降のために保存されます。保存済みカードはアカウント設定から削除できます。
-              </p>
             </div>
 
             <button
