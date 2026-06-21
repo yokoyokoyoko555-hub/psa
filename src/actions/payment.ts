@@ -25,6 +25,19 @@ export async function deletePaymentMethod(methodId: string) {
 
   await prisma.savedPaymentMethod.delete({ where: { id: methodId } });
 
+  if (method.isDefault) {
+    const nextMethod = await prisma.savedPaymentMethod.findFirst({
+      where: { customerId: session.id },
+      orderBy: { createdAt: "desc" },
+    });
+    if (nextMethod) {
+      await prisma.savedPaymentMethod.update({
+        where: { id: nextMethod.id },
+        data: { isDefault: true },
+      });
+    }
+  }
+
   revalidatePath("/mypage/settings");
   revalidatePath("/mypage/payment-methods");
   return { success: true };

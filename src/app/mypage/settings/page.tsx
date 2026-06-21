@@ -58,16 +58,16 @@ export default async function SettingsPage() {
 
         <section id="payment-methods" className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">支払い方法</h2>
+            <h2 className="text-lg font-bold text-gray-900">保存済みカード</h2>
             <p className="text-sm text-gray-500 mt-1">
-              登録済みカードは申込決済や追加請求に使用されます。
+              決済時に保存されたカードを確認・削除できます。カード番号とCVCは当社サーバーには保存されません。
             </p>
           </div>
 
           {methods.length === 0 ? (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-6 text-center">
-              <p className="font-bold text-gray-700">登録済みの支払い方法がありません</p>
-              <p className="text-sm text-gray-500 mt-1">申込時の決済後にカード情報が保存されます。</p>
+              <p className="font-bold text-gray-700">保存済みカードがありません</p>
+              <p className="text-sm text-gray-500 mt-1">通常申込の決済後、使用したカードがここに表示されます。</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -98,7 +98,7 @@ export default async function SettingsPage() {
           )}
 
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-xs text-gray-500">
-            <p>カード番号・CVCは当社サーバーに保存されません。</p>
+            <p>カードの追加は通常申込の決済時に行われます。不要なカードはいつでも削除できます。</p>
             <p>決済情報はStripeによって安全に管理されています。</p>
           </div>
         </section>
