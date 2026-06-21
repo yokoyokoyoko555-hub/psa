@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getMyApplications } from "@/actions/application";
+import CustomerHeader from "@/components/CustomerHeader";
 import ApplicationCenter, { type AppRow } from "./ApplicationCenter";
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -46,22 +47,17 @@ export default async function ApplicationsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center gap-4">
-          <Link href="/mypage" className="shrink-0 hover:opacity-70 transition">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
-          </Link>
-          <h1 className="font-bold text-gray-900">申込一覧</h1>
-          <div className="flex-1" />
+      <CustomerHeader
+        title="申込一覧"
+        actions={
           <Link
             href="/apply"
             className="shrink-0 bg-brand-600 text-white rounded-full px-4 py-1.5 text-sm font-bold hover:bg-brand-700 transition"
           >
             新規申込
           </Link>
-        </div>
-      </header>
+        }
+      />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
         <ApplicationCenter apps={rows} />

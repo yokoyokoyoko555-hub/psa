@@ -71,11 +71,18 @@ export default function AuthScreen({ initialTab = "signup" }: { initialTab?: "si
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
+      <header className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="max-w-6xl mx-auto">
+          <Link href="/" className="inline-block hover:opacity-70 transition">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
+          </Link>
+        </div>
+      </header>
+
       {/* ロゴ・タグライン */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pt-6 pb-3">
         <p className="text-base font-bold text-gray-700 mb-1">PSA鑑定始めるならトレカビンクス！</p>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.jpg" alt="トレカビンクス" className="h-16 w-auto" />
       </div>
 
       {/* タブ + フォーム */}

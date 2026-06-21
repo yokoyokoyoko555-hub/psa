@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import BookingCalendar from "./BookingCalendar";
+import CustomerHeader from "@/components/CustomerHeader";
 
 export const metadata = { title: "カード提出予約 | トレカビンクス" };
 
@@ -59,15 +59,7 @@ export default async function SubmissionBookingPage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center gap-3">
-          <Link href="/mypage" className="shrink-0 hover:opacity-70 transition">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
-          </Link>
-          <h1 className="font-bold text-gray-900">カード提出予約</h1>
-        </div>
-      </header>
+      <CustomerHeader title="カード提出予約" />
 
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white border border-gray-200 rounded-xl p-5">

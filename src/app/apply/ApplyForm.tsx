@@ -575,12 +575,22 @@ export default function ApplyForm({
           </nav>
 
           {/* 一時保存して終了 */}
-          <button
-            onClick={handleSaveAndExit}
-            className="shrink-0 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
-          >
-            保存・終了
-          </button>
+          <div className="shrink-0 flex items-center gap-2">
+            <Link
+              href="/mypage/settings"
+              aria-label="アカウント設定"
+              title="アカウント設定"
+              className="w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-lg hover:border-brand-500 hover:bg-brand-50 transition"
+            >
+              👤
+            </Link>
+            <button
+              onClick={handleSaveAndExit}
+              className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+            >
+              保存・終了
+            </button>
+          </div>
         </div>
       </header>
 

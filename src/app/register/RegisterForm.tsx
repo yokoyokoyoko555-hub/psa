@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { registerCustomer } from "@/actions/customer";
 
@@ -53,8 +54,17 @@ export default function RegisterForm({ email, token }: { email: string; token: s
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="w-full max-w-lg mx-auto">
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="max-w-6xl mx-auto">
+          <Link href="/" className="inline-block hover:opacity-70 transition">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
+          </Link>
+        </div>
+      </header>
+
+      <div className="w-full max-w-lg mx-auto px-4 py-12">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
           <h1 className="text-2xl font-bold text-center text-gray-900 mb-2">会員情報の登録</h1>
           <p className="text-center text-gray-500 text-sm mb-6">トレカビンクス PSA申込</p>

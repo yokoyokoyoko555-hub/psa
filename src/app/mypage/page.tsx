@@ -3,10 +3,9 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
-import { decrypt } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import { getMyApplications } from "@/actions/application";
-import { logoutCustomer } from "@/actions/customer";
+import CustomerHeader from "@/components/CustomerHeader";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -42,7 +41,6 @@ export default async function MypagePage() {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
 
-  const name = decrypt(customer.nameEncrypted);
   const [applications, notifications] = await Promise.all([
     getMyApplications(),
     prisma.notification.findMany({
@@ -75,25 +73,7 @@ export default async function MypagePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <Link href="/" className="shrink-0 hover:opacity-70 transition">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.jpg" alt="トレカビンクス" className="h-12 w-auto" />
-          </Link>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">
-              {customer.memberNo ? `${customer.memberNo}　` : ""}{name} 様
-            </span>
-            <form action={logoutCustomer}>
-              <button type="submit" className="text-sm text-gray-500 hover:text-gray-700">
-                ログアウト
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+      <CustomerHeader title="マイページ" />
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {notifications.length > 0 && (
@@ -155,16 +135,6 @@ export default async function MypagePage() {
             <div>
               <p className="font-bold text-lg text-gray-900">申込一覧</p>
               <p className="text-gray-500 text-sm">全{applications.length}件</p>
-            </div>
-          </Link>
-          <Link
-            href="/mypage/settings"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
-          >
-            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">👤</div>
-            <div>
-              <p className="font-bold text-lg text-gray-900">アカウント設定</p>
-              <p className="text-gray-500 text-sm">登録情報・返送先・支払い方法</p>
             </div>
           </Link>
           <Link
