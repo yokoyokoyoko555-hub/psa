@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import ApplyForm, { type InitialDraft } from "./ApplyForm";
 import StoreRequestForm from "./StoreRequestForm";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
