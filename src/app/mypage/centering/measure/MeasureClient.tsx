@@ -94,6 +94,12 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     const myId = ++detectId.current;
     setDetecting(true);
     setDetectMsg("AIエンジンを準備中…（初回は数秒かかります）");
+    const watchdog = window.setTimeout(() => {
+      if (detectId.current !== myId) return;
+      detectId.current++;
+      setDetecting(false);
+      setDetectMsg("自動検出に時間がかかっているため、手動で合わせてください。");
+    }, DETECT_TIMEOUT_MS);
     const img = new Image();
     img.onload = async () => {
       try {
@@ -105,9 +111,11 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
         ]);
         if (detectId.current !== myId) return; // キャンセル/再実行済み
         if (res === DETECT_TIMEOUT) {
+          window.clearTimeout(watchdog);
           setDetectMsg("自動検出に時間がかかっているため、手動で合わせてください。");
           return;
         }
+        window.clearTimeout(watchdog);
         if (res) {
           setOuter(res.outer);
           setInner(res.inner);
@@ -121,6 +129,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
         }
       } catch (e) {
         if (detectId.current !== myId) return;
+        window.clearTimeout(watchdog);
         setDetectMsg(
           "自動検出に失敗しました（" + (e instanceof Error ? e.message : "不明") + "）。手動で合わせてください。",
         );
@@ -130,6 +139,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     };
     img.onerror = () => {
       if (detectId.current !== myId) return;
+      window.clearTimeout(watchdog);
       setDetecting(false);
       setDetectMsg("画像の読み込みに失敗しました。");
     };
