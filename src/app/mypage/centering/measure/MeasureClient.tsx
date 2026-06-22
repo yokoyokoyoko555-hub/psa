@@ -10,6 +10,8 @@ import { saveCenteringMeasurement } from "@/actions/centering";
 type Step = "cap-front" | "adj-front" | "cap-back" | "adj-back" | "result";
 type Target = "outer" | "inner";
 type Corner = keyof Quad;
+type Face = "front" | "back";
+type QuadPair = { outer: Quad; inner: Quad };
 
 const DEFAULT_OUTER: Quad = {
   tl: { x: 0.1, y: 0.08 }, tr: { x: 0.9, y: 0.08 },
@@ -50,6 +52,12 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
   const [detectMsg, setDetectMsg] = useState("");
   const [usedAi, setUsedAi] = useState(false);
 
+  // ①補正テレメトリ（AI提案値 / 確定値。画像は保存しない）
+  const [frontProposed, setFrontProposed] = useState<QuadPair | null>(null);
+  const [backProposed, setBackProposed] = useState<QuadPair | null>(null);
+  const [frontFinal, setFrontFinal] = useState<QuadPair | null>(null);
+  const [backFinal, setBackFinal] = useState<QuadPair | null>(null);
+
   const capturing = step === "cap-front" || step === "cap-back";
   const adjusting = step === "adj-front" || step === "adj-back";
   const curImg = step === "adj-front" ? frontImg : backImg;
@@ -79,7 +87,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     setTarget("outer");
   }
 
-  function runDetect(url: string) {
+  function runDetect(url: string, face: Face) {
     setDetecting(true);
     setDetectMsg("AI読み込み・解析中...");
     const img = new Image();
@@ -90,6 +98,9 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
           setOuter(res.outer);
           setInner(res.inner);
           setUsedAi(true);
+          const pair = { outer: res.outer, inner: res.inner };
+          if (face === "front") setFrontProposed(pair);
+          else setBackProposed(pair);
           setDetectMsg("AIが枠を検出しました。ズレていれば微調整してください。");
         } else {
           setDetectMsg("自動検出できませんでした。手動で合わせてください。");
@@ -108,17 +119,17 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
   }
 
   function acceptImage(url: string) {
-    if (step === "cap-front") {
+    const face: Face = step === "cap-front" ? "front" : "back";
+    if (face === "front") {
       setFrontImg(url);
-      startAdjust();
       setStep("adj-front");
     } else {
       setBackImg(url);
-      startAdjust();
       setStep("adj-back");
     }
+    startAdjust();
     setDetectMsg("");
-    if (aiEnabled) runDetect(url);
+    if (aiEnabled) runDetect(url, face);
   }
 
   function capture() {
@@ -176,11 +187,14 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
       setTarget("inner");
       return;
     }
+    const finalPair = { outer, inner };
     const cen = centeringFromQuads(outer, inner);
     if (step === "adj-front") {
+      setFrontFinal(finalPair);
       setFront(cen);
       setStep("cap-back");
     } else {
+      setBackFinal(finalPair);
       setBack(cen);
       setStep("result");
     }
@@ -191,6 +205,10 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     const grade = estimateGrade(front, back);
     setSaving(true);
     setError("");
+    const detectionSample = {
+      front: frontFinal ? { proposed: frontProposed, final: frontFinal } : null,
+      back: backFinal ? { proposed: backProposed, final: backFinal } : null,
+    };
     const res = await saveCenteringMeasurement({
       method: usedAi ? "AI" : "MANUAL",
       frontLR: front.lr,
@@ -198,6 +216,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
       backLR: back?.lr,
       backTB: back?.tb,
       estimatedGrade: grade,
+      detectionSample,
     });
     setSaving(false);
     if (res.success && res.id) router.push(`/mypage/centering/${res.id}`);
@@ -211,6 +230,10 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     setBackImg(null);
     setUsedAi(false);
     setDetectMsg("");
+    setFrontProposed(null);
+    setBackProposed(null);
+    setFrontFinal(null);
+    setBackFinal(null);
     startAdjust();
     setStep("cap-front");
   }
@@ -250,8 +273,11 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
               <button onClick={capture} aria-label="撮影" className="w-16 h-16 rounded-full border-4 border-brand-600 flex items-center justify-center">
                 <span className="w-11 h-11 rounded-full bg-brand-600 block" />
               </button>
-              <FileButton onFile={onFile} compact />
             </div>
+            <FileButton onFile={onFile} />
+            <p className="text-center text-xs text-gray-400">
+              撮影のほか、保存済みの画像から取り込んで測定できます{aiEnabled ? "（取り込み後にAIが自動検出）" : ""}
+            </p>
           </>
         )}
       </div>
@@ -349,7 +375,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
 
         {aiEnabled && (
           <button
-            onClick={() => curImg && runDetect(curImg)}
+            onClick={() => curImg && runDetect(curImg, step === "adj-front" ? "front" : "back")}
             disabled={detecting}
             className="w-full border border-brand-300 text-brand-700 rounded-lg py-2 text-sm hover:bg-brand-50 disabled:opacity-50"
           >
@@ -428,11 +454,11 @@ function StepBadge({ step }: { step: Step }) {
   );
 }
 
-function FileButton({ onFile, compact }: { onFile: (e: React.ChangeEvent<HTMLInputElement>) => void; compact?: boolean }) {
+function FileButton({ onFile }: { onFile: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
   return (
-    <label className={compact ? "text-sm text-gray-500 cursor-pointer hover:text-gray-700" : "block text-center w-full border border-gray-300 rounded-lg py-3 text-sm text-gray-700 cursor-pointer hover:bg-gray-50"}>
-      {compact ? "画像選択" : "画像ファイルを選択"}
-      <input type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
+    <label className="block text-center w-full border border-gray-300 rounded-lg py-3 text-sm text-gray-700 cursor-pointer hover:bg-gray-50">
+      🖼 画像から取り込む
+      <input type="file" accept="image/*" onChange={onFile} className="hidden" />
     </label>
   );
 }

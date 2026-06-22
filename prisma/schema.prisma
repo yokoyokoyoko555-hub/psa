@@ -271,6 +271,10 @@ model CenteringMeasurement {
   backTB         Float? // バック上下
   estimatedGrade String? // 参考上限グレード（"10"〜"5" / null）
   note           String?
+  // ①補正テレメトリ（画像は保存しない＝座標のみ）。AI提案の四隅と確定四隅を記録し、
+  // AIの検出誤差・系統的ズレの分析→CV調整に使う。ADR-0013 / CENTERING_TOOL.md §学習ロードマップ。
+  // 形: { front: { proposed: {outer,inner}|null, final: {outer,inner} }|null, back: 同 }
+  detectionSample Json?
   createdAt      DateTime        @default(now())
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)

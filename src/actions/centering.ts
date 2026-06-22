@@ -32,6 +32,14 @@ export async function getCenteringAccess(): Promise<boolean> {
   return hasCenteringAccess(customer.id);
 }
 
+const ptSchema = z.object({ x: z.number(), y: z.number() });
+const quadSchema = z.object({ tl: ptSchema, tr: ptSchema, br: ptSchema, bl: ptSchema });
+const quadPairSchema = z.object({ outer: quadSchema, inner: quadSchema });
+const faceSampleSchema = z
+  .object({ proposed: quadPairSchema.nullable(), final: quadPairSchema })
+  .nullable();
+const detectionSampleSchema = z.object({ front: faceSampleSchema, back: faceSampleSchema });
+
 const saveSchema = z.object({
   method: z.enum(["MANUAL", "AI"]).optional(),
   frontLR: z.number().min(0).max(100),
@@ -41,6 +49,7 @@ const saveSchema = z.object({
   estimatedGrade: z.string().max(8).optional(),
   cardId: z.string().optional(),
   note: z.string().max(500).optional(),
+  detectionSample: detectionSampleSchema.optional(),
 });
 
 export async function saveCenteringMeasurement(
@@ -70,6 +79,7 @@ export async function saveCenteringMeasurement(
       backTB: parsed.data.backTB ?? null,
       estimatedGrade: parsed.data.estimatedGrade ?? null,
       note: parsed.data.note ?? null,
+      detectionSample: parsed.data.detectionSample ?? undefined,
     },
   });
 
