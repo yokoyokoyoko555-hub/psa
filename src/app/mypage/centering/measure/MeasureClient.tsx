@@ -33,6 +33,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const active = useRef<{ target: Target; corner: Corner } | null>(null);
+  const detectId = useRef(0);
 
   const [camError, setCamError] = useState(false);
   const [frontImg, setFrontImg] = useState<string | null>(null);
@@ -88,12 +89,14 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
   }
 
   function runDetect(url: string, face: Face) {
+    const myId = ++detectId.current;
     setDetecting(true);
-    setDetectMsg("AI読み込み・解析中...");
+    setDetectMsg("AIエンジンを準備中…（初回は数秒かかります）");
     const img = new Image();
     img.onload = async () => {
       try {
         const res = await detectQuads(img);
+        if (detectId.current !== myId) return; // キャンセル/再実行済み
         if (res) {
           setOuter(res.outer);
           setInner(res.inner);
@@ -106,18 +109,26 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
           setDetectMsg("自動検出できませんでした。手動で合わせてください。");
         }
       } catch (e) {
+        if (detectId.current !== myId) return;
         setDetectMsg(
           "自動検出に失敗しました（" + (e instanceof Error ? e.message : "不明") + "）。手動で合わせてください。",
         );
       } finally {
-        setDetecting(false);
+        if (detectId.current === myId) setDetecting(false);
       }
     };
     img.onerror = () => {
+      if (detectId.current !== myId) return;
       setDetecting(false);
       setDetectMsg("画像の読み込みに失敗しました。");
     };
     img.src = url;
+  }
+
+  function cancelDetect() {
+    detectId.current++;
+    setDetecting(false);
+    setDetectMsg("手動で合わせてください。");
   }
 
   function acceptImage(url: string) {
@@ -369,8 +380,14 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
           )}
 
           {detecting && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50">
               <span className="text-white text-sm font-bold">✨ AIで検出中...</span>
+              <button
+                onClick={cancelDetect}
+                className="border border-white/70 text-white rounded-lg px-4 py-2 text-sm hover:bg-white/10"
+              >
+                手動で合わせる
+              </button>
             </div>
           )}
         </div>
