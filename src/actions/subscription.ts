@@ -1,5 +1,6 @@
 "use server";
 
+import { prisma } from "@/lib/prisma";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { createCheckoutSubscriptionSession, createBillingPortalSession } from "@/lib/stripe";
 import { ensureStripeCustomer } from "@/lib/stripe-customer";
@@ -17,6 +18,17 @@ export async function startCenteringSubscription(): Promise<{ url?: string; erro
 
   const priceId = process.env.STRIPE_CENTERING_PRICE_ID;
   if (!priceId) return { error: "プランが未設定です。しばらくお待ちください。" };
+
+  // 二重加入防止: 進行中/有効なサブスクがあれば新規Checkoutを作らない
+  const existing = await prisma.subscription.findFirst({
+    where: {
+      customerId: customer.id,
+      status: { in: ["ACTIVE", "TRIALING", "PAST_DUE", "INCOMPLETE"] },
+    },
+  });
+  if (existing) {
+    return { error: "すでにお手続き済みです。ページを更新してご確認ください。" };
+  }
 
   try {
     const stripeCustomerId = await ensureStripeCustomer(customer);
