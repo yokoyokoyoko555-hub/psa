@@ -2,26 +2,16 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { cancelSubmissionBooking, upsertSubmissionBooking } from "@/actions/submission-booking";
+import { upsertSubmissionBooking } from "@/actions/submission-booking";
 
 type BookingMethod = "STORE_DROP_OFF" | "SHIPPING";
 
-type Booking = {
+type ExistingBooking = {
   id: string;
-  applicationId: string;
   method: BookingMethod;
   scheduledAt: string;
-  status: string;
   note: string | null;
-};
-
-type ApplicationOption = {
-  id: string;
-  applicationNo: string;
-  totalAmount: number;
-  cardCount: number;
-  booking: Booking | null;
-};
+} | null;
 
 const TIME_SLOTS = ["10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -44,38 +34,30 @@ function makeMonthDays(month: Date) {
   });
 }
 
-function formatBooking(iso: string) {
-  const date = new Date(iso);
-  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
-export default function BookingCalendar({
-  applications,
-  initialApplicationId,
+export default function BookingForm({
+  applicationId,
+  existingBooking,
   closedDates,
   shippingDates,
 }: {
-  applications: ApplicationOption[];
-  initialApplicationId?: string;
+  applicationId: string;
+  existingBooking: ExistingBooking;
   closedDates: string[];
   shippingDates: string[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [month, setMonth] = useState(() => new Date());
-  const initialApp = applications.find((a) => a.id === initialApplicationId) ?? applications[0];
-  const [applicationId, setApplicationId] = useState(initialApp?.id ?? "");
-  const selectedApp = applications.find((a) => a.id === applicationId);
-  const existingBooking = selectedApp?.booking?.status === "BOOKED" ? selectedApp.booking : null;
+  const [month, setMonth] = useState(() =>
+    existingBooking ? new Date(existingBooking.scheduledAt) : new Date(),
+  );
   const [method, setMethod] = useState<BookingMethod>(existingBooking?.method ?? "STORE_DROP_OFF");
-  const [selectedDate, setSelectedDate] = useState(() => {
-    if (existingBooking) return toDateKey(new Date(existingBooking.scheduledAt));
-    return toDateKey(new Date());
-  });
+  const [selectedDate, setSelectedDate] = useState(() =>
+    existingBooking ? toDateKey(new Date(existingBooking.scheduledAt)) : toDateKey(new Date()),
+  );
   const [time, setTime] = useState(() => {
     if (!existingBooking) return "10:00";
-    const date = new Date(existingBooking.scheduledAt);
-    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+    const d = new Date(existingBooking.scheduledAt);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   });
   const [note, setNote] = useState(existingBooking?.note ?? "");
   const [message, setMessage] = useState("");
@@ -83,11 +65,10 @@ export default function BookingCalendar({
   const todayKey = toDateKey(new Date());
 
   function moveMonth(offset: number) {
-    setMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+    setMonth((c) => new Date(c.getFullYear(), c.getMonth() + offset, 1));
   }
 
   function submit() {
-    if (!applicationId) return;
     if (closedDates.includes(selectedDate)) {
       setMessage("この日は予約受付不可です。別の日を選択してください");
       return;
@@ -100,28 +81,12 @@ export default function BookingCalendar({
         scheduledAt: `${selectedDate}T${time}:00+09:00`,
         note,
       });
-      setMessage(result.success ? "予約を保存しました" : result.error ?? "予約に失敗しました");
-      if (result.success) router.refresh();
+      if (result.success) {
+        router.push(`/mypage/submission-booking/${applicationId}`);
+      } else {
+        setMessage(result.error ?? "予約に失敗しました");
+      }
     });
-  }
-
-  function cancel() {
-    if (!existingBooking || !confirm("この予約をキャンセルしますか？")) return;
-    setMessage("");
-    startTransition(async () => {
-      const result = await cancelSubmissionBooking(existingBooking.id);
-      setMessage(result.success ? "予約をキャンセルしました" : result.error ?? "キャンセルに失敗しました");
-      if (result.success) router.refresh();
-    });
-  }
-
-  if (applications.length === 0) {
-    return (
-      <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-        <p className="font-bold text-gray-900">予約できる支払済み申込がありません</p>
-        <p className="text-sm text-gray-500 mt-2">お支払い完了後に、カードの店頭持込または郵送予定を予約できます。</p>
-      </div>
-    );
   }
 
   return (
@@ -174,14 +139,10 @@ export default function BookingCalendar({
                 <span className="text-sm font-bold">{date.getDate()}</span>
                 <span className="mt-2 flex flex-wrap gap-1">
                   {isClosed && (
-                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700">
-                      受付不可
-                    </span>
+                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700">受付不可</span>
                   )}
                   {isShippingDay && (
-                    <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
-                      発送日
-                    </span>
+                    <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">発送日</span>
                   )}
                 </span>
               </button>
@@ -191,45 +152,6 @@ export default function BookingCalendar({
       </section>
 
       <aside className="bg-white border border-gray-200 rounded-xl p-5 space-y-5">
-        <div>
-          <label className="block text-sm font-bold text-gray-900 mb-2">申込ID</label>
-          <select
-            value={applicationId}
-            onChange={(event) => {
-              const nextId = event.target.value;
-              setApplicationId(nextId);
-              const nextApp = applications.find((a) => a.id === nextId);
-              if (nextApp?.booking?.status === "BOOKED") {
-                setMethod(nextApp.booking.method);
-                setSelectedDate(toDateKey(new Date(nextApp.booking.scheduledAt)));
-                const date = new Date(nextApp.booking.scheduledAt);
-                setTime(`${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`);
-                setNote(nextApp.booking.note ?? "");
-              } else {
-                setNote("");
-              }
-            }}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-          >
-            {applications.map((app) => (
-              <option key={app.id} value={app.id}>
-                {app.applicationNo} / {app.cardCount}枚
-              </option>
-            ))}
-          </select>
-          <p className="mt-2 text-xs text-gray-500">
-            選択した申込IDに、持ち込み日または発送予定日を紐づけます。
-          </p>
-        </div>
-
-        {existingBooking && (
-          <div className="rounded-lg border border-brand-100 bg-brand-50 p-3 text-sm">
-            <p className="font-bold text-brand-700">現在の予約</p>
-            <p className="text-gray-700 mt-1">{formatBooking(existingBooking.scheduledAt)}</p>
-            <p className="text-gray-600">{existingBooking.method === "STORE_DROP_OFF" ? "店頭持込" : "郵送予定"}</p>
-          </div>
-        )}
-
         <div>
           <p className="text-sm font-bold text-gray-900 mb-2">方法</p>
           <div className="grid grid-cols-2 gap-2">
@@ -273,7 +195,7 @@ export default function BookingCalendar({
           <label className="block text-sm font-bold text-gray-900 mb-2">備考</label>
           <textarea
             value={note}
-            onChange={(event) => setNote(event.target.value)}
+            onChange={(e) => setNote(e.target.value)}
             rows={3}
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             placeholder="任意"
@@ -287,18 +209,8 @@ export default function BookingCalendar({
           disabled={isPending}
           className="w-full rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-60"
         >
-          {isPending ? "保存中..." : "予約を保存"}
+          {isPending ? "保存中..." : existingBooking ? "予約を更新" : "予約を確定"}
         </button>
-        {existingBooking && (
-          <button
-            type="button"
-            onClick={cancel}
-            disabled={isPending}
-            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-          >
-            予約をキャンセル
-          </button>
-        )}
       </aside>
     </div>
   );

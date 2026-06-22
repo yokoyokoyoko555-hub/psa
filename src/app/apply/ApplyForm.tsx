@@ -511,7 +511,7 @@ export default function ApplyForm({
         return;
       }
 
-      router.push(`/mypage/submission-booking?applicationId=${encodeURIComponent(createdApplicationId)}`);
+      router.push(`/mypage/submission-booking/${encodeURIComponent(createdApplicationId)}/edit`);
     } catch (err) {
       console.error(err);
       setError("決済処理中にエラーが発生しました。時間をおいて再度お試しください。");
