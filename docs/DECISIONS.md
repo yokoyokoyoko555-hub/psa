@@ -144,5 +144,17 @@
   - 段階: Phase1=リスト化＋日時選択＋詳細遷移、Phase2=詳細を店頭提示レシート化（明細・印刷対応）。QRスキャン受領は本スコープ外（将来別ADR）。
 - 影響: `/mypage/submission-booking` のUI刷新、新規ルート2つ（`[applicationId]` / `[applicationId]/edit`）、`BookingCalendar` の簡素化。管理側・決済・ステータス遷移は不変。
 
+## ADR-0015: 料金体系リニューアル（PSA日本）— 送料保険マトリクス＋代理入力料金＋事務手数料
+- 日付: 2026-06-23
+- 状態: Accepted（設計確定・実装前。要確認2点は [PRICING.md](PRICING.md) §9）。ADR-0010/0011 を補完。
+- 文脈: 実運用の料金体系に合わせ、管理画面の料金設定と顧客画面を更新。鑑定料は現状維持で、送料・保険を「申告価格帯×枚数帯」のマトリクス化し、代理入力料金・事務手数料を追加。対象は PSA日本のみ。
+- 決定:
+  - **鑑定料は不変**（`ServicePrice.pricePerCard`）。
+  - **送料・保険は合算1マトリクス** `ShippingInsuranceRate`（region×申告合計帯×枚数帯→金額、26+は¥/枚加算）。PSA_JP では既存 `ShippingRule`/`InsuranceRule` を置換。顧客表示は「送料・保険料」1行。
+  - **代理入力料金 = ¥/枚・サービスレベルごと**（既存 `agencyFee` を流用・UI改称、STORE時のみ加算）。
+  - **事務手数料 = ¥/申込・サービスレベルごと**（`ServicePrice.handlingFee` 新設）。申込=1サービスレベル。
+  - 範囲は **PSA_JP のみ**。US は据え置き。税10%・ステータス遷移は不変。
+- 影響: schema に `ServicePrice.handlingFee` 追加＋`ShippingInsuranceRate` 新規（db push）。`fee-calculator`/seed/管理料金設定UI/顧客内訳の改修。`FeeBreakdown` に `handlingFee`、送料保険は合算行に。26+加算式・店頭受取時の扱いは PRICING.md §9 で確定後に実装。
+
 
 
