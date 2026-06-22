@@ -2,6 +2,7 @@
 
 import { getCustomerSession } from "@/lib/customer-auth";
 import { createCheckoutSubscriptionSession, createBillingPortalSession } from "@/lib/stripe";
+import { ensureStripeCustomer } from "@/lib/stripe-customer";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { headers } from "next/headers";
 
@@ -16,12 +17,12 @@ export async function startCenteringSubscription(): Promise<{ url?: string; erro
 
   const priceId = process.env.STRIPE_CENTERING_PRICE_ID;
   if (!priceId) return { error: "プランが未設定です。しばらくお待ちください。" };
-  if (!customer.stripeCustomerId) return { error: "決済情報が初期化されていません。" };
 
   try {
+    const stripeCustomerId = await ensureStripeCustomer(customer);
     const base = baseUrl();
     const session = await createCheckoutSubscriptionSession({
-      customerId: customer.stripeCustomerId,
+      customerId: stripeCustomerId,
       priceId,
       successUrl: `${base}/mypage/centering?subscribed=1`,
       cancelUrl: `${base}/mypage/centering`,
@@ -37,7 +38,8 @@ export async function startCenteringSubscription(): Promise<{ url?: string; erro
     });
 
     return { url: session.url ?? undefined };
-  } catch {
+  } catch (err) {
+    console.error("startCenteringSubscription failed:", err);
     return { error: "決済ページの作成に失敗しました。" };
   }
 }
@@ -46,15 +48,16 @@ export async function startCenteringSubscription(): Promise<{ url?: string; erro
 export async function openBillingPortal(): Promise<{ url?: string; error?: string }> {
   const customer = await getCustomerSession();
   if (!customer) return { error: "ログインが必要です" };
-  if (!customer.stripeCustomerId) return { error: "決済情報がありません。" };
 
   try {
+    const stripeCustomerId = await ensureStripeCustomer(customer);
     const session = await createBillingPortalSession({
-      customerId: customer.stripeCustomerId,
+      customerId: stripeCustomerId,
       returnUrl: `${baseUrl()}/mypage/centering`,
     });
     return { url: session.url };
-  } catch {
+  } catch (err) {
+    console.error("openBillingPortal failed:", err);
     return { error: "管理画面を開けませんでした。" };
   }
 }
