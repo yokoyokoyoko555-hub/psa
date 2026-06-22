@@ -107,7 +107,7 @@ export default async function BookingDetailPage({
             </p>
             {app.cards.length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
-                代理申込のため、明細はカードお預け後にスタッフが入力します。当日は現物をお持ちください。
+                代理入力のため、明細はカードお預け後にスタッフが入力します。当日は現物をお持ちください。
               </div>
             ) : (
             <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg">

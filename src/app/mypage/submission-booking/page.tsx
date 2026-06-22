@@ -71,7 +71,7 @@ export default async function SubmissionBookingPage() {
                     <p className="font-bold text-gray-900">{app.applicationNo}</p>
                     <p className="text-sm text-gray-500 mt-0.5">
                       {app.source === "STORE" && app._count.cards === 0
-                        ? "代理申込（スタッフが明細を入力します）"
+                        ? "代理入力（スタッフが明細を入力します）"
                         : `${app._count.cards}枚 ・ ¥${app.totalAmount.toLocaleString()}`}
                     </p>
                     {booked ? (

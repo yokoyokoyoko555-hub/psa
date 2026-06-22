@@ -68,7 +68,7 @@ export default async function EditBookingPage({
           <p className="font-bold text-gray-900">{app.applicationNo}</p>
           <p className="text-sm text-gray-500 mt-0.5">
             {app.source === "STORE" && app._count.cards === 0
-              ? "代理申込（お預け後にスタッフが明細を入力します）"
+              ? "代理入力（お預け後にスタッフが明細を入力します）"
               : `${app._count.cards}枚 ・ ¥${app.totalAmount.toLocaleString()}`}
           </p>
         </div>

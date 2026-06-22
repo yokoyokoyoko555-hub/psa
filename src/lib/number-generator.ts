@@ -1,9 +1,13 @@
 import { prisma } from "./prisma";
 import { format } from "date-fns";
 
-export async function generateApplicationNo(): Promise<string> {
+// 種別で接頭辞を変える: 自己入力(CUSTOMER)=APP- / 代理入力(STORE)=DAI-。接頭辞ごとに独立採番。
+export async function generateApplicationNo(
+  source: "CUSTOMER" | "STORE" = "CUSTOMER"
+): Promise<string> {
   const today = format(new Date(), "yyyyMMdd");
-  const prefix = `APP-${today}-`;
+  const head = source === "STORE" ? "DAI" : "APP";
+  const prefix = `${head}-${today}-`;
   const count = await prisma.application.count({
     where: { applicationNo: { startsWith: prefix } },
   });

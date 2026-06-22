@@ -431,7 +431,7 @@ export async function createStoreRequest(
   const parsed = storeRequestSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
 
-  const applicationNo = await generateApplicationNo();
+  const applicationNo = await generateApplicationNo("STORE");
 
   const application = await prisma.$transaction(async (tx) => {
     const app = await tx.application.create({
