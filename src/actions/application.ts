@@ -424,7 +424,7 @@ const storeRequestSchema = z.object({
  */
 export async function createStoreRequest(
   input: z.infer<typeof storeRequestSchema>
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; applicationId?: string }> {
   const customer = await getCustomerSession();
   if (!customer) return { success: false, error: "ログインが必要です" };
 
@@ -469,7 +469,7 @@ export async function createStoreRequest(
     targetId: application.id,
   });
 
-  return { success: true };
+  return { success: true, applicationId: application.id };
 }
 
 const draftCardSchema = z.object({

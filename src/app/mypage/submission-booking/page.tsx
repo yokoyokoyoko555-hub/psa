@@ -18,11 +18,18 @@ export default async function SubmissionBookingPage() {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
 
+  // 代理申込(STORE)はお預け予約が先のため支払い前でも対象。通常(CUSTOMER)は支払い済みのみ。
   const applications = await prisma.application.findMany({
     where: {
       customerId: customer.id,
-      status: { notIn: ["DRAFT", "CANCELLED"] },
-      payments: { some: { status: "SUCCEEDED" } },
+      OR: [
+        { source: "STORE", status: { not: "CANCELLED" } },
+        {
+          source: "CUSTOMER",
+          status: { notIn: ["DRAFT", "CANCELLED"] },
+          payments: { some: { status: "SUCCEEDED" } },
+        },
+      ],
     },
     include: {
       _count: { select: { cards: true } },
@@ -63,7 +70,9 @@ export default async function SubmissionBookingPage() {
                   <div className="min-w-0">
                     <p className="font-bold text-gray-900">{app.applicationNo}</p>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      {app._count.cards}枚 ・ ¥{app.totalAmount.toLocaleString()}
+                      {app.source === "STORE" && app._count.cards === 0
+                        ? "代理申込（スタッフが明細を入力します）"
+                        : `${app._count.cards}枚 ・ ¥${app.totalAmount.toLocaleString()}`}
                     </p>
                     {booked ? (
                       <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">

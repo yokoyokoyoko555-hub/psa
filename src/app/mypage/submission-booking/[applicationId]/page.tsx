@@ -105,6 +105,11 @@ export default async function BookingDetailPage({
             <p className="text-sm font-bold text-gray-900 mb-2">
               カード明細（{app.cards.length}種・計{totalQty}枚）
             </p>
+            {app.cards.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                代理申込のため、明細はカードお預け後にスタッフが入力します。当日は現物をお持ちください。
+              </div>
+            ) : (
             <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
               {app.cards.map((card, i) => (
                 <div key={card.id} className="flex items-start gap-3 px-3 py-2.5">
@@ -125,6 +130,7 @@ export default async function BookingDetailPage({
                 </div>
               ))}
             </div>
+            )}
           </div>
 
           <div className="px-6 py-4 bg-gray-50 text-xs text-gray-600 leading-relaxed">

@@ -26,8 +26,14 @@ export default async function EditBookingPage({
     where: {
       id: applicationId,
       customerId: customer.id,
-      status: { notIn: ["DRAFT", "CANCELLED"] },
-      payments: { some: { status: "SUCCEEDED" } },
+      OR: [
+        { source: "STORE", status: { not: "CANCELLED" } },
+        {
+          source: "CUSTOMER",
+          status: { notIn: ["DRAFT", "CANCELLED"] },
+          payments: { some: { status: "SUCCEEDED" } },
+        },
+      ],
     },
     include: { submissionBooking: true, _count: { select: { cards: true } } },
   });
@@ -60,7 +66,11 @@ export default async function EditBookingPage({
         </Link>
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="font-bold text-gray-900">{app.applicationNo}</p>
-          <p className="text-sm text-gray-500 mt-0.5">{app._count.cards}枚 ・ ¥{app.totalAmount.toLocaleString()}</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {app.source === "STORE" && app._count.cards === 0
+              ? "代理申込（お預け後にスタッフが明細を入力します）"
+              : `${app._count.cards}枚 ・ ¥${app.totalAmount.toLocaleString()}`}
+          </p>
         </div>
         <BookingForm
           applicationId={app.id}

@@ -75,6 +75,7 @@ export default function StoreRequestForm({ profile, addresses }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   async function handleSubmit() {
     if (!agreed) {
@@ -113,6 +114,7 @@ export default function StoreRequestForm({ profile, addresses }: Props) {
         userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
       });
       if (result.success) {
+        setCreatedId(result.applicationId ?? null);
         setDone(true);
       } else {
         setError(result.error ?? "送信に失敗しました");
@@ -131,15 +133,29 @@ export default function StoreRequestForm({ profile, addresses }: Props) {
         <div className="text-4xl">✅</div>
         <h2 className="text-lg font-bold text-gray-900">代理申込の依頼を受け付けました</h2>
         <p className="text-sm text-gray-600">
-          当社スタッフがカード内容を入力し、料金確定後にお支払いをご案内します。
-          進捗はマイページでご確認いただけます。
+          次に、カードのお預け方法（店頭持込・郵送）と日時をご予約ください。
+          お預かり後、スタッフがカード明細を入力し、料金確定後にお支払いをご案内します。
         </p>
-        <button
-          onClick={() => router.push("/mypage")}
-          className="bg-brand-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-brand-700 transition"
-        >
-          マイページへ
-        </button>
+        <div className="flex flex-col gap-3 pt-1">
+          {createdId && (
+            <button
+              onClick={() => router.push(`/mypage/submission-booking/${createdId}/edit`)}
+              className="bg-brand-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-brand-700 transition"
+            >
+              カード提出の予約へ進む
+            </button>
+          )}
+          <button
+            onClick={() => router.push("/mypage")}
+            className={`font-bold px-6 py-3 rounded-lg transition ${
+              createdId
+                ? "border border-gray-300 text-gray-700 hover:bg-gray-50"
+                : "bg-brand-600 text-white hover:bg-brand-700"
+            }`}
+          >
+            マイページへ
+          </button>
+        </div>
       </div>
     );
   }

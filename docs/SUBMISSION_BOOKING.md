@@ -63,7 +63,17 @@
 - **Phase 2**: `/[applicationId]` 予約詳細を**店頭提示レシート**として整備（カード明細リスト・照合用体裁・提出方法別案内・印刷対応）
 - 将来（別ADR）: QRスキャンによる店頭受領の効率化 など
 
-## 8. 留意点
+## 8. 代理申込（source=STORE）のお預け予約 ※支払い前に必要
+代理申込は「依頼 → **顧客がカードをお預け（店頭/郵送）** → スタッフが明細入力・料金確定 → 支払い」の順。
+よって**お預け予約は支払い前に行う**。通常申込（CUSTOMER）の「支払い済みのみ予約可」とは条件が異なる。
+
+- 予約対象の判定（リスト/edit/Action）:
+  - `source=STORE` … `status != CANCELLED` なら**支払い前でも予約可**
+  - `source=CUSTOMER` … 従来どおり `status not in (DRAFT,CANCELLED)` かつ 決済成功
+- 代理申込は作成時 `status=DRAFT`／カード明細なし。リスト/レシートでは「代理申込（スタッフが明細入力）」と表示し、レシートのカード明細は「お預け後に入力」と案内。
+- 代理申込の依頼完了画面（`StoreRequestForm`）から **`/mypage/submission-booking/[applicationId]/edit`** へ誘導（`createStoreRequest` が `applicationId` を返す）。
+
+## 9. 留意点
 - 認可: 自分の申込/予約のみ閲覧・編集（[ADR-0005] に倣いページ/Action側で `customerId` 一致を確認）。
 - 予約可能日: `SubmissionCalendarDay`（休業日 `isClosed` / 発送日 `isShippingDay`）を edit のカレンダーに反映（既存ロジック流用）。
-- 既存挙動（料金・ステータス17段階・決済）は変更しない（[AGENTS.md §7]）。
+- 既存挙動（料金・ステータス17段階・通常申込の決済ゲート）は変更しない。代理申込の予約解放のみ `source=STORE` に限定して追加（[AGENTS.md §7]、ユーザー承認済み）。

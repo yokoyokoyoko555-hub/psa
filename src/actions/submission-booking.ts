@@ -67,11 +67,17 @@ export async function upsertSubmissionBooking(
     include: { payments: { select: { status: true } } },
   });
   if (!application) return { success: false, error: "申込が見つかりません" };
-  if (application.status === "DRAFT" || application.status === "CANCELLED") {
+  if (application.status === "CANCELLED") {
     return { success: false, error: "この申込は予約できません" };
   }
-  if (!application.payments.some((p) => p.status === "SUCCEEDED")) {
-    return { success: false, error: "お支払い完了後に予約できます" };
+  // 代理申込(STORE)はカードお預けが先のため支払い前でも予約可。通常(CUSTOMER)は支払い済みのみ。
+  if (application.source !== "STORE") {
+    if (application.status === "DRAFT") {
+      return { success: false, error: "この申込は予約できません" };
+    }
+    if (!application.payments.some((p) => p.status === "SUCCEEDED")) {
+      return { success: false, error: "お支払い完了後に予約できます" };
+    }
   }
 
   const booking = await prisma.submissionBooking.upsert({
