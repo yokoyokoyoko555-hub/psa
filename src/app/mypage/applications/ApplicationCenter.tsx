@@ -12,12 +12,26 @@ export interface AppRow {
   serviceLevel: string; // 表示用ラベル or "-"
   createdAt: string; // ISO
   status: string;
+  source: string; // CUSTOMER | STORE
   isDraft: boolean;
 }
 
 function fmt(iso: string) {
   const d = new Date(iso);
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function SourceBadge({ source }: { source: string }) {
+  const isStore = source === "STORE";
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
+        isStore ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"
+      }`}
+    >
+      {isStore ? "代理入力" : "自己入力"}
+    </span>
+  );
 }
 
 export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
@@ -67,7 +81,10 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
               >
                 <div>
                   <span className="font-mono text-xs text-gray-400">{a.applicationNo}</span>
-                  <p className="font-medium text-gray-900">{a.cardCount}枚 / {a.serviceLevel}</p>
+                  <p className="font-medium text-gray-900 flex items-center gap-2">
+                    {a.cardCount}枚 / {a.serviceLevel}
+                    <SourceBadge source={a.source} />
+                  </p>
                 </div>
                 <span className="text-sm text-gray-500">{fmt(a.createdAt)}</span>
               </Link>
@@ -105,7 +122,7 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">申込</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium">プレビュー表示</th>
+                  <th className="text-left px-4 py-3 text-gray-500 font-medium">種別</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">サービスレベル</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">作成日</th>
                   <th className="px-4 py-3"></th>
@@ -114,26 +131,39 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
               <tbody className="divide-y divide-gray-100">
                 {drafts.map((a) => (
                   <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 font-medium text-gray-900">{a.cardCount} 枚</td>
-                    <td className="px-4 py-4 text-gray-300">—</td>
+                    <td className="px-4 py-4 font-medium text-gray-900">
+                      {a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : `${a.cardCount} 枚`}
+                    </td>
+                    <td className="px-4 py-4"><SourceBadge source={a.source} /></td>
                     <td className="px-4 py-4 text-gray-700">{a.serviceLevel}</td>
                     <td className="px-4 py-4 text-gray-700">{fmt(a.createdAt)}</td>
                     <td className="px-4 py-4">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleDelete(a.id)}
-                          disabled={busy}
-                          className="w-9 h-9 rounded-full border border-gray-200 text-red-500 hover:bg-red-50 flex items-center justify-center"
-                          title="削除"
-                        >
-                          🗑
-                        </button>
-                        <button
-                          onClick={() => router.push(`/apply?draft=${a.id}`)}
-                          className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          続行
-                        </button>
+                        {a.source === "STORE" ? (
+                          <button
+                            onClick={() => router.push(`/mypage/submission-booking/${a.id}`)}
+                            className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            予約・確認
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleDelete(a.id)}
+                              disabled={busy}
+                              className="w-9 h-9 rounded-full border border-gray-200 text-red-500 hover:bg-red-50 flex items-center justify-center"
+                              title="削除"
+                            >
+                              🗑
+                            </button>
+                            <button
+                              onClick={() => router.push(`/apply?draft=${a.id}`)}
+                              className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                            >
+                              続行
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

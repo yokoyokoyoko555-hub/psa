@@ -41,6 +41,7 @@ export default async function ApplicationsPage() {
       serviceLevel: SERVICE_LABELS[app.serviceLevel] ?? app.serviceLevel,
       createdAt: new Date(app.createdAt).toISOString(),
       status: app.status,
+      source: app.source,
       isDraft: app.status === "DRAFT",
     };
   });
