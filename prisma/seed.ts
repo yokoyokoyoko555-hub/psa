@@ -88,7 +88,7 @@ async function main() {
     ],
   });
 
-  // Insurance rules
+  // Insurance rules（PSA US用に温存。PSA日本は下記の合算マトリクスを使用）
   await prisma.insuranceRule.deleteMany();
   await prisma.insuranceRule.createMany({
     data: [
@@ -98,6 +98,27 @@ async function main() {
       { minValue: 300001, maxValue: 500000, fee: 2000, sortOrder: 3 },
       { minValue: 500001, fee: 0, feeRate: 0.5, sortOrder: 4 },
     ],
+  });
+
+  // 送料・保険 合算マトリクス（PSA日本）。申告価格合計帯 × 枚数帯。26+は基準額+加算単価×(枚数-25)。ADR-0015
+  const siBands = [
+    { min: 0, max: 175000, f8: 1900, f25: 2400, sur: 25 },
+    { min: 175001, max: 1000000, f8: 3400, f25: 3900, sur: 25 },
+    { min: 1000001, max: 2500000, f8: 4200, f25: 4700, sur: 25 },
+    { min: 2500001, max: 4500000, f8: 4900, f25: 5400, sur: 25 },
+    { min: 4500001, max: 10000000, f8: 6100, f25: 6600, sur: 25 },
+    { min: 10000001, max: 15000000, f8: 6900, f25: 7400, sur: 50 },
+    { min: 15000001, max: 20000000, f8: 8400, f25: 8900, sur: 50 },
+    { min: 20000001, max: 30000000, f8: 12500, f25: 12900, sur: 50 },
+    { min: 30000001, max: null as number | null, f8: 13600, f25: 14200, sur: 50 },
+  ];
+  await prisma.shippingInsuranceRate.deleteMany({ where: { region: "PSA_JP" } });
+  await prisma.shippingInsuranceRate.createMany({
+    data: siBands.flatMap((b, i) => [
+      { region: "PSA_JP" as const, minValue: b.min, maxValue: b.max, qtyMin: 1, qtyMax: 8, fee: b.f8, perCardSurcharge: 0, sortOrder: i * 3 },
+      { region: "PSA_JP" as const, minValue: b.min, maxValue: b.max, qtyMin: 9, qtyMax: 25, fee: b.f25, perCardSurcharge: 0, sortOrder: i * 3 + 1 },
+      { region: "PSA_JP" as const, minValue: b.min, maxValue: b.max, qtyMin: 26, qtyMax: null, fee: b.f25, perCardSurcharge: b.sur, sortOrder: i * 3 + 2 },
+    ]),
   });
 
   // Test customer

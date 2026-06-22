@@ -487,7 +487,8 @@ model ServicePrice {
   serviceLevel     ServiceLevel
   region           ServiceRegion @default(PSA_JP)
   pricePerCard     Int // 1枚あたり鑑定料（円）= 顧客請求額
-  agencyFee        Int // 代行手数料（円）= 当社入力(STORE)時のみ加算
+  agencyFee        Int // 代理入力料金（円/枚）= 代理入力(STORE)時のみ加算
+  handlingFee      Int           @default(0) // 事務手数料（円/申込）。ADR-0015
   maxDeclaredValue Int? // 申告価格の上限（円）。nullは上限なし
   isActive         Boolean       @default(true)
   updatedAt        DateTime      @updatedAt
@@ -495,6 +496,25 @@ model ServicePrice {
 
   @@unique([serviceLevel, region])
   @@map("service_prices")
+}
+
+// 送料・保険 合算マトリクス（申告価格合計帯 × 枚数帯 → 金額）。PSA日本向け。ADR-0015 / PRICING.md
+model ShippingInsuranceRate {
+  id               String        @id @default(cuid())
+  region           ServiceRegion @default(PSA_JP)
+  minValue         Int // 申告価格合計の下限（円）
+  maxValue         Int? // 上限（null=上限なし）
+  qtyMin           Int // 枚数下限（例 1 / 9 / 26）
+  qtyMax           Int? // 枚数上限（null=上限なし）
+  fee              Int // セル金額（円）。26+帯では基準額（=9-25帯）
+  perCardSurcharge Int           @default(0) // 26+帯の加算単価（円/枚）。通常帯は0
+  sortOrder        Int           @default(0)
+  isActive         Boolean       @default(true)
+  updatedAt        DateTime      @updatedAt
+  updatedBy        String?
+
+  @@index([region])
+  @@map("shipping_insurance_rates")
 }
 
 // ===== SHIPPING RULES (送料設定) =====
