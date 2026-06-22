@@ -35,8 +35,12 @@ export default async function CenteringPage({
           href="/mypage/centering/measure"
           className="block bg-brand-600 text-white rounded-2xl p-6 hover:bg-brand-700 transition"
         >
-          <p className="text-lg font-bold">📷 測定する（無料）</p>
-          <p className="text-sm text-white/80 mt-1">カードの表裏を撮影し、ガイドを合わせてセンタリングを測定します</p>
+          <p className="text-lg font-bold">📷 測定する{aiEnabled ? "" : "（無料）"}</p>
+          <p className="text-sm text-white/80 mt-1">
+            {aiEnabled
+              ? "撮影／取り込みでAIが枠を自動検出し、瞬時に測定します"
+              : "カードの表裏を撮影し、ガイドを合わせてセンタリングを測定します"}
+          </p>
         </Link>
 
         {subscribed === "1" && !aiEnabled && (

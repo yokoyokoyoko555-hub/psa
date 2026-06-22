@@ -105,8 +105,10 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
         } else {
           setDetectMsg("自動検出できませんでした。手動で合わせてください。");
         }
-      } catch {
-        setDetectMsg("自動検出に失敗しました。手動で合わせてください。");
+      } catch (e) {
+        setDetectMsg(
+          "自動検出に失敗しました（" + (e instanceof Error ? e.message : "不明") + "）。手動で合わせてください。",
+        );
       } finally {
         setDetecting(false);
       }
@@ -257,7 +259,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
           </div>
         ) : (
           <>
-            <div className="relative bg-black rounded-xl overflow-hidden aspect-[3/4] flex items-center justify-center">
+            <div className="relative bg-black rounded-xl overflow-hidden h-[52vh] max-h-[520px] flex items-center justify-center">
               <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="border-2 border-dashed border-white/70 rounded-lg" style={{ width: "62%", height: "82%" }} />

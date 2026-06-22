@@ -2,7 +2,7 @@
 // OpenCV.js（WASM, 約8MB）をクライアントで遅延ロードする。AI測定画面でのみ読み込む。
 // 設計: docs/CENTERING_TOOL.md / ADR-0013（端末内自動検出）。
 
-const CV_URL = "https://docs.opencv.org/4.10.0/opencv.js";
+const CV_URL = "https://docs.opencv.org/4.x/opencv.js";
 let loadPromise: Promise<any> | null = null;
 
 export function loadOpenCv(): Promise<any> {
