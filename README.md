@@ -16,6 +16,7 @@
 | [docs/API.md](docs/API.md) | APIルート・Server Actions仕様 |
 | [docs/SECURITY.md](docs/SECURITY.md) | セキュリティ設計 |
 | [docs/CENTERING_TOOL.md](docs/CENTERING_TOOL.md) | **センタリング測定ツール（月額550円サブスク）設計書**（[ADR-0012](docs/DECISIONS.md)） |
+| [docs/SUBMISSION_BOOKING.md](docs/SUBMISSION_BOOKING.md) | **カード提出予約 リファイン設計書**（申込起点リスト＋店頭提示レシート。[ADR-0014](docs/DECISIONS.md)） |
 | [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) | Codex等へ渡す一枚要約 |
 
 ## 技術スタック

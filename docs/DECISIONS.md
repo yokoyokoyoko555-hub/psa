@@ -132,5 +132,17 @@
   - `CenteringMeasurement` に `method`（MANUAL / AI）を追加し測定手段を記録。
 - 影響: `/mypage/centering` のゲート再構成（手動開放・AIのみ課金）。schema に `method` 追加（db push）。Stripe継続Price（¥550）作成は引き続き要（Phase 0）。AIの自動検出実装（CVライブラリ選定: OpenCV.js 等）は別実装。`CENTERING_DEV_UNLOCK=true` は「AI機能の開発開放」用に意味を引き継ぐ。
 
+## ADR-0014: カード提出予約を申込起点のリスト型に再設計＋店頭提示レシート
+- 日付: 2026-06-23
+- 状態: Accepted（設計確定・未実装）。詳細は [SUBMISSION_BOOKING.md](SUBMISSION_BOOKING.md)。
+- 文脈: 決済後の提出予約がカレンダー起点で「どの申込の予約か」が分かりにくい。予約完了後の着地、既存予約の管理、店頭持込時の現物照合の手段が不足。
+- 決定:
+  - 予約トップを**支払済み申込のリスト**に変更（申込番号・枚数・金額・予約状態）。カレンダーは選択した申込専用に従属表示（単一申込の日時/方法選択）。
+  - 予約保存後は**予約詳細ページ `/mypage/submission-booking/[applicationId]`** へ遷移（完了画面兼用）。一覧＋詳細で変更・キャンセル。
+  - 店頭提示は**QRなしのレシート**とし、**カード明細リスト**を表示して店員が現物と面前照合する用途に最適化（QRは現物照合にならないため不採用）。
+  - スキーマは**変更しない**（予約は `SubmissionBooking.applicationId @unique` で既に申込単位。カード明細は `Card` から取得）。既存Actions（`upsertSubmissionBooking`/`cancelSubmissionBooking`）を流用。
+  - 段階: Phase1=リスト化＋日時選択＋詳細遷移、Phase2=詳細を店頭提示レシート化（明細・印刷対応）。QRスキャン受領は本スコープ外（将来別ADR）。
+- 影響: `/mypage/submission-booking` のUI刷新、新規ルート2つ（`[applicationId]` / `[applicationId]/edit`）、`BookingCalendar` の簡素化。管理側・決済・ステータス遷移は不変。
+
 
 
