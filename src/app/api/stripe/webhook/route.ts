@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
   let event: Stripe.Event;
   try {
     event = constructWebhookEvent(body, signature);
-  } catch {
+  } catch (err) {
+    console.error("Stripe webhook signature verification failed:", err);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
@@ -167,16 +168,28 @@ async function upsertSubscription(sub: Stripe.Subscription) {
   const customer = await prisma.customer.findFirst({
     where: { stripeCustomerId: sub.customer as string },
   });
-  if (!customer) return;
+  if (!customer) {
+    console.error("Webhook: customer not found for stripeCustomerId", sub.customer);
+    return;
+  }
 
   const up = String(sub.status).toUpperCase();
   // 未知ステータス（paused等）は ACTIVE/TRIALING に該当させず PAST_DUE 扱い＝利用不可側へ
   const status = (SUB_STATUSES.includes(up) ? up : "PAST_DUE") as never;
 
-  // current_period_end はStripeバージョン差を吸収するため緩く参照
-  const cpe = (sub as unknown as { current_period_end?: number }).current_period_end;
-  const periodEnd = new Date((cpe ?? Math.floor(Date.now() / 1000)) * 1000);
+  // current_period_end はStripeのAPIバージョン差で top-level / items のどちらかにある。
+  // 両方無ければ「即無効化」を避けるため約31日後を仮置き（後続イベントで正される）。
+  const subAny = sub as unknown as {
+    current_period_end?: number;
+    items?: { data?: { current_period_end?: number }[] };
+  };
+  const cpe = subAny.current_period_end ?? subAny.items?.data?.[0]?.current_period_end;
+  const periodEnd = cpe
+    ? new Date(cpe * 1000)
+    : new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
   const priceId = sub.items?.data?.[0]?.price?.id ?? "";
+
+  console.log("Webhook upsertSubscription", { sub: sub.id, status: up, periodEnd });
 
   await prisma.subscription.upsert({
     where: { stripeSubscriptionId: sub.id },
