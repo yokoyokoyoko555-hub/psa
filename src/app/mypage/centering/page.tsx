@@ -27,7 +27,17 @@ export default async function CenteringPage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <CustomerHeader title="センタリング測定" />
+      <CustomerHeader
+        title="センタリング測定"
+        actions={
+          <Link
+            href="/apply"
+            className="shrink-0 bg-brand-600 text-white rounded-full px-4 py-1.5 text-sm font-bold hover:bg-brand-700 transition"
+          >
+            新規申込
+          </Link>
+        }
+      />
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* 無料の手動測定（誰でも利用可） */}
