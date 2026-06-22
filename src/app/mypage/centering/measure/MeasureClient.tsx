@@ -24,6 +24,8 @@ const DEFAULT_INNER: Quad = {
 const OUTER_COLOR = "#185FA5";
 const INNER_COLOR = "#BA7517";
 const CORNERS: Corner[] = ["tl", "tr", "br", "bl"];
+const DETECT_TIMEOUT_MS = 15000;
+const DETECT_TIMEOUT = Symbol("detect-timeout");
 
 export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
   const router = useRouter();
@@ -95,8 +97,17 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     const img = new Image();
     img.onload = async () => {
       try {
-        const res = await detectQuads(img);
+        const res = await Promise.race([
+          detectQuads(img),
+          new Promise<typeof DETECT_TIMEOUT>((resolve) => {
+            setTimeout(() => resolve(DETECT_TIMEOUT), DETECT_TIMEOUT_MS);
+          }),
+        ]);
         if (detectId.current !== myId) return; // キャンセル/再実行済み
+        if (res === DETECT_TIMEOUT) {
+          setDetectMsg("自動検出に時間がかかっているため、手動で合わせてください。");
+          return;
+        }
         if (res) {
           setOuter(res.outer);
           setInner(res.inner);
