@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { centeringFromQuads, estimateGrade, formatRatio, type Quad, type Centering } from "@/lib/centering";
+import { detectQuads } from "@/lib/centering-detect";
 import { saveCenteringMeasurement } from "@/actions/centering";
 
 type Step = "cap-front" | "adj-front" | "cap-back" | "adj-back" | "result";
@@ -44,6 +45,11 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // AI自動検出（aiEnabled時のみ）
+  const [detecting, setDetecting] = useState(false);
+  const [detectMsg, setDetectMsg] = useState("");
+  const [usedAi, setUsedAi] = useState(false);
+
   const capturing = step === "cap-front" || step === "cap-back";
   const adjusting = step === "adj-front" || step === "adj-back";
   const curImg = step === "adj-front" ? frontImg : backImg;
@@ -73,6 +79,34 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     setTarget("outer");
   }
 
+  function runDetect(url: string) {
+    setDetecting(true);
+    setDetectMsg("AI読み込み・解析中...");
+    const img = new Image();
+    img.onload = async () => {
+      try {
+        const res = await detectQuads(img);
+        if (res) {
+          setOuter(res.outer);
+          setInner(res.inner);
+          setUsedAi(true);
+          setDetectMsg("AIが枠を検出しました。ズレていれば微調整してください。");
+        } else {
+          setDetectMsg("自動検出できませんでした。手動で合わせてください。");
+        }
+      } catch {
+        setDetectMsg("自動検出に失敗しました。手動で合わせてください。");
+      } finally {
+        setDetecting(false);
+      }
+    };
+    img.onerror = () => {
+      setDetecting(false);
+      setDetectMsg("画像の読み込みに失敗しました。");
+    };
+    img.src = url;
+  }
+
   function acceptImage(url: string) {
     if (step === "cap-front") {
       setFrontImg(url);
@@ -83,6 +117,8 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
       startAdjust();
       setStep("adj-back");
     }
+    setDetectMsg("");
+    if (aiEnabled) runDetect(url);
   }
 
   function capture() {
@@ -156,7 +192,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     setSaving(true);
     setError("");
     const res = await saveCenteringMeasurement({
-      method: "MANUAL",
+      method: usedAi ? "AI" : "MANUAL",
       frontLR: front.lr,
       frontTB: front.tb,
       backLR: back?.lr,
@@ -173,6 +209,8 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
     setBack(null);
     setFrontImg(null);
     setBackImg(null);
+    setUsedAi(false);
+    setDetectMsg("");
     startAdjust();
     setStep("cap-front");
   }
@@ -185,7 +223,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
         <StepBadge step={step} />
         <p className="text-center text-sm text-gray-600">{isFront ? "表面" : "裏面"}を枠に合わせて撮影してください</p>
         {aiEnabled && (
-          <p className="text-center text-xs text-brand-600">✨ AIプラン有効（枠の自動検出は順次提供）</p>
+          <p className="text-center text-xs text-brand-600">✨ AIプラン有効：撮影後にAIが枠を自動検出します</p>
         )}
         {camError ? (
           <div className="space-y-3">
@@ -234,6 +272,7 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
             {target === "outer" ? "① 外周（カードの縁）" : "② 内枠（絵柄・フレームの縁）"}
           </p>
           <p className="text-xs text-gray-500">4つの隅を実際のカードの角にドラッグして合わせてください</p>
+          {detectMsg && <p className="text-xs text-brand-600">{detectMsg}</p>}
         </div>
 
         <div
@@ -300,7 +339,23 @@ export default function MeasureClient({ aiEnabled }: { aiEnabled: boolean }) {
               <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: 1, background: color, opacity: 0.8 }} />
             </div>
           )}
+
+          {detecting && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+              <span className="text-white text-sm font-bold">✨ AIで検出中...</span>
+            </div>
+          )}
         </div>
+
+        {aiEnabled && (
+          <button
+            onClick={() => curImg && runDetect(curImg)}
+            disabled={detecting}
+            className="w-full border border-brand-300 text-brand-700 rounded-lg py-2 text-sm hover:bg-brand-50 disabled:opacity-50"
+          >
+            ✨ AIで自動検出{usedAi ? "し直す" : ""}
+          </button>
+        )}
 
         <div className="flex gap-3">
           {target === "inner" ? (

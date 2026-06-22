@@ -186,13 +186,14 @@ iOS Safari注意: `getUserMedia` はHTTPS必須（本番は充足）、`<video p
 
 ### Phase 1 — 撮影＋測定（実装済）
 - [x] `/mypage/centering/measure`（client）: カメラ・ガイド枠・撮影・フォールバックアップロード
-- [x] 画像処理: 外周/内枠を**4隅で手動指定（台形対応）→ ホモグラフィで透視補正 → 余白算出**。操作は「外周→内枠」の2ステップ＋拡大ルーペ付き（`centeringFromQuads`）。**外周の自動CV検出のみ Phase 2 送り**
+- [x] 画像処理: 外周/内枠を**4隅指定（台形対応）→ ホモグラフィで透視補正 → 余白算出**（`centeringFromQuads`）。操作は「外周→内枠」2ステップ＋拡大ルーペ
+- [x] **AI自動検出（OpenCV.js, 端末内）**: 撮影後に外周＝最大の四角輪郭、内枠＝同心の四角輪郭を自動検出し四隅へ反映（`lib/opencv-loader.ts` / `lib/centering-detect.ts`）。失敗時は手動既定値にフォールバック。AIプラン(`aiEnabled`)時のみ自動実行＋「AIで自動検出し直す」ボタン
 - [x] 参考グレード対応表（`lib/centering.ts` 定数）＋判定（純関数）
 - [x] `actions/centering.ts`: `saveCenteringMeasurement()`（数値のみ）
 - [x] `/mypage/centering/[id]` 結果詳細＋免責、履歴一覧
 - [x] ゲート（`hasCenteringAccess`）を全ページ/Actionに適用。**Stripe未配線のため `CENTERING_DEV_UNLOCK=true` で開放**
 
-> Phase 1 は**4隅マニュアル指定＋ホモグラフィ透視補正**で実装（斜め/台形に写ったカードも測定可）。操作性のため「外周→内枠」2ステップ・大型ハンドル・拡大ルーペを採用。**外周の自動CV検出のみ Phase 2 送り**。利用ゲートは現状 `CENTERING_DEV_UNLOCK=true` を要求（本番開放は Phase 0 のサブスク配線で）。
+> Phase 1（手動）＋AI自動検出（OpenCV.js 端末内）まで実装済み。手動測定は無料で全ログインユーザーに開放、AI自動検出は `aiEnabled`（サブスク or `CENTERING_DEV_UNLOCK=true`）時のみ。Stripeサブスク配線（Phase 0）は引き続き残。OpenCV.js は `https://docs.opencv.org/4.10.0/opencv.js` をAI測定時のみ遅延ロード（CSP無しのため読込可）。内枠の自動検出精度向上（フルアート対応のML化）は将来課題。
 
 ### Phase 2 — 付加価値（将来・任意）
 - [ ] 内枠自動検出の精度向上（ML/セグメンテーション検討は新ADR）
