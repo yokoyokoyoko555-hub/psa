@@ -190,14 +190,14 @@ iOS Safari注意: `getUserMedia` はHTTPS必須（本番は充足）、`<video p
 ---
 
 ## 8. 実装タスク（Phase別）
-### Phase 0 — 課金基盤＋導線（測定なし）
-- [x] `schema.prisma`: `SubscriptionStatus` enum・`Subscription` モデル追加、`Customer` に relation（モデルのみ先行）
-- [ ] `lib/stripe.ts`: `createCheckoutSubscriptionSession()` / `createBillingPortalSession()`
-- [ ] `actions/subscription.ts`: 加入・Portal（`hasCenteringAccess()` は `actions/centering.ts` に実装済）
-- [ ] `/api/stripe/webhook`: subscription/invoice イベント追記
-- [x] `/mypage/centering`: 未加入/加入済の出し分け（**加入ボタンは現状 disabled「まもなく提供」**。Stripe配線で有効化）
+### Phase 0 — 課金基盤＋導線（コード実装済み。あとはStripe側設定＋env）
+- [x] `schema.prisma`: `SubscriptionStatus` enum・`Subscription` モデル追加、`Customer` に relation
+- [x] `lib/stripe.ts`: `createCheckoutSubscriptionSession()` / `createBillingPortalSession()`
+- [x] `actions/subscription.ts`: `startCenteringSubscription()`（Checkout） / `openBillingPortal()`（Portal）。`hasCenteringAccess()` は `actions/centering.ts`（ACTIVE/TRIALING かつ 期間内）
+- [x] `/api/stripe/webhook`: `customer.subscription.created/updated/deleted` で `Subscription` を upsert（invoice系は subscription.updated が renewal時に発火するため代替。既存 `payment_intent.*` は不変）
+- [x] `/mypage/centering`: 未加入→`SubscribeButton`（加入）／加入済→`ManageSubscriptionButton`（Portal）。`?subscribed=1` で反映待ち案内
 - [x] `/mypage`: クイックアクションに導線
-- [ ] env `STRIPE_CENTERING_PRICE_ID`、操作ログ（加入/解約）
+- [ ] **env `STRIPE_CENTERING_PRICE_ID` 設定**＋StripeでPrice作成・Portal有効化・Webhookエンドポイント登録（§テストモード手順）
 
 ### Phase 1 — 撮影＋測定（実装済）
 - [x] `/mypage/centering/measure`（client）: カメラ・ガイド枠・撮影・フォールバックアップロード
@@ -231,6 +231,16 @@ iOS Safari注意: `getUserMedia` はHTTPS必須（本番は充足）、`<video p
 2. Railwayに `STRIPE_CENTERING_PRICE_ID` を設定
 3. Customer Portal を有効化（解約・支払い方法変更を許可）
 4. Webhookに subscription/invoice 系イベントを追加（§5）
+
+### テストモードでの動作確認手順（推奨：本番化前にまずテストで）
+1. Stripeダッシュボードを **「テストモード」** に切替。
+2. **テスト用APIキー**を Railway env に設定: `STRIPE_SECRET_KEY=sk_test_...` / `STRIPE_PUBLISHABLE_KEY=pk_test_...`。
+3. テストモードで商品＋Price（¥550/月 recurring）を作成 → `STRIPE_CENTERING_PRICE_ID=price_...`(test) を設定。
+4. テストモードのWebhookエンドポイントを登録: `https://<本番ドメイン>/api/stripe/webhook`、イベントに `customer.subscription.created/updated/deleted`（既存の payment_intent.* も）。署名シークレットを `STRIPE_WEBHOOK_SECRET=whsec_...`(test) に設定。
+5. テストモードで **Customer Portal を有効化**（Settings → Billing → Customer portal）。
+6. マイページ→センタリング→「AIプランに加入する」→ Checkout で**テストカード `4242 4242 4242 4242`**（任意の将来日・任意CVC）で決済 → 戻ると数十秒で `aiEnabled` が true に（webhook反映）。
+7. `CENTERING_DEV_UNLOCK` は外してOK（実加入で開放されることを確認）。解約は「支払い・解約を管理」→ Portal から。
+> テストで問題なければ、本番モードのキー/Price/Webhook/Portal に差し替えるだけで本番稼働。
 
 ---
 

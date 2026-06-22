@@ -67,6 +67,32 @@ export async function chargeOffSession(params: {
   });
 }
 
+export async function createCheckoutSubscriptionSession(params: {
+  customerId: string;
+  priceId: string;
+  successUrl: string;
+  cancelUrl: string;
+}) {
+  return getStripe().checkout.sessions.create({
+    mode: "subscription",
+    customer: params.customerId,
+    line_items: [{ price: params.priceId, quantity: 1 }],
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    allow_promotion_codes: true,
+  });
+}
+
+export async function createBillingPortalSession(params: {
+  customerId: string;
+  returnUrl: string;
+}) {
+  return getStripe().billingPortal.sessions.create({
+    customer: params.customerId,
+    return_url: params.returnUrl,
+  });
+}
+
 export function constructWebhookEvent(payload: string | Buffer, signature: string) {
   return getStripe().webhooks.constructEvent(
     payload,

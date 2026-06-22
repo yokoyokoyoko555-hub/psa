@@ -38,6 +38,12 @@ export async function POST(req: NextRequest) {
         await handlePaymentMethodAttached(pm);
         break;
       }
+      case "customer.subscription.created":
+      case "customer.subscription.updated":
+      case "customer.subscription.deleted": {
+        await upsertSubscription(event.data.object as Stripe.Subscription);
+        break;
+      }
     }
   } catch (err) {
     console.error("Webhook handler error:", err);
@@ -144,6 +150,51 @@ async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
       data: { status: "UPCHARGE_UNPAID" },
     });
   }
+}
+
+const SUB_STATUSES = [
+  "ACTIVE",
+  "TRIALING",
+  "PAST_DUE",
+  "CANCELED",
+  "INCOMPLETE",
+  "INCOMPLETE_EXPIRED",
+  "UNPAID",
+];
+
+// Stripe Subscription を自社 Subscription テーブルへ upsert（ADR-0013 / CENTERING_TOOL.md）
+async function upsertSubscription(sub: Stripe.Subscription) {
+  const customer = await prisma.customer.findFirst({
+    where: { stripeCustomerId: sub.customer as string },
+  });
+  if (!customer) return;
+
+  const up = String(sub.status).toUpperCase();
+  // 未知ステータス（paused等）は ACTIVE/TRIALING に該当させず PAST_DUE 扱い＝利用不可側へ
+  const status = (SUB_STATUSES.includes(up) ? up : "PAST_DUE") as never;
+
+  // current_period_end はStripeバージョン差を吸収するため緩く参照
+  const cpe = (sub as unknown as { current_period_end?: number }).current_period_end;
+  const periodEnd = new Date((cpe ?? Math.floor(Date.now() / 1000)) * 1000);
+  const priceId = sub.items?.data?.[0]?.price?.id ?? "";
+
+  await prisma.subscription.upsert({
+    where: { stripeSubscriptionId: sub.id },
+    create: {
+      customerId: customer.id,
+      stripeSubscriptionId: sub.id,
+      stripePriceId: priceId,
+      status,
+      currentPeriodEnd: periodEnd,
+      cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+    },
+    update: {
+      status,
+      stripePriceId: priceId,
+      currentPeriodEnd: periodEnd,
+      cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+    },
+  });
 }
 
 async function handlePaymentMethodAttached(pm: Stripe.PaymentMethod) {

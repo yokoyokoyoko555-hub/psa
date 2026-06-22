@@ -52,7 +52,7 @@
 - ✅ PSA申込CTA（測定結果→`/apply`。本丸事業への送客導線）
 - ✅ ①補正テレメトリ収集（AI提案 vs 確定の四隅座標を保存。画像は保存しない）
 - ✅ 手段別ゲート（手動=無料／AI=サブスク。現状 `CENTERING_DEV_UNLOCK=true` で開発開放）
-- ❌ **AIプランの課金配線（Phase 0）** — Stripe継続Price(¥550)・Checkout・Customer Portal・Webhook(subscription/invoice)・`hasCenteringAccess` 本番化。`CENTERING_DEV_UNLOCK` 撤去
+- 🟡 **AIプランの課金配線（Phase 0）** — **コード実装済み**（Checkout加入・Customer Portal・Webhookでの`Subscription`同期・加入/管理ボタン）。残: Stripeで Price作成＋`STRIPE_CENTERING_PRICE_ID` 設定＋Webhook登録＋Portal有効化（まずテストモード。CENTERING_TOOL.md §テストモード手順）。確認後 `CENTERING_DEV_UNLOCK` 撤去
 - 🟡 ①テレメトリの集計・可視化（管理画面 or クエリで AI提案 vs 確定のズレ分析→CV調整）
 - 🟡 測定→PSA申込の連携強化（`/apply` へカード情報を引き継ぎ事前入力・流入/転換の計測）
 - ❌ AI検出精度の改善（②画像オプトイン収集→③ML端末内推論。フルアートの内枠検出強化）
@@ -65,7 +65,7 @@
 ### 優先度: 高
 - 🟡 **本番SMTP接続**（最優先）— メール認証（登録・確認リンク24h）／**パスワードリセット（1h）**／各種通知の実送信に必須。SMTP未設定時はテスト用に画面へリンク表示する実装。本番値の設定が必要
 - 🟡 **本番Stripe接続＋シークレット差し替え** — `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`、テストPW `Admin1234!` 等、`ENCRYPTION_KEY`/`NEXTAUTH_SECRET` の本番値確認
-- ❌ **AIプラン課金配線（Phase 0）** — センタリングAIの有料化（上記「センタリング測定ツール」参照）
+- 🟡 **AIプラン課金配線（Phase 0）** — コード実装済み。Stripe側設定（テストモード）で稼働（上記「センタリング測定ツール」参照）
 - 🟡 **代理申込の決済通電** — 画面・データ・フローは実装済み（顧客の依頼→管理「要対応」→当社がカード明細/料金入力）。残りは「当社が請求作成→顧客が請求を決済する」導線（[ADR-0011](DECISIONS.md)）
 - 🟡 **Stripe Elements 統合** — 通常申込の実カード決済は実装済み。代理申込の顧客決済ページへの横展開は未実装
 - ❌ **PSA US の正式料金** — 現在JPと同額の暫定値。管理画面→設定で正式値に更新

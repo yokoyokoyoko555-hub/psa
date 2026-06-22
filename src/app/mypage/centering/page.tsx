@@ -6,14 +6,20 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { getCenteringAccess, getMyMeasurements } from "@/actions/centering";
 import { formatRatio } from "@/lib/centering";
 import CustomerHeader from "@/components/CustomerHeader";
+import { SubscribeButton, ManageSubscriptionButton } from "./CenteringPlanButtons";
 import { format } from "date-fns";
 
 export const metadata = { title: "センタリング測定 | トレカビンクス" };
 
-export default async function CenteringPage() {
+export default async function CenteringPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ subscribed?: string }>;
+}) {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
 
+  const { subscribed } = await searchParams;
   const [aiEnabled, measurements] = await Promise.all([
     getCenteringAccess(),
     getMyMeasurements(),
@@ -33,14 +39,23 @@ export default async function CenteringPage() {
           <p className="text-sm text-white/80 mt-1">カードの表裏を撮影し、ガイドを合わせてセンタリングを測定します</p>
         </Link>
 
+        {subscribed === "1" && !aiEnabled && (
+          <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 text-sm">
+            ご加入ありがとうございます。反映まで少し時間がかかる場合があります。数十秒後にページを更新してください。
+          </div>
+        )}
+
         {/* AIプラン案内 / 利用中 */}
         {aiEnabled ? (
-          <div className="bg-white rounded-2xl border border-brand-200 p-5 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center text-brand-600">✨</div>
-            <div>
-              <p className="font-bold text-gray-900">AIプラン利用中</p>
-              <p className="text-sm text-gray-500">撮影するとAIが枠を自動検出し、瞬時に測定します</p>
+          <div className="bg-white rounded-2xl border border-brand-200 p-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-brand-50 flex items-center justify-center text-brand-600">✨</div>
+              <div>
+                <p className="font-bold text-gray-900">AIプラン利用中</p>
+                <p className="text-sm text-gray-500">撮影/取り込みでAIが枠を自動検出し、瞬時に測定</p>
+              </div>
             </div>
+            <ManageSubscriptionButton />
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
@@ -51,13 +66,8 @@ export default async function CenteringPage() {
                 <p className="text-sm text-gray-500">AIがカード枠を自動検出。ガイド合わせ不要で、誰でも瞬時に測定</p>
               </div>
             </div>
-            <button
-              disabled
-              className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg opacity-50 cursor-not-allowed"
-            >
-              AIプランに加入する（まもなく提供）
-            </button>
-            <p className="text-xs text-gray-400 text-center">※ AIプランの加入機能は準備中です。手動の測定は無料でご利用いただけます。</p>
+            <SubscribeButton />
+            <p className="text-xs text-gray-400 text-center">手動の測定は無料でご利用いただけます。いつでも解約可能です。</p>
           </div>
         )}
 
