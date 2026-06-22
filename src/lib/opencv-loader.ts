@@ -13,9 +13,30 @@ export function loadOpenCv(): Promise<any> {
 
   loadPromise = new Promise<any>((resolve, reject) => {
     const w = window as any;
+    let settled = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      if (pollTimer) clearInterval(pollTimer);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      pollTimer = null;
+      timeoutTimer = null;
+    };
+
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      loadPromise = null;
+      reject(err);
+    };
 
     const ready = (c: any): boolean => {
+      if (settled) return true;
       if (c && c.Mat) {
+        settled = true;
+        cleanup();
         w.cv = c;
         resolve(c);
         return true;
@@ -30,30 +51,34 @@ export function loadOpenCv(): Promise<any> {
       try {
         let c = w.cv;
         if (!c) {
-          reject(new Error("opencv: cv undefined after load"));
+          fail(new Error("opencv: cv undefined after load"));
           return;
         }
         // Promise形式 / ファクトリ関数形式を一度だけ解決
-        if (typeof c.then === "function") c = await c;
-        else if (typeof c === "function") c = await c();
+        if (typeof c.then === "function") c = await Promise.race([c, timeout()]);
+        else if (typeof c === "function") c = await Promise.race([c(), timeout()]);
 
         if (ready(c)) return;
 
         // Module形式: 初期化完了を待つ（コールバック＋ポーリングの二段構え）
         c.onRuntimeInitialized = () => ready(c);
         const start = Date.now();
-        const iv = setInterval(() => {
+        pollTimer = setInterval(() => {
           if (ready(c)) {
-            clearInterval(iv);
+            cleanup();
           } else if (Date.now() - start > TIMEOUT_MS) {
-            clearInterval(iv);
-            reject(new Error("opencv: init timeout"));
+            fail(new Error("opencv: init timeout"));
           }
         }, 200);
       } catch (e) {
-        reject(e instanceof Error ? e : new Error("opencv: init failed"));
+        fail(e instanceof Error ? e : new Error("opencv: init failed"));
       }
     };
+
+    const timeout = () =>
+      new Promise<never>((_, rejectTimeout) => {
+        timeoutTimer = setTimeout(() => rejectTimeout(new Error("opencv: load timeout")), TIMEOUT_MS);
+      });
 
     const existing = document.getElementById("opencv-js-script") as HTMLScriptElement | null;
     if (existing) {
@@ -68,10 +93,10 @@ export function loadOpenCv(): Promise<any> {
     script.src = CV_URL;
     script.async = true;
     script.onload = handleLoaded;
-    script.onerror = () => reject(new Error("opencv: script load failed"));
+    script.onerror = () => fail(new Error("opencv: script load failed"));
     document.body.appendChild(script);
 
-    setTimeout(() => reject(new Error("opencv: load timeout")), TIMEOUT_MS);
+    timeoutTimer = setTimeout(() => fail(new Error("opencv: load timeout")), TIMEOUT_MS);
   });
 
   return loadPromise;
