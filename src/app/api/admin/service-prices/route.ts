@@ -14,6 +14,7 @@ export async function PUT(req: NextRequest) {
     id: string;
     pricePerCard: number;
     agencyFee: number;
+    handlingFee: number;
     maxDeclaredValue: number | null;
     isActive: boolean;
   }[] = await req.json();
@@ -24,6 +25,7 @@ export async function PUT(req: NextRequest) {
       data: {
         pricePerCard: u.pricePerCard,
         agencyFee: u.agencyFee,
+        handlingFee: u.handlingFee ?? 0,
         maxDeclaredValue: u.maxDeclaredValue,
         isActive: u.isActive,
       },

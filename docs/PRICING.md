@@ -78,9 +78,11 @@
 2. **店頭受取でもマトリクス満額**を請求（送料・保険は返却方法に依存しない＝`ShippingInsuranceRate` は returnMethod を持たない）。
 
 ## 10. 段階
-1. schema（ServicePrice.handlingFee / ShippingInsuranceRate）
-2. fee-calculator 改修＋seed更新
-3. 管理画面（料金設定UI・マトリクスエディタ）
-4. 顧客画面（内訳表示）
+1. ✅ schema（ServicePrice.handlingFee / ShippingInsuranceRate）
+2. ✅ fee-calculator 改修＋seed更新（未投入時は従来ロジックにフォールバック）
+3. ✅ 管理画面（料金設定UI: 代理入力料金・事務手数料、送料保険マトリクスエディタ `ShippingInsuranceForm`＋`saveShippingInsuranceRates`）
+4. ⬜ 顧客画面（内訳表示: 送料・保険料／事務手数料／代理入力料金）
+
+> 有効化: 管理画面「送料・保険料設定（PSA日本）」で価格帯を保存すると、計算がマトリクスに切替（未保存時は従来ロジック）。
 
 > 料金ロジック変更のため [AGENTS.md §7] に基づきユーザー承認のうえ実施。§9 の2点を確定後に実装着手。
