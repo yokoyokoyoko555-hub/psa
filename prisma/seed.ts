@@ -100,6 +100,13 @@ async function main() {
     ],
   });
 
+  // 料金共通設定（事務手数料・一律）。upsertで既存編集値を保持。ADR-0015
+  await prisma.pricingSetting.upsert({
+    where: { id: "default" },
+    update: {},
+    create: { id: "default", handlingFee: 0 },
+  });
+
   // 送料・保険 合算マトリクス（PSA日本）。申告価格合計帯 × 枚数帯。26+は基準額+加算単価×(枚数-25)。ADR-0015
   const siBands = [
     { min: 0, max: 175000, f8: 1900, f25: 2400, sur: 25 },

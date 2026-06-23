@@ -488,7 +488,6 @@ model ServicePrice {
   region           ServiceRegion @default(PSA_JP)
   pricePerCard     Int // 1枚あたり鑑定料（円）= 顧客請求額
   agencyFee        Int // 代理入力料金（円/枚）= 代理入力(STORE)時のみ加算
-  handlingFee      Int           @default(0) // 事務手数料（円/申込）。ADR-0015
   maxDeclaredValue Int? // 申告価格の上限（円）。nullは上限なし
   isActive         Boolean       @default(true)
   updatedAt        DateTime      @updatedAt
@@ -496,6 +495,16 @@ model ServicePrice {
 
   @@unique([serviceLevel, region])
   @@map("service_prices")
+}
+
+// 料金の共通設定（シングルトン: id="default"）。事務手数料はサービス共通の一律額。ADR-0015
+model PricingSetting {
+  id          String   @id @default("default")
+  handlingFee Int      @default(0) // 事務手数料（円/申込・一律）。PSA日本に適用
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@map("pricing_settings")
 }
 
 // 送料・保険 合算マトリクス（申告価格合計帯 × 枚数帯 → 金額）。PSA日本向け。ADR-0015 / PRICING.md

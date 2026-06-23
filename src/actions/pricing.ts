@@ -47,3 +47,18 @@ export async function saveShippingInsuranceRates(
   revalidatePath("/admin/settings");
   return { success: true };
 }
+
+/** 事務手数料（サービス共通・一律）を保存 */
+export async function saveHandlingFee(
+  handlingFee: number
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin();
+  const fee = Math.max(0, Math.floor(Number(handlingFee) || 0));
+  await prisma.pricingSetting.upsert({
+    where: { id: "default" },
+    update: { handlingFee: fee },
+    create: { id: "default", handlingFee: fee },
+  });
+  revalidatePath("/admin/settings");
+  return { success: true };
+}

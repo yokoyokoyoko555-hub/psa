@@ -89,7 +89,10 @@ export async function calculateFees(params: {
   const psaFeeTotal = servicePrice.pricePerCard * params.cardCount;
   const psaCostTotal = Math.floor(psaFeeTotal * PSA_COST_RATE);
   const agencyFeeTotal = params.applyAgencyFee ? servicePrice.agencyFee * params.cardCount : 0;
-  const handlingFee = servicePrice.handlingFee;
+
+  // 事務手数料: サービス共通の一律額（PSA日本のみ適用。USは据え置きで0）
+  const handlingFee =
+    params.region === "PSA_JP" ? (await prisma.pricingSetting.findFirst())?.handlingFee ?? 0 : 0;
 
   // 送料・保険: PSA日本は合算マトリクス（未投入時は従来ロジックにフォールバック）、USは従来ロジック
   const legacy = () => calcShippingInsuranceLegacy({ returnMethod: params.returnMethod, totalDeclaredValue: params.totalDeclaredValue });
