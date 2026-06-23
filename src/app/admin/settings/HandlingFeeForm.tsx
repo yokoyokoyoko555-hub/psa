@@ -33,6 +33,9 @@ export default function HandlingFeeForm({ handlingFee }: { handlingFee: number }
           className="w-32 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
         />
         <span className="text-sm text-gray-600">円 / 申込</span>
+      </div>
+      <div className="flex items-center justify-end gap-3">
+        {message && <span className="text-green-700 text-sm">{message}</span>}
         <button
           type="button"
           onClick={save}
@@ -41,7 +44,6 @@ export default function HandlingFeeForm({ handlingFee }: { handlingFee: number }
         >
           {isPending ? "保存中..." : "保存"}
         </button>
-        {message && <span className="text-green-700 text-sm">{message}</span>}
       </div>
     </div>
   );

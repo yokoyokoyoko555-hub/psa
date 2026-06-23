@@ -185,7 +185,8 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
         </table>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-end gap-3">
+        {saved && <span className="text-green-700 text-sm">保存しました</span>}
         <button
           type="submit"
           disabled={loading}
@@ -193,7 +194,6 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
         >
           {loading ? "保存中..." : "保存"}
         </button>
-        {saved && <span className="text-green-700 text-sm">保存しました</span>}
       </div>
     </form>
   );

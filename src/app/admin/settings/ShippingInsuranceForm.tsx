@@ -124,10 +124,12 @@ export default function ShippingInsuranceForm({ rates }: { rates: ShippingInsura
         <button type="button" onClick={addBand} className="border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
           ＋ 価格帯を追加
         </button>
-        <button type="button" onClick={save} disabled={isPending} className="bg-brand-600 text-white font-bold px-6 py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 text-sm">
-          {isPending ? "保存中..." : "保存"}
-        </button>
-        {message && <span className="text-green-700 text-sm">{message}</span>}
+        <div className="ml-auto flex items-center gap-3">
+          {message && <span className="text-green-700 text-sm">{message}</span>}
+          <button type="button" onClick={save} disabled={isPending} className="bg-brand-600 text-white font-bold px-6 py-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 text-sm">
+            {isPending ? "保存中..." : "保存"}
+          </button>
+        </div>
       </div>
     </div>
   );
