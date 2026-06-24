@@ -92,15 +92,19 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <div className="flex justify-between text-gray-600">
               <span>PSA鑑定料</span><span>¥{application.psaFeeTotal.toLocaleString()}</span>
             </div>
+            {application.agencyFeeTotal > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>代理入力料金</span><span>¥{application.agencyFeeTotal.toLocaleString()}</span>
+              </div>
+            )}
             <div className="flex justify-between text-gray-600">
-              <span>代行手数料</span><span>¥{application.agencyFeeTotal.toLocaleString()}</span>
+              <span>送料・保険料</span><span>¥{(application.shippingFee + application.insuranceFee).toLocaleString()}</span>
             </div>
-            <div className="flex justify-between text-gray-600">
-              <span>送料</span><span>¥{application.shippingFee.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between text-gray-600">
-              <span>保険料</span><span>¥{application.insuranceFee.toLocaleString()}</span>
-            </div>
+            {application.handlingFee > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>事務手数料</span><span>¥{application.handlingFee.toLocaleString()}</span>
+              </div>
+            )}
             <div className="flex justify-between text-gray-600">
               <span>消費税</span><span>¥{application.taxAmount.toLocaleString()}</span>
             </div>

@@ -144,16 +144,16 @@ export default async function AdminApplicationDetailPage({
                 <p className="font-medium">¥{application.psaFeeTotal.toLocaleString()}</p>
               </div>
               <div>
-                <p className="text-gray-500">代行手数料</p>
+                <p className="text-gray-500">代理入力料金</p>
                 <p className="font-medium">¥{application.agencyFeeTotal.toLocaleString()}</p>
               </div>
               <div>
-                <p className="text-gray-500">送料</p>
-                <p className="font-medium">¥{application.shippingFee.toLocaleString()}</p>
+                <p className="text-gray-500">送料・保険料</p>
+                <p className="font-medium">¥{(application.shippingFee + application.insuranceFee).toLocaleString()}</p>
               </div>
               <div>
-                <p className="text-gray-500">保険料</p>
-                <p className="font-medium">¥{application.insuranceFee.toLocaleString()}</p>
+                <p className="text-gray-500">事務手数料</p>
+                <p className="font-medium">¥{application.handlingFee.toLocaleString()}</p>
               </div>
             </div>
           </div>

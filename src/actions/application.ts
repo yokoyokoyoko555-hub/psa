@@ -594,6 +594,28 @@ export async function deleteApplication(
   return { success: true };
 }
 
+/** 申込フォームのプレビュー用: サーバーと同じ計算式で料金内訳を返す（顧客入力=代理料金なし） */
+export async function previewFees(input: {
+  serviceLevel: ServiceLevel;
+  region: ServiceRegion;
+  returnMethod: ReturnMethod;
+  cardCount: number;
+  totalDeclaredValue: number;
+}) {
+  try {
+    return await calculateFees({
+      serviceLevel: input.serviceLevel,
+      region: input.region,
+      returnMethod: input.returnMethod,
+      cardCount: input.cardCount,
+      totalDeclaredValue: input.totalDeclaredValue,
+      applyAgencyFee: false,
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function getMyApplications() {
   const customer = await getCustomerSession();
   if (!customer) return [];

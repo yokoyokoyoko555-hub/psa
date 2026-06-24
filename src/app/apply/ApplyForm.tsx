@@ -9,7 +9,8 @@ declare global {
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { confirmApplicationPayment, createApplication, saveDraft as saveDraftServer } from "@/actions/application";
+import { confirmApplicationPayment, createApplication, previewFees, saveDraft as saveDraftServer } from "@/actions/application";
+import type { FeeBreakdown } from "@/lib/fee-calculator";
 
 export type InitialDraft = {
   draftId: string;
@@ -56,7 +57,6 @@ const REGION_LABELS: Record<ServiceRegion, string> = {
   PSA_US: "PSA US",
 };
 
-const TAX_RATE = 0.1;
 const AGREEMENT_VERSION = "v1.0";
 const AGREEMENT_TEXT = `PSA鑑定受付代行サービス利用規約
 
@@ -241,31 +241,24 @@ export default function ApplyForm({
 
   const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
   const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
-  const psaFeeTotal = (servicePrice?.pricePerCard ?? 0) * cardCount;
-  const agencyFeeTotal = 0; // 顧客入力は手数料なし
 
-  const shippingRule =
-    shippingRules.find((r) => {
-      if (r.returnMethod !== returnMethod) return false;
-      const over = totalDeclaredValue >= r.minAmount;
-      const under = r.maxAmount === null || totalDeclaredValue <= r.maxAmount;
-      return over && under;
-    }) ?? shippingRules.filter((r) => r.returnMethod === returnMethod).at(-1);
-  const shippingFee = shippingRule?.fee ?? 0;
+  // 料金はサーバー(calculateFees)と同じ計算で取得し、請求額とプレビューを一致させる
+  const [fees, setFees] = useState<FeeBreakdown | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    previewFees({ serviceLevel, region, returnMethod, cardCount, totalDeclaredValue }).then((f) => {
+      if (!cancelled) setFees(f);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [serviceLevel, region, returnMethod, cardCount, totalDeclaredValue]);
 
-  const insuranceRule =
-    insuranceRules.find((r) => {
-      const over = totalDeclaredValue >= r.minValue;
-      const under = r.maxValue === null || totalDeclaredValue <= r.maxValue;
-      return over && under;
-    }) ?? insuranceRules.at(-1);
-  const insuranceFee = insuranceRule?.feeRate
-    ? Math.ceil(totalDeclaredValue * (insuranceRule.feeRate / 100))
-    : (insuranceRule?.fee ?? 0);
-
-  const subtotal = psaFeeTotal + agencyFeeTotal + shippingFee + insuranceFee;
-  const taxAmount = Math.floor(subtotal * TAX_RATE);
-  const totalAmount = subtotal + taxAmount;
+  const psaFeeTotal = fees?.psaFeeTotal ?? 0;
+  const shippingInsuranceFee = (fees?.shippingFee ?? 0) + (fees?.insuranceFee ?? 0);
+  const handlingFee = fees?.handlingFee ?? 0;
+  const taxAmount = fees?.taxAmount ?? 0;
+  const totalAmount = fees?.totalAmount ?? 0;
 
   // 一時保存（localStorage）からの復元。意図的に effect 内で state を設定する。
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -968,8 +961,10 @@ export default function ApplyForm({
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">鑑定料</span><span>¥{psaFeeTotal.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">送料</span><span>¥{shippingFee.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">保険料</span><span>¥{insuranceFee.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>¥{shippingInsuranceFee.toLocaleString()}</span></div>
+              {handlingFee > 0 && (
+                <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>¥{handlingFee.toLocaleString()}</span></div>
+              )}
               <div className="flex justify-between"><span className="text-gray-500">消費税</span><span>¥{taxAmount.toLocaleString()}</span></div>
               <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-2 mt-2">
                 <span>合計</span><span>¥{totalAmount.toLocaleString()}</span>
