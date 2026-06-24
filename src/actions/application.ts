@@ -596,12 +596,13 @@ export async function deleteApplication(
 
 /** 申込フォームのプレビュー用: サーバーと同じ計算式で料金内訳を返す（顧客入力=代理料金なし） */
 export async function previewFees(input: {
-  serviceLevel: ServiceLevel;
+  serviceLevel: ServiceLevel | null;
   region: ServiceRegion;
   returnMethod: ReturnMethod;
   cardCount: number;
   totalDeclaredValue: number;
 }) {
+  if (!input.serviceLevel) return null;
   try {
     return await calculateFees({
       serviceLevel: input.serviceLevel,
