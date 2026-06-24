@@ -472,17 +472,19 @@ export async function completeStoreApplication(
         totalAmount: fees.totalAmount,
         psaFeeTotal: fees.psaFeeTotal,
         agencyFeeTotal: fees.agencyFeeTotal,
+        handlingFee: fees.handlingFee,
         shippingFee: fees.shippingFee,
         insuranceFee: fees.insuranceFee,
         taxAmount: fees.taxAmount,
       },
     });
 
+    const proxyFeePerCard = (await prisma.pricingSetting.findFirst())?.proxyFee ?? 0;
     for (const c of parsed.data.cards) {
       const cardNo = await generateCardNo();
       const psaFee = servicePrice.pricePerCard * c.quantity;
       const psaCost = Math.floor(psaFee * 0.8);
-      const agencyFee = servicePrice.agencyFee * c.quantity;
+      const agencyFee = proxyFeePerCard * c.quantity;
       await tx.card.create({
         data: {
           customerId: app.customerId,

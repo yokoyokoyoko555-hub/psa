@@ -23,7 +23,6 @@ const SERVICE_LABELS: Record<string, string> = {
 type Cell = {
   id: string;
   pricePerCard: string;
-  agencyFee: string; // 代理入力料金（円/枚）
   maxDeclaredValue: string;
   isActive: boolean;
 };
@@ -43,7 +42,6 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
       const cell: Cell = {
         id: sp.id,
         pricePerCard: String(sp.pricePerCard),
-        agencyFee: String(sp.agencyFee),
         maxDeclaredValue: sp.maxDeclaredValue === null ? "" : String(sp.maxDeclaredValue),
         isActive: sp.isActive,
       };
@@ -75,7 +73,6 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
     const updates: {
       id: string;
       pricePerCard: number;
-      agencyFee: number;
       maxDeclaredValue: number | null;
       isActive: boolean;
     }[] = [];
@@ -85,7 +82,6 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
         updates.push({
           id: cell.id,
           pricePerCard: parseInt(cell.pricePerCard) || 0,
-          agencyFee: parseInt(cell.agencyFee) || 0,
           maxDeclaredValue: cell.maxDeclaredValue === "" ? null : parseInt(cell.maxDeclaredValue),
           isActive: cell.isActive,
         });
@@ -111,7 +107,7 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
     if (!cell) {
       return (
         <>
-          {Array.from({ length: 4 }).map((_, i) => (
+          {Array.from({ length: 3 }).map((_, i) => (
             <td key={i} className="px-2 py-3 text-gray-300">—</td>
           ))}
         </>
@@ -132,7 +128,6 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
     return (
       <>
         {numInput("pricePerCard")}
-        {numInput("agencyFee")}
         {numInput("maxDeclaredValue", "なし")}
         <td className="px-2 py-3 text-center">
           <input
@@ -148,22 +143,21 @@ export default function ServicePriceForm({ servicePrices }: { servicePrices: Ser
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <p className="text-xs text-gray-500">
-        鑑定料・代理入力料金は1枚あたりの金額です。代理入力料金は代理入力(STORE)の申込のみ加算されます。事務手数料は別セクション（サービス共通）で設定します。
+        鑑定料は1枚あたりの金額です。代理入力料金・事務手数料は別セクション（サービス共通の一律額）で設定します。
       </p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50">
               <th rowSpan={2} className="text-left px-3 py-2 text-gray-600 font-medium align-bottom">サービス</th>
-              <th colSpan={4} className="text-center px-3 py-2 text-gray-700 font-bold border-l border-gray-200">PSA 日本</th>
-              <th colSpan={4} className="text-center px-3 py-2 text-gray-700 font-bold border-l border-gray-200">PSA US</th>
+              <th colSpan={3} className="text-center px-3 py-2 text-gray-700 font-bold border-l border-gray-200">PSA 日本</th>
+              <th colSpan={3} className="text-center px-3 py-2 text-gray-700 font-bold border-l border-gray-200">PSA US</th>
             </tr>
             <tr className="bg-gray-50 text-gray-500 font-medium">
               {(["jp", "us"] as const).map((rg) => (
-                <th key={rg} colSpan={4} className="p-0">
-                  <div className="grid grid-cols-4 border-l border-gray-200">
+                <th key={rg} colSpan={3} className="p-0">
+                  <div className="grid grid-cols-3 border-l border-gray-200">
                     <span className="px-2 py-2 text-left">鑑定料</span>
-                    <span className="px-2 py-2 text-left">代理入力料金</span>
                     <span className="px-2 py-2 text-left">上限</span>
                     <span className="px-2 py-2 text-center">表示</span>
                   </div>

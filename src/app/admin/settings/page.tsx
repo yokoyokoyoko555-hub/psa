@@ -30,11 +30,11 @@ export default async function SettingsPage() {
         </div>
       </details>
 
-      {/* 事務手数料（一律） */}
+      {/* 代理入力料金・事務手数料（一律） */}
       <details className="bg-white rounded-xl border border-gray-200 p-6">
-        <summary className={summaryCls}>事務手数料設定（サービス共通・一律）</summary>
+        <summary className={summaryCls}>代理入力料金・事務手数料（サービス共通・一律）</summary>
         <div className="mt-4">
-          <HandlingFeeForm handlingFee={pricing?.handlingFee ?? 0} />
+          <HandlingFeeForm proxyFee={pricing?.proxyFee ?? 0} handlingFee={pricing?.handlingFee ?? 0} />
         </div>
       </details>
 

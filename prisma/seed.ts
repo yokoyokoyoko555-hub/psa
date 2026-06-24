@@ -72,7 +72,7 @@ async function main() {
       await prisma.servicePrice.upsert({
         where: { serviceLevel_region: { serviceLevel: l.serviceLevel, region } },
         update: {},
-        create: { ...l, region, agencyFee: 0 },
+        create: { ...l, region },
       });
     }
   }
@@ -104,7 +104,7 @@ async function main() {
   await prisma.pricingSetting.upsert({
     where: { id: "default" },
     update: {},
-    create: { id: "default", handlingFee: 0 },
+    create: { id: "default", handlingFee: 0, proxyFee: 0 },
   });
 
   // 送料・保険 合算マトリクス（PSA日本）。申告価格合計帯 × 枚数帯。26+は基準額+加算単価×(枚数-25)。ADR-0015

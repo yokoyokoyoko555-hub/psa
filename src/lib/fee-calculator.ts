@@ -86,13 +86,14 @@ export async function calculateFees(params: {
   });
   if (!servicePrice) throw new Error("Service price not found");
 
+  const setting = await prisma.pricingSetting.findFirst();
   const psaFeeTotal = servicePrice.pricePerCard * params.cardCount;
   const psaCostTotal = Math.floor(psaFeeTotal * PSA_COST_RATE);
-  const agencyFeeTotal = params.applyAgencyFee ? servicePrice.agencyFee * params.cardCount : 0;
 
-  // 事務手数料: サービス共通の一律額（PSA日本のみ適用。USは据え置きで0）
-  const handlingFee =
-    params.region === "PSA_JP" ? (await prisma.pricingSetting.findFirst())?.handlingFee ?? 0 : 0;
+  // 代理入力料金: サービス共通の一律額（円/枚）× 枚数。代理入力(STORE)時のみ
+  const agencyFeeTotal = params.applyAgencyFee ? (setting?.proxyFee ?? 0) * params.cardCount : 0;
+  // 事務手数料: サービス共通の一律額（円/枚）× 枚数（PSA日本のみ適用。USは据え置きで0）
+  const handlingFee = params.region === "PSA_JP" ? (setting?.handlingFee ?? 0) * params.cardCount : 0;
 
   // 送料・保険: PSA日本は合算マトリクス（未投入時は従来ロジックにフォールバック）、USは従来ロジック
   const legacy = () => calcShippingInsuranceLegacy({ returnMethod: params.returnMethod, totalDeclaredValue: params.totalDeclaredValue });

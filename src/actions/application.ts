@@ -180,6 +180,7 @@ export async function createApplication(
       totalAmount: fees.totalAmount,
       psaFeeTotal: fees.psaFeeTotal,
       agencyFeeTotal: fees.agencyFeeTotal,
+      handlingFee: fees.handlingFee,
       shippingFee: fees.shippingFee,
       insuranceFee: fees.insuranceFee,
       taxAmount: fees.taxAmount,

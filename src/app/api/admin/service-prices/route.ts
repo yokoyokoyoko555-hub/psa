@@ -13,7 +13,6 @@ export async function PUT(req: NextRequest) {
   const updates: {
     id: string;
     pricePerCard: number;
-    agencyFee: number;
     maxDeclaredValue: number | null;
     isActive: boolean;
   }[] = await req.json();
@@ -23,7 +22,6 @@ export async function PUT(req: NextRequest) {
       where: { id: u.id },
       data: {
         pricePerCard: u.pricePerCard,
-        agencyFee: u.agencyFee,
         maxDeclaredValue: u.maxDeclaredValue,
         isActive: u.isActive,
       },

@@ -48,16 +48,18 @@ export async function saveShippingInsuranceRates(
   return { success: true };
 }
 
-/** 事務手数料（サービス共通・一律）を保存 */
-export async function saveHandlingFee(
-  handlingFee: number
-): Promise<{ success: boolean; error?: string }> {
+/** 代理入力料金・事務手数料（いずれもサービス共通の一律額・円/枚）を保存 */
+export async function saveUniformFees(input: {
+  proxyFee: number;
+  handlingFee: number;
+}): Promise<{ success: boolean; error?: string }> {
   await requireAdmin();
-  const fee = Math.max(0, Math.floor(Number(handlingFee) || 0));
+  const proxyFee = Math.max(0, Math.floor(Number(input.proxyFee) || 0));
+  const handlingFee = Math.max(0, Math.floor(Number(input.handlingFee) || 0));
   await prisma.pricingSetting.upsert({
     where: { id: "default" },
-    update: { handlingFee: fee },
-    create: { id: "default", handlingFee: fee },
+    update: { proxyFee, handlingFee },
+    create: { id: "default", proxyFee, handlingFee },
   });
   revalidatePath("/admin/settings");
   return { success: true };

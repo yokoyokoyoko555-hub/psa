@@ -2,37 +2,52 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveHandlingFee } from "@/actions/pricing";
+import { saveUniformFees } from "@/actions/pricing";
 
-export default function HandlingFeeForm({ handlingFee }: { handlingFee: number }) {
+export default function HandlingFeeForm({
+  proxyFee,
+  handlingFee,
+}: {
+  proxyFee: number;
+  handlingFee: number;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [value, setValue] = useState(String(handlingFee));
+  const [proxy, setProxy] = useState(String(proxyFee));
+  const [handling, setHandling] = useState(String(handlingFee));
   const [message, setMessage] = useState("");
 
   function save() {
     setMessage("");
     startTransition(async () => {
-      const res = await saveHandlingFee(parseInt(value) || 0);
+      const res = await saveUniformFees({
+        proxyFee: parseInt(proxy) || 0,
+        handlingFee: parseInt(handling) || 0,
+      });
       setMessage(res.success ? "保存しました" : res.error ?? "保存に失敗しました");
       if (res.success) router.refresh();
     });
   }
 
+  const inputCls = "w-32 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900";
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        すべてのサービス共通の一律額です。1申込（=1サービスレベル）につき1回加算されます（PSA日本）。
+        いずれもサービス共通の一律額（円/枚）です。枚数に応じて加算されます（PSA日本）。
+        代理入力料金は代理入力(STORE)の申込のみ、事務手数料は全申込に適用されます。
       </p>
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          min={0}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="w-32 border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
-        />
-        <span className="text-sm text-gray-600">円 / 申込</span>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="w-28 text-sm text-gray-700">代理入力料金</span>
+          <input type="number" min={0} value={proxy} onChange={(e) => setProxy(e.target.value)} className={inputCls} />
+          <span className="text-sm text-gray-600">円 / 枚</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-28 text-sm text-gray-700">事務手数料</span>
+          <input type="number" min={0} value={handling} onChange={(e) => setHandling(e.target.value)} className={inputCls} />
+          <span className="text-sm text-gray-600">円 / 枚</span>
+        </div>
       </div>
       <div className="flex items-center justify-end gap-3">
         {message && <span className="text-green-700 text-sm">{message}</span>}

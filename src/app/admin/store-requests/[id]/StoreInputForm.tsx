@@ -119,8 +119,7 @@ export default function StoreInputForm({
         >
           {servicePrices.map((p) => (
             <option key={p.id} value={p.serviceLevel}>
-              {SERVICE_LABELS[p.serviceLevel] ?? p.serviceLevel}（¥{p.pricePerCard.toLocaleString()}/枚
-              {p.agencyFee > 0 ? ` + 手数料¥${p.agencyFee.toLocaleString()}` : ""}）
+              {SERVICE_LABELS[p.serviceLevel] ?? p.serviceLevel}（¥{p.pricePerCard.toLocaleString()}/枚）
               {p.maxDeclaredValue !== null ? ` 上限¥${p.maxDeclaredValue.toLocaleString()}` : ""}
             </option>
           ))}
