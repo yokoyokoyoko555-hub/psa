@@ -460,6 +460,7 @@ export async function completeStoreApplication(
     cardCount,
     totalDeclaredValue,
     applyAgencyFee: true,
+    customerId: app.customerId,
   });
 
   await prisma.$transaction(async (tx) => {
@@ -475,15 +476,18 @@ export async function completeStoreApplication(
         handlingFee: fees.handlingFee,
         shippingFee: fees.shippingFee,
         insuranceFee: fees.insuranceFee,
+        discountAmount: fees.discountAmount,
+        campaignName: fees.campaignName,
         taxAmount: fees.taxAmount,
       },
     });
 
-    const proxyFeePerCard = (await prisma.pricingSetting.findFirst())?.proxyFee ?? 0;
+    const proxyFeePerCard = (await prisma.pricingSetting.findUnique({ where: { id: app.region } }))?.proxyFee ?? 0;
     for (const c of parsed.data.cards) {
       const cardNo = await generateCardNo();
       const psaFee = servicePrice.pricePerCard * c.quantity;
-      const psaCost = Math.floor(psaFee * 0.8);
+      const perCardCost = servicePrice.cost > 0 ? servicePrice.cost : Math.floor(servicePrice.pricePerCard * 0.8);
+      const psaCost = perCardCost * c.quantity;
       const agencyFee = proxyFeePerCard * c.quantity;
       await tx.card.create({
         data: {

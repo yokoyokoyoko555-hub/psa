@@ -155,6 +155,12 @@ export default async function AdminApplicationDetailPage({
                 <p className="text-gray-500">事務手数料</p>
                 <p className="font-medium">¥{application.handlingFee.toLocaleString()}</p>
               </div>
+              {application.discountAmount > 0 && (
+                <div>
+                  <p className="text-gray-500">キャンペーン割引</p>
+                  <p className="font-medium text-brand-700">-¥{application.discountAmount.toLocaleString()}{application.campaignName ? `（${application.campaignName}）` : ""}</p>
+                </div>
+              )}
             </div>
           </div>
 

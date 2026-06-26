@@ -155,6 +155,21 @@
   - **事務手数料 = ¥/申込・サービスレベルごと**（`ServicePrice.handlingFee` 新設）。申込=1サービスレベル。
   - 範囲は **PSA_JP のみ**。US は据え置き。税10%・ステータス遷移は不変。
 - 影響: schema に `ServicePrice.handlingFee` 追加＋`ShippingInsuranceRate` 新規（db push）。`fee-calculator`/seed/管理料金設定UI/顧客内訳の改修。`FeeBreakdown` に `handlingFee`、送料保険は合算行に。26+加算式・店頭受取時の扱いは PRICING.md §9 で確定後に実装。
+- 補足(後日): 代理入力料金・事務手数料は**リージョン別の一律額**（`PricingSetting`(id=region)）に変更。`ServicePrice.cost`(原価)追加。送料保険マトリクスはリージョン別（JP/USそれぞれ1セット、未投入は従来ロジック）。US顧客表示はUSD（`lib/currency`）。
+
+## ADR-0016: 新規獲得キャンペーン割引（鑑定料以外・期間自動適用）
+- 日付: 2026-06-24
+- 状態: Accepted（実装中）。料金変更のためユーザー承認済み。
+- 文脈: 新規申込獲得のため、期間限定で「半額/無料」等の割引を出したい。
+- 決定:
+  - **割引対象は「鑑定料以外」**（代理入力料金＋送料・保険＋事務手数料の合計）。鑑定料(原価あり)は割引しない。
+  - **割引方式は PERCENT(%) と FIXED(固定額) の両対応**（`Campaign.discountType`/`value`）。割引は対象ベースを上限にクランプ（マイナスにしない）。税は割引後に計算。
+  - **期間中に自動適用**（`startAt`〜`endAt`、`isActive`）。クーポンコードは将来。
+  - **対象者は新規(初回申込)限定／全員 を切替**（`newCustomerOnly`）。新規=当該顧客の非DRAFT/非CANCELLED申込が0件。
+  - リージョン別運用可（`Campaign.region` null=全リージョン。FIXEDは通貨に注意）。
+  - 適用キャンペーンは「有効・期間内・リージョン一致・対象者条件一致」のうち1件（`startAt` 新しい順で先頭）。
+  - `FeeBreakdown` に `discountAmount`/`campaignName`、`Application` に `discountAmount`/`campaignName` を追加し記録・表示。
+- 影響: `Campaign` モデル＋enum新規、`Application` に2列追加（db push）。`calculateFees` に `customerId?`（新規判定用）を追加。管理画面にキャンペーン管理、顧客内訳に「キャンペーン割引」行。
 
 
 

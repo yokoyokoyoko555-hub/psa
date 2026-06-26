@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import CustomerHeader from "@/components/CustomerHeader";
+import { formatMoney } from "@/lib/currency";
 import BookingForm from "../../BookingForm";
 
 export const metadata = { title: "カード提出予約 | トレカビンクス" };
@@ -69,7 +70,7 @@ export default async function EditBookingPage({
           <p className="text-sm text-gray-500 mt-0.5">
             {app.source === "STORE" && app._count.cards === 0
               ? "代理入力（お預け後にスタッフが明細を入力します）"
-              : `${app._count.cards}枚 ・ ¥${app.totalAmount.toLocaleString()}`}
+              : `${app._count.cards}枚 ・ ${formatMoney(app.totalAmount, app.region)}`}
           </p>
         </div>
         <BookingForm

@@ -38,12 +38,20 @@ function toBands(rates: ShippingInsuranceRate[]): Band[] {
     .map(({ _min, ...rest }) => { void _min; return rest; });
 }
 
-export default function ShippingInsuranceForm({ rates }: { rates: ShippingInsuranceRate[] }) {
+export default function ShippingInsuranceForm({
+  rates,
+  region,
+  unit,
+}: {
+  rates: ShippingInsuranceRate[];
+  region: "PSA_JP" | "PSA_US";
+  unit: string;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const [bands, setBands] = useState<Band[]>(() => {
-    const b = toBands(rates);
+    const b = toBands(rates.filter((r) => r.region === region));
     return b.length > 0 ? b : [{ minValue: "0", maxValue: "", fee8: "0", fee25: "0", surcharge: "0" }];
   });
 
@@ -69,7 +77,7 @@ export default function ShippingInsuranceForm({ rates }: { rates: ShippingInsura
           surcharge: parseInt(b.surcharge) || 0,
         })),
       };
-      const res = await saveShippingInsuranceRates(payload);
+      const res = await saveShippingInsuranceRates({ region, ...payload });
       setMessage(res.success ? "保存しました" : res.error ?? "保存に失敗しました");
       if (res.success) router.refresh();
     });
@@ -78,7 +86,7 @@ export default function ShippingInsuranceForm({ rates }: { rates: ShippingInsura
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        申告価格の合計金額帯ごとに、1〜8枚・9〜25枚の金額と、26枚以上の加算単価（円/枚）を設定します。
+        申告価格の合計金額帯ごとに、1〜8枚・9〜25枚の金額と、26枚以上の加算単価（{unit}/枚）を設定します（金額単位: {unit}）。
         26枚以上は「9〜25枚の金額 + 加算単価 ×（枚数 − 25）」で計算されます。上限を空欄にすると「上限なし」になります。
       </p>
       <div className="overflow-x-auto">

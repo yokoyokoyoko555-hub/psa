@@ -5,9 +5,13 @@ import { useRouter } from "next/navigation";
 import { saveUniformFees } from "@/actions/pricing";
 
 export default function HandlingFeeForm({
+  region,
+  unit,
   proxyFee,
   handlingFee,
 }: {
+  region: "PSA_JP" | "PSA_US";
+  unit: string;
   proxyFee: number;
   handlingFee: number;
 }) {
@@ -21,6 +25,7 @@ export default function HandlingFeeForm({
     setMessage("");
     startTransition(async () => {
       const res = await saveUniformFees({
+        region,
         proxyFee: parseInt(proxy) || 0,
         handlingFee: parseInt(handling) || 0,
       });
@@ -34,19 +39,19 @@ export default function HandlingFeeForm({
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        いずれもサービス共通の一律額（円/枚）です。枚数に応じて加算されます（PSA日本）。
+        いずれもサービス共通の一律額（{unit}/枚）です。枚数に応じて加算されます。
         代理入力料金は代理入力(STORE)の申込のみ、事務手数料は全申込に適用されます。
       </p>
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <span className="w-28 text-sm text-gray-700">代理入力料金</span>
           <input type="number" min={0} value={proxy} onChange={(e) => setProxy(e.target.value)} className={inputCls} />
-          <span className="text-sm text-gray-600">円 / 枚</span>
+          <span className="text-sm text-gray-600">{unit} / 枚</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-28 text-sm text-gray-700">事務手数料</span>
           <input type="number" min={0} value={handling} onChange={(e) => setHandling(e.target.value)} className={inputCls} />
-          <span className="text-sm text-gray-600">円 / 枚</span>
+          <span className="text-sm text-gray-600">{unit} / 枚</span>
         </div>
       </div>
       <div className="flex items-center justify-end gap-3">

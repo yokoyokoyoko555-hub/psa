@@ -8,20 +8,51 @@ export interface FeeBreakdown {
   psaFeeTotal: number;
   psaCostTotal: number;
   agencyFeeTotal: number; // 代理入力料金（STORE時のみ）
-  shippingFee: number; // PSA_JPでは「送料・保険」合算額をここに入れる
-  insuranceFee: number; // PSA_JPでは0（合算のため）
-  handlingFee: number; // 事務手数料（申込あたり）
+  shippingFee: number; // 「送料・保険」合算額をここに入れる
+  insuranceFee: number; // 0（合算のため）
+  handlingFee: number; // 事務手数料
+  discountAmount: number; // キャンペーン割引（鑑定料以外に適用・正の値）
+  campaignName: string | null;
   taxAmount: number;
   totalAmount: number;
 }
 
+/** 有効・期間内・条件一致のキャンペーンを1件返す（startAt新しい順で先頭） */
+async function findCampaign(region: ServiceRegion, customerId?: string) {
+  const now = new Date();
+  const campaigns = await prisma.campaign.findMany({
+    where: {
+      isActive: true,
+      startAt: { lte: now },
+      endAt: { gte: now },
+      OR: [{ region: null }, { region }],
+    },
+    orderBy: { startAt: "desc" },
+  });
+  for (const c of campaigns) {
+    if (c.newCustomerOnly) {
+      if (!customerId) continue;
+      const prior = await prisma.application.count({
+        where: { customerId, status: { notIn: ["DRAFT", "CANCELLED"] } },
+      });
+      if (prior > 0) continue;
+    }
+    return c;
+  }
+  return null;
+}
+
 /**
- * PSA日本: 送料・保険 合算マトリクスから金額を求める（26+は基準額+加算単価×(枚数-25)）。
+ * 送料・保険 合算マトリクスから金額を求める（26+は基準額+加算単価×(枚数-25)）。リージョン別。
  * マトリクス未投入(行が無い)時は null を返し、呼び出し側で従来ロジックにフォールバックする。
  */
-async function calcShippingInsuranceJp(totalDeclaredValue: number, cardCount: number): Promise<number | null> {
+async function calcShippingInsuranceMatrix(
+  region: ServiceRegion,
+  totalDeclaredValue: number,
+  cardCount: number,
+): Promise<number | null> {
   const rates = await prisma.shippingInsuranceRate.findMany({
-    where: { region: "PSA_JP", isActive: true },
+    where: { region, isActive: true },
     orderBy: { sortOrder: "asc" },
   });
   if (rates.length === 0) return null; // 未設定 → フォールバック
@@ -80,32 +111,43 @@ export async function calculateFees(params: {
   totalDeclaredValue: number;
   /** 代行手数料を加算するか（当社入力=true / 顧客入力=false） */
   applyAgencyFee: boolean;
+  /** 新規(初回)限定キャンペーンの判定に使用（任意） */
+  customerId?: string;
 }): Promise<FeeBreakdown> {
   const servicePrice = await prisma.servicePrice.findUnique({
     where: { serviceLevel_region: { serviceLevel: params.serviceLevel, region: params.region } },
   });
   if (!servicePrice) throw new Error("Service price not found");
 
-  const setting = await prisma.pricingSetting.findFirst();
+  const setting = await prisma.pricingSetting.findUnique({ where: { id: params.region } });
   const psaFeeTotal = servicePrice.pricePerCard * params.cardCount;
-  const psaCostTotal = Math.floor(psaFeeTotal * PSA_COST_RATE);
+  // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替
+  const perCardCost = servicePrice.cost > 0 ? servicePrice.cost : Math.floor(servicePrice.pricePerCard * PSA_COST_RATE);
+  const psaCostTotal = perCardCost * params.cardCount;
 
-  // 代理入力料金: サービス共通の一律額（円/枚）× 枚数。代理入力(STORE)時のみ
+  // 代理入力料金: リージョン別の一律額（/枚）× 枚数。代理入力(STORE)時のみ
   const agencyFeeTotal = params.applyAgencyFee ? (setting?.proxyFee ?? 0) * params.cardCount : 0;
-  // 事務手数料: サービス共通の一律額（円/枚）× 枚数（PSA日本のみ適用。USは据え置きで0）
-  const handlingFee = params.region === "PSA_JP" ? (setting?.handlingFee ?? 0) * params.cardCount : 0;
+  // 事務手数料: リージョン別の一律額（/枚）× 枚数
+  const handlingFee = (setting?.handlingFee ?? 0) * params.cardCount;
 
-  // 送料・保険: PSA日本は合算マトリクス（未投入時は従来ロジックにフォールバック）、USは従来ロジック
-  const legacy = () => calcShippingInsuranceLegacy({ returnMethod: params.returnMethod, totalDeclaredValue: params.totalDeclaredValue });
-  let shippingInsurance: number;
-  if (params.region === "PSA_JP") {
-    const matrix = await calcShippingInsuranceJp(params.totalDeclaredValue, params.cardCount);
-    shippingInsurance = matrix ?? (await legacy());
-  } else {
-    shippingInsurance = await legacy();
+  // 送料・保険: リージョン別の合算マトリクス（未投入時は従来ロジックにフォールバック）
+  const matrix = await calcShippingInsuranceMatrix(params.region, params.totalDeclaredValue, params.cardCount);
+  const shippingInsurance =
+    matrix ?? (await calcShippingInsuranceLegacy({ returnMethod: params.returnMethod, totalDeclaredValue: params.totalDeclaredValue }));
+
+  // キャンペーン割引: 「鑑定料以外」（代理入力料金＋送料保険＋事務手数料）を対象。鑑定料は対象外。
+  const discountBase = agencyFeeTotal + shippingInsurance + handlingFee;
+  const campaign = await findCampaign(params.region, params.customerId);
+  let discountAmount = 0;
+  if (campaign) {
+    discountAmount =
+      campaign.discountType === "PERCENT"
+        ? Math.floor((discountBase * Math.min(100, Math.max(0, campaign.value))) / 100)
+        : campaign.value;
+    discountAmount = Math.min(discountAmount, discountBase); // 対象ベースを上限
   }
 
-  const subtotal = psaFeeTotal + agencyFeeTotal + shippingInsurance + handlingFee;
+  const subtotal = psaFeeTotal + discountBase - discountAmount;
   const taxAmount = Math.floor(subtotal * TAX_RATE);
   const totalAmount = subtotal + taxAmount;
 
@@ -116,6 +158,8 @@ export async function calculateFees(params: {
     shippingFee: shippingInsurance,
     insuranceFee: 0,
     handlingFee,
+    discountAmount,
+    campaignName: campaign && discountAmount > 0 ? campaign.name : null,
     taxAmount,
     totalAmount,
   };

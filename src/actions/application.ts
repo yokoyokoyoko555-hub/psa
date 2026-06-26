@@ -146,6 +146,7 @@ export async function createApplication(
     cardCount,
     totalDeclaredValue,
     applyAgencyFee: false,
+    customerId: customer.id,
   });
 
   let stripeCustomerId: string;
@@ -183,6 +184,8 @@ export async function createApplication(
       handlingFee: fees.handlingFee,
       shippingFee: fees.shippingFee,
       insuranceFee: fees.insuranceFee,
+      discountAmount: fees.discountAmount,
+      campaignName: fees.campaignName,
       taxAmount: fees.taxAmount,
     };
 
@@ -603,6 +606,7 @@ export async function previewFees(input: {
   totalDeclaredValue: number;
 }) {
   if (!input.serviceLevel) return null;
+  const customer = await getCustomerSession();
   try {
     return await calculateFees({
       serviceLevel: input.serviceLevel,
@@ -611,6 +615,7 @@ export async function previewFees(input: {
       cardCount: input.cardCount,
       totalDeclaredValue: input.totalDeclaredValue,
       applyAgencyFee: false,
+      customerId: customer?.id,
     });
   } catch {
     return null;

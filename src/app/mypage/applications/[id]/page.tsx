@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getApplicationDetail } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
+import { formatMoney } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -83,33 +84,39 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </div>
             <div>
               <p className="text-gray-500">合計金額</p>
-              <p className="font-bold text-lg">¥{application.totalAmount.toLocaleString()}</p>
+              <p className="font-bold text-lg">{formatMoney(application.totalAmount, application.region)}</p>
             </div>
           </div>
 
           {/* Fee breakdown */}
           <div className="mt-4 pt-4 border-t border-gray-100 space-y-1 text-sm">
             <div className="flex justify-between text-gray-600">
-              <span>PSA鑑定料</span><span>¥{application.psaFeeTotal.toLocaleString()}</span>
+              <span>PSA鑑定料</span><span>{formatMoney(application.psaFeeTotal, application.region)}</span>
             </div>
             {application.agencyFeeTotal > 0 && (
               <div className="flex justify-between text-gray-600">
-                <span>代理入力料金</span><span>¥{application.agencyFeeTotal.toLocaleString()}</span>
+                <span>代理入力料金</span><span>{formatMoney(application.agencyFeeTotal, application.region)}</span>
               </div>
             )}
             <div className="flex justify-between text-gray-600">
-              <span>送料・保険料</span><span>¥{(application.shippingFee + application.insuranceFee).toLocaleString()}</span>
+              <span>送料・保険料</span><span>{formatMoney(application.shippingFee + application.insuranceFee, application.region)}</span>
             </div>
             {application.handlingFee > 0 && (
               <div className="flex justify-between text-gray-600">
-                <span>事務手数料</span><span>¥{application.handlingFee.toLocaleString()}</span>
+                <span>事務手数料</span><span>{formatMoney(application.handlingFee, application.region)}</span>
+              </div>
+            )}
+            {application.discountAmount > 0 && (
+              <div className="flex justify-between text-brand-700">
+                <span>キャンペーン割引{application.campaignName ? `（${application.campaignName}）` : ""}</span>
+                <span>-{formatMoney(application.discountAmount, application.region)}</span>
               </div>
             )}
             <div className="flex justify-between text-gray-600">
-              <span>消費税</span><span>¥{application.taxAmount.toLocaleString()}</span>
+              <span>消費税</span><span>{formatMoney(application.taxAmount, application.region)}</span>
             </div>
             <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
-              <span>合計</span><span>¥{application.totalAmount.toLocaleString()}</span>
+              <span>合計</span><span>{formatMoney(application.totalAmount, application.region)}</span>
             </div>
           </div>
         </div>

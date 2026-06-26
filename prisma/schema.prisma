@@ -320,6 +320,8 @@ model Application {
   handlingFee    Int               @default(0) // 事務手数料（合計）。ADR-0015
   shippingFee    Int               @default(0)
   insuranceFee   Int               @default(0)
+  discountAmount Int               @default(0) // キャンペーン割引（合計）。ADR-0016
+  campaignName   String? // 適用キャンペーン名（記録用）
   taxAmount      Int               @default(0)
   notes          String?
   submittedAt    DateTime?
@@ -487,8 +489,9 @@ model ServicePrice {
   id               String        @id @default(cuid())
   serviceLevel     ServiceLevel
   region           ServiceRegion @default(PSA_JP)
-  pricePerCard     Int // 1枚あたり鑑定料（円）= 顧客請求額
-  maxDeclaredValue Int? // 申告価格の上限（円）。nullは上限なし
+  pricePerCard     Int // 1枚あたり鑑定料 = 顧客請求額（JP=円 / US=USD）
+  cost             Int           @default(0) // 1枚あたり原価（JP=円 / US=USD）。0なら鑑定料×80%で代替
+  maxDeclaredValue Int? // 申告価格の上限。nullは上限なし
   isActive         Boolean       @default(true)
   updatedAt        DateTime      @updatedAt
   updatedBy        String?
@@ -497,15 +500,37 @@ model ServicePrice {
   @@map("service_prices")
 }
 
-// 料金の共通設定（シングルトン: id="default"）。事務手数料はサービス共通の一律額。ADR-0015
+// 料金の一律設定（リージョン別。id=リージョン値 "PSA_JP"/"PSA_US"）。代理入力料金・事務手数料。ADR-0015
 model PricingSetting {
-  id          String   @id @default("default")
-  handlingFee Int      @default(0) // 事務手数料（円/枚・一律）。PSA日本に適用・枚数で加算
-  proxyFee    Int      @default(0) // 代理入力料金（円/枚・一律）。代理入力(STORE)時のみ加算
+  id          String   @id // リージョン値（PSA_JP / PSA_US）を格納
+  handlingFee Int      @default(0) // 事務手数料（JP=円/枚 / US=USD/枚・一律）。枚数で加算
+  proxyFee    Int      @default(0) // 代理入力料金（JP=円/枚 / US=USD/枚・一律）。代理入力(STORE)時のみ
   updatedAt   DateTime @updatedAt
   updatedBy   String?
 
   @@map("pricing_settings")
+}
+
+// 新規獲得キャンペーン割引（鑑定料以外・期間自動適用）。ADR-0016
+enum CampaignDiscountType {
+  PERCENT
+  FIXED
+}
+
+model Campaign {
+  id              String               @id @default(cuid())
+  name            String
+  discountType    CampaignDiscountType
+  value           Int // PERCENT: 0-100 / FIXED: 金額
+  region          ServiceRegion? // null=全リージョン
+  newCustomerOnly Boolean              @default(false)
+  startAt         DateTime
+  endAt           DateTime
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@map("campaigns")
 }
 
 // 送料・保険 合算マトリクス（申告価格合計帯 × 枚数帯 → 金額）。PSA日本向け。ADR-0015 / PRICING.md

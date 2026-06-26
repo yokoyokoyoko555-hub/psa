@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { confirmApplicationPayment, createApplication, previewFees, saveDraft as saveDraftServer } from "@/actions/application";
 import type { FeeBreakdown } from "@/lib/fee-calculator";
+import { formatMoney } from "@/lib/currency";
 
 export type InitialDraft = {
   draftId: string;
@@ -210,7 +211,7 @@ export default function ApplyForm({
     }
     if (cap !== null && draft.declaredValue > cap) {
       setError(
-        `申告金額が選択中のサービス上限（¥${cap.toLocaleString()}）を超えています。上位サービスを選択してください。`
+        `申告金額が選択中のサービス上限（${formatMoney(cap, region)}）を超えています。上位サービスを選択してください。`
       );
       return;
     }
@@ -257,6 +258,8 @@ export default function ApplyForm({
   const psaFeeTotal = fees?.psaFeeTotal ?? 0;
   const shippingInsuranceFee = (fees?.shippingFee ?? 0) + (fees?.insuranceFee ?? 0);
   const handlingFee = fees?.handlingFee ?? 0;
+  const discountAmount = fees?.discountAmount ?? 0;
+  const campaignName = fees?.campaignName ?? null;
   const taxAmount = fees?.taxAmount ?? 0;
   const totalAmount = fees?.totalAmount ?? 0;
 
@@ -635,10 +638,10 @@ export default function ApplyForm({
                     }`}
                   >
                     <p className="font-bold text-gray-900">{SERVICE_LABELS[sp.serviceLevel]}</p>
-                    <p className="text-brand-600 font-medium">¥{sp.pricePerCard.toLocaleString()}/枚</p>
+                    <p className="text-brand-600 font-medium">{formatMoney(sp.pricePerCard, region)}/枚</p>
                     <p className="text-xs text-gray-500">
                       申告価格上限{" "}
-                      {sp.maxDeclaredValue === null ? "なし" : `¥${sp.maxDeclaredValue.toLocaleString()}`}
+                      {sp.maxDeclaredValue === null ? "なし" : formatMoney(sp.maxDeclaredValue, region)}
                     </p>
                   </button>
                 ))}
@@ -685,7 +688,7 @@ export default function ApplyForm({
           <div className="space-y-6">
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
               選択中: <strong>{REGION_LABELS[region]} / {serviceLevel && SERVICE_LABELS[serviceLevel]}</strong>
-              {cap !== null && <>（申告金額上限 ¥{cap.toLocaleString()}/枚）</>}
+              {cap !== null && <>（申告金額上限 {formatMoney(cap, region)}/枚）</>}
             </div>
 
             {/* Card entry form */}
@@ -783,7 +786,7 @@ export default function ApplyForm({
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-bold text-gray-800">アイテム（{cards.length}）</h3>
                 <span className="text-sm text-gray-500">
-                  申告合計 ¥{totalDeclaredValue.toLocaleString()}
+                  申告合計 {formatMoney(totalDeclaredValue, region)}
                 </span>
               </div>
               {cards.length === 0 ? (
@@ -801,7 +804,7 @@ export default function ApplyForm({
                           {c.rarity ? `（${c.rarity}）` : ""}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {c.quantity}枚 / 申告 ¥{(c.declaredValue * c.quantity).toLocaleString()}
+                          {c.quantity}枚 / 申告 {formatMoney(c.declaredValue * c.quantity, region)}
                         </p>
                       </div>
                       <button
@@ -952,7 +955,7 @@ export default function ApplyForm({
                       {c.cardName}（{c.tcgTitle}）× {c.quantity}枚
                     </span>
                     <span className="text-gray-500">
-                      申告 ¥{(c.declaredValue * c.quantity).toLocaleString()}
+                      申告 {formatMoney(c.declaredValue * c.quantity, region)}
                     </span>
                   </div>
                 ))}
@@ -960,14 +963,20 @@ export default function ApplyForm({
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-gray-500">鑑定料</span><span>¥{psaFeeTotal.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>¥{shippingInsuranceFee.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">鑑定料</span><span>{formatMoney(psaFeeTotal, region)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoney(shippingInsuranceFee, region)}</span></div>
               {handlingFee > 0 && (
-                <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>¥{handlingFee.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>{formatMoney(handlingFee, region)}</span></div>
               )}
-              <div className="flex justify-between"><span className="text-gray-500">消費税</span><span>¥{taxAmount.toLocaleString()}</span></div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-brand-700">
+                  <span>キャンペーン割引{campaignName ? `（${campaignName}）` : ""}</span>
+                  <span>-{formatMoney(discountAmount, region)}</span>
+                </div>
+              )}
+              <div className="flex justify-between"><span className="text-gray-500">消費税</span><span>{formatMoney(taxAmount, region)}</span></div>
               <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-2 mt-2">
-                <span>合計</span><span>¥{totalAmount.toLocaleString()}</span>
+                <span>合計</span><span>{formatMoney(totalAmount, region)}</span>
               </div>
             </div>
 
@@ -1014,7 +1023,7 @@ export default function ApplyForm({
                 disabled={paymentLoading || !stripeReady || !!cardError}
                 className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
               >
-                {paymentLoading ? "決済処理中..." : `¥${totalAmount.toLocaleString()} を支払う`}
+                {paymentLoading ? "決済処理中..." : `${formatMoney(totalAmount, region)} を支払う`}
               </button>
               <p className="text-xs text-gray-400 text-center">
                 カード情報はStripe上で安全に処理され、このサービスには保存されません。
