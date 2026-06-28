@@ -23,6 +23,29 @@ export async function sendMail(options: MailOptions) {
   });
 }
 
+/**
+ * DBのメールテンプレート(MailTemplate)を使って送信。{{var}} を vars で置換。
+ * SMTP未設定・テンプレ無効/不在・送信失敗時は何もしない（呼び出し側の処理を止めない）。ADR-0018
+ */
+export async function sendTemplate(
+  key: string,
+  to: string,
+  vars: Record<string, string | number> = {},
+): Promise<boolean> {
+  if (!process.env.SMTP_HOST) return false;
+  try {
+    const { prisma } = await import("./prisma");
+    const tpl = await prisma.mailTemplate.findUnique({ where: { key } });
+    if (!tpl || !tpl.enabled) return false;
+    const fill = (s: string) =>
+      s.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (vars[k] !== undefined ? String(vars[k]) : ""));
+    await sendMail({ to, subject: fill(tpl.subject), html: fill(tpl.bodyHtml) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function registrationVerificationHtml(params: { verifyUrl: string }): string {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">

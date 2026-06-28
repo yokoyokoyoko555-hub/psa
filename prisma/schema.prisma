@@ -502,13 +502,43 @@ model ServicePrice {
 
 // 料金の一律設定（リージョン別。id=リージョン値 "PSA_JP"/"PSA_US"）。代理入力料金・事務手数料。ADR-0015
 model PricingSetting {
-  id          String   @id // リージョン値（PSA_JP / PSA_US）を格納
-  handlingFee Int      @default(0) // 事務手数料（JP=円/枚 / US=USD/枚・一律）。枚数で加算
-  proxyFee    Int      @default(0) // 代理入力料金（JP=円/枚 / US=USD/枚・一律）。代理入力(STORE)時のみ
-  updatedAt   DateTime @updatedAt
-  updatedBy   String?
+  id             String   @id // リージョン値（PSA_JP / PSA_US）を格納
+  handlingFee    Int      @default(0) // 事務手数料（JP=円/枚 / US=USD/枚・一律）。枚数で加算
+  proxyFee       Int      @default(0) // 代理入力料金（JP=円/枚 / US=USD/枚・一律）。代理入力(STORE)時のみ
+  freeShipInsQty Int      @default(0) // この枚数以上で送料・保険を無料(0円)化。0=無効。ADR-0017
+  updatedAt      DateTime @updatedAt
+  updatedBy      String?
 
   @@map("pricing_settings")
+}
+
+// メール文面テンプレート（管理画面で編集。{{var}} を差込）。ADR-0018
+model MailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique // application_received / store_input_completed / grade_available / return_completed / upcharge
+  name      String
+  subject   String
+  bodyHtml  String
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("mail_templates")
+}
+
+// カード名称マスタ（管理が手入力で蓄積。サブミッション時に検索・サジェスト）。ADR-0019
+model CardNameMaster {
+  id         String       @id @default(cuid())
+  tcgTitle   String? // タイトル/セット名
+  cardName   String
+  cardNumber String?
+  rarity     String?
+  language   CardLanguage @default(JAPANESE)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@index([cardName])
+  @@map("card_name_masters")
 }
 
 // 新規獲得キャンペーン割引（鑑定料以外・期間自動適用）。ADR-0016

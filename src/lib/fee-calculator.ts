@@ -132,8 +132,11 @@ export async function calculateFees(params: {
 
   // 送料・保険: リージョン別の合算マトリクス（未投入時は従来ロジックにフォールバック）
   const matrix = await calcShippingInsuranceMatrix(params.region, params.totalDeclaredValue, params.cardCount);
-  const shippingInsurance =
+  let shippingInsurance =
     matrix ?? (await calcShippingInsuranceLegacy({ returnMethod: params.returnMethod, totalDeclaredValue: params.totalDeclaredValue }));
+  // N枚以上で送料・保険を無料化（リージョン別しきい値・0=無効）
+  const freeQty = setting?.freeShipInsQty ?? 0;
+  if (freeQty > 0 && params.cardCount >= freeQty) shippingInsurance = 0;
 
   // キャンペーン割引: 「鑑定料以外」（代理入力料金＋送料保険＋事務手数料）を対象。鑑定料は対象外。
   const discountBase = agencyFeeTotal + shippingInsurance + handlingFee;

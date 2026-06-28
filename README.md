@@ -17,7 +17,8 @@
 | [docs/SECURITY.md](docs/SECURITY.md) | セキュリティ設計 |
 | [docs/CENTERING_TOOL.md](docs/CENTERING_TOOL.md) | **センタリング測定ツール（月額550円サブスク）設計書**（[ADR-0012](docs/DECISIONS.md)） |
 | [docs/SUBMISSION_BOOKING.md](docs/SUBMISSION_BOOKING.md) | **カード提出予約 リファイン設計書**（申込起点リスト＋店頭提示レシート。[ADR-0014](docs/DECISIONS.md)） |
-| [docs/PRICING.md](docs/PRICING.md) | **料金体系リニューアル設計書（PSA日本）**（送料保険マトリクス＋代理入力料金＋事務手数料。[ADR-0015](docs/DECISIONS.md)） |
+| [docs/PRICING.md](docs/PRICING.md) | **料金体系リニューアル設計書**（送料保険マトリクス＋代理入力料金＋事務手数料＋キャンペーン割引。[ADR-0015](docs/DECISIONS.md)〜[ADR-0017](docs/DECISIONS.md)） |
+| [docs/PROXY_PREPAY.md](docs/PROXY_PREPAY.md) | **代理入力の先払いフロー設計書**（[ADR-0020](docs/DECISIONS.md)・実装は次フェーズ） |
 | [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) | Codex等へ渡す一枚要約 |
 
 ## 技術スタック

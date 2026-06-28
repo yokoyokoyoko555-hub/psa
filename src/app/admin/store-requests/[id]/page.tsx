@@ -29,6 +29,12 @@ export default async function StoreRequestDetailPage({
     where: { region: app.region, isActive: true },
     orderBy: { pricePerCard: "asc" },
   });
+  const masters = await prisma.cardNameMaster.findMany({
+    select: { cardName: true },
+    orderBy: { cardName: "asc" },
+    take: 1000,
+  });
+  const masterNames = Array.from(new Set(masters.map((m) => m.cardName)));
 
   const alreadyDone = app.status !== "DRAFT";
 
@@ -68,6 +74,7 @@ export default async function StoreRequestDetailPage({
         <StoreInputForm
           applicationId={app.id}
           servicePrices={servicePrices}
+          masterNames={masterNames}
         />
       )}
     </div>

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import CopyButton from "@/components/CopyButton";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -175,12 +176,15 @@ export default async function AdminApplicationDetailPage({
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <Link
-                        href={`/admin/cards/${card.id}`}
-                        className="font-medium text-brand-600 hover:underline"
-                      >
-                        {card.cardName}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/admin/cards/${card.id}`}
+                          className="font-medium text-brand-600 hover:underline"
+                        >
+                          {card.cardName}
+                        </Link>
+                        <CopyButton text={card.cardName} />
+                      </div>
                       <p className="text-xs text-gray-500">
                         {card.tcgTitle}
                         {card.cardNumber ? ` / ${card.cardNumber}` : ""}

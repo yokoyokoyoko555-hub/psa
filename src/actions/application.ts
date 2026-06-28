@@ -6,6 +6,8 @@ import { decrypt, encrypt } from "@/lib/crypto";
 import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
 import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe } from "@/lib/stripe";
+import { sendTemplate } from "@/lib/mailer";
+import { formatMoney } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -402,6 +404,13 @@ export async function confirmApplicationPayment(
     targetType: "applications",
     targetId: application.id,
     after: { paymentIntentId: paymentIntent.id, status: paymentIntent.status },
+  });
+
+  // 申込受付メール（best-effort・SMTP未設定/無効なら送信されない）
+  await sendTemplate("application_received", customer.email, {
+    name: decrypt(customer.nameEncrypted),
+    applicationNo: application.applicationNo,
+    amount: formatMoney(application.totalAmount, application.region),
   });
 
   revalidatePath("/mypage");

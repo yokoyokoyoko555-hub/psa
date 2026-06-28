@@ -7,7 +7,8 @@ import { generateGroupNo, generateCardNo } from "@/lib/number-generator";
 import { logOperation } from "@/lib/operation-log";
 import { chargeOffSession } from "@/lib/stripe";
 import { calculateFees } from "@/lib/fee-calculator";
-import { sendMail, upchargeNotificationHtml } from "@/lib/mailer";
+import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
+import { formatMoney } from "@/lib/currency";
 import { CardStatus, CardLanguage, ServiceLevel } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -531,6 +532,16 @@ export async function completeStoreApplication(
     targetId: app.id,
     after: { serviceLevel: parsed.data.serviceLevel, totalAmount: fees.totalAmount },
   });
+
+  // 代理入力完了メール（best-effort・SMTP未設定/無効なら送信されない）
+  const cust = await prisma.customer.findUnique({ where: { id: app.customerId } });
+  if (cust) {
+    await sendTemplate("store_input_completed", cust.email, {
+      name: decrypt(cust.nameEncrypted),
+      applicationNo: app.applicationNo,
+      amount: formatMoney(fees.totalAmount, app.region),
+    });
+  }
 
   return { success: true };
 }

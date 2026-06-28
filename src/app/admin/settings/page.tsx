@@ -40,7 +40,7 @@ export default async function SettingsPage() {
               </div>
               <div className={subCls}>
                 <h3 className="font-bold text-gray-800 mb-3">代理入力料金・事務手数料（一律）</h3>
-                <HandlingFeeForm region={region} unit={unit} proxyFee={ps?.proxyFee ?? 0} handlingFee={ps?.handlingFee ?? 0} />
+                <HandlingFeeForm region={region} unit={unit} proxyFee={ps?.proxyFee ?? 0} handlingFee={ps?.handlingFee ?? 0} freeShipInsQty={ps?.freeShipInsQty ?? 0} />
               </div>
               <div className={subCls}>
                 <h3 className="font-bold text-gray-800 mb-3">送料・保険料</h3>

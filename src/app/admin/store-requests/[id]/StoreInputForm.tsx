@@ -56,9 +56,11 @@ function newRow(): CardRow {
 export default function StoreInputForm({
   applicationId,
   servicePrices,
+  masterNames = [],
 }: {
   applicationId: string;
   servicePrices: ServicePrice[];
+  masterNames?: string[];
 }) {
   const router = useRouter();
   const [serviceLevel, setServiceLevel] = useState<ServiceLevel>(
@@ -106,6 +108,11 @@ export default function StoreInputForm({
 
   return (
     <div className="space-y-6">
+      <datalist id="card-name-master">
+        {masterNames.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>
       )}
@@ -159,6 +166,7 @@ export default function StoreInputForm({
               />
               <input
                 placeholder="カード名（例: リザードン）"
+                list="card-name-master"
                 value={c.cardName}
                 onChange={(e) => update(i, "cardName", e.target.value)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"

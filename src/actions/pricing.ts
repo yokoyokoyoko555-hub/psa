@@ -50,21 +50,23 @@ export async function saveShippingInsuranceRates(
   return { success: true };
 }
 
-/** 代理入力料金・事務手数料（リージョン別の一律額・/枚）を保存 */
+/** 代理入力料金・事務手数料・送料保険無料化枚数（リージョン別の一律）を保存 */
 export async function saveUniformFees(input: {
   region: "PSA_JP" | "PSA_US";
   proxyFee: number;
   handlingFee: number;
+  freeShipInsQty: number;
 }): Promise<{ success: boolean; error?: string }> {
   await requireAdmin();
   const region = regionEnum.safeParse(input.region);
   if (!region.success) return { success: false, error: "リージョンが不正です" };
   const proxyFee = Math.max(0, Math.floor(Number(input.proxyFee) || 0));
   const handlingFee = Math.max(0, Math.floor(Number(input.handlingFee) || 0));
+  const freeShipInsQty = Math.max(0, Math.floor(Number(input.freeShipInsQty) || 0));
   await prisma.pricingSetting.upsert({
     where: { id: region.data },
-    update: { proxyFee, handlingFee },
-    create: { id: region.data, proxyFee, handlingFee },
+    update: { proxyFee, handlingFee, freeShipInsQty },
+    create: { id: region.data, proxyFee, handlingFee, freeShipInsQty },
   });
   revalidatePath("/admin/settings");
   return { success: true };

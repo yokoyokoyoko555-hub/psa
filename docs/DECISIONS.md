@@ -171,5 +171,26 @@
   - `FeeBreakdown` に `discountAmount`/`campaignName`、`Application` に `discountAmount`/`campaignName` を追加し記録・表示。
 - 影響: `Campaign` モデル＋enum新規、`Application` に2列追加（db push）。`calculateFees` に `customerId?`（新規判定用）を追加。管理画面にキャンペーン管理、顧客内訳に「キャンペーン割引」行。
 
+## ADR-0017: 送料・保険の無料化しきい値（N枚以上で0円・リージョン別）
+- 日付: 2026-06-26 / 状態: Accepted（実装済）
+- 決定: `PricingSetting.freeShipInsQty`（リージョン別、0=無効）を追加。`calculateFees` で `cardCount >= freeShipInsQty(>0)` のとき送料・保険を0円化。管理画面の一律料金セクションで設定。
+
+## ADR-0018: メール文面のテンプレート管理化
+- 日付: 2026-06-26 / 状態: Accepted（基盤実装済・トリガ順次追加）
+- 決定: `MailTemplate`(key/subject/bodyHtml/enabled) を新設。`mailer.sendTemplate(key,to,vars)` が `{{var}}` を差込んで送信（SMTP未設定/無効/失敗時は無送信）。管理画面で編集。seedで初期テンプレ投入。トリガ: 申込受付(決済確定)・代理入力完了。今後: グレード確定・返却完了・Upcharge等を順次 `sendTemplate` 化。
+
+## ADR-0019: カード名称マスタ（手入力蓄積→サブミッション時サジェスト）
+- 日付: 2026-06-26 / 状態: Accepted（実装済）
+- 決定: `CardNameMaster` を新設。管理画面 `/admin/card-masters` で手入力CRUD・検索。代理入力(StoreInputForm)のカード名入力に `<datalist>` でサジェスト。顧客入力の誤りはマスタを正とする運用。
+
+## ADR-0020: 代理入力の先払い化（フロー刷新）
+- 日付: 2026-06-26 / 状態: Proposed（設計確定・実装は次フェーズ）。詳細は [PROXY_PREPAY.md](PROXY_PREPAY.md)。ADR-0011/0014 の代理フローを置換。
+- 決定:
+  - 代理申込を「**サービスレベル＋カード枚数 入力 → 概算(枚数×鑑定料)を先に決済**」に変更。決済後にカードの**持込/配送を予約**（現行「支払い前に予約」は廃止＝一本化）。
+  - 店舗到着→staffが明細入力→最終料金確定→**差額を追加請求**（Upchargeを流用 or 専用課金。送料・保険・事務手数料・代理入力料金差分を含む）。
+  - **代理入力料金は「カードの種類数 × 手数料」**（同一カードは何枚でも1種）。種類数はstaff入力後に確定。`calculateFees` に種類数ベースの代理料金を導入。
+  - 送料・保険は申告価格が必要なため**差額側にのせる**。返金が必要なケース（最終<先払い）の扱いは実装時に確定。
+- 影響: `StoreRequestForm` を「枚数入力＋先払い決済(Stripe)」に作り替え、提出予約ゲートを支払い後に統一、`submitStoreInput` に差額請求、fee-calculator に種類数代理料金。新規Stripe決済サーフェスのため**反復テスト前提で別実装**。
+
 
 

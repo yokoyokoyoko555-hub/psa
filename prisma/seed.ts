@@ -100,6 +100,39 @@ async function main() {
     ],
   });
 
+  // メールテンプレート初期データ（既存は保持＝createのみ）。ADR-0018
+  const mailTemplates = [
+    {
+      key: "application_received",
+      name: "申込受付",
+      subject: "【トレカビンクス】お申込みを受け付けました（{{applicationNo}}）",
+      bodyHtml:
+        "<p>{{name}} 様</p><p>お申込みを受け付けました。</p><p>申込番号: {{applicationNo}}<br>合計金額: {{amount}}</p><p>進捗はマイページでご確認いただけます。</p>",
+    },
+    {
+      key: "store_input_completed",
+      name: "代理入力 完了・請求のご案内",
+      subject: "【トレカビンクス】カード内容が確定しました（{{applicationNo}}）",
+      bodyHtml:
+        "<p>{{name}} 様</p><p>お預かりしたカードの内容を確定しました。</p><p>申込番号: {{applicationNo}}<br>合計金額: {{amount}}</p><p>詳細はマイページでご確認ください。</p>",
+    },
+    {
+      key: "grade_available",
+      name: "グレード確定",
+      subject: "【トレカビンクス】鑑定グレードが確定しました",
+      bodyHtml: "<p>{{name}} 様</p><p>鑑定結果が確定しました。マイページでご確認ください。</p>",
+    },
+    {
+      key: "return_completed",
+      name: "返却完了",
+      subject: "【トレカビンクス】カードの返却が完了しました",
+      bodyHtml: "<p>{{name}} 様</p><p>カードの返却手続きが完了しました。</p>",
+    },
+  ];
+  for (const t of mailTemplates) {
+    await prisma.mailTemplate.upsert({ where: { key: t.key }, update: {}, create: t });
+  }
+
   // 料金共通設定（事務手数料・一律）。upsertで既存編集値を保持。ADR-0015
   for (const r of ["PSA_JP", "PSA_US"] as const) {
     await prisma.pricingSetting.upsert({
