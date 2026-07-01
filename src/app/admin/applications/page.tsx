@@ -22,7 +22,11 @@ export default async function AdminApplicationsPage({
   const page = sp.page ? parseInt(sp.page) : 1;
   const limit = 50;
 
-  const where = sp.status ? { status: sp.status as "DRAFT" | "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" } : {};
+  // 申込管理は自己入力(CUSTOMER)のみ。代理入力(STORE)は「代理申込」画面で扱う。
+  const where = {
+    source: "CUSTOMER" as const,
+    ...(sp.status ? { status: sp.status as "DRAFT" | "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" } : {}),
+  };
 
   const [applications, total] = await Promise.all([
     prisma.application.findMany({
@@ -42,7 +46,7 @@ export default async function AdminApplicationsPage({
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">申込管理</h1>
+        <h1 className="text-2xl font-bold text-gray-900">申込管理（自己入力）</h1>
         <p className="text-gray-500 text-sm">全{total}件</p>
       </div>
 
@@ -87,7 +91,11 @@ export default async function AdminApplicationsPage({
               const paid = app.payments.some((p) => p.status === "SUCCEEDED");
               return (
                 <tr key={app.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-500">{app.applicationNo}</td>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    <Link href={`/admin/applications/${app.id}`} className="text-brand-600 hover:underline">
+                      {app.applicationNo}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3">
                     <p className="text-gray-900">{decrypt(app.customer.nameEncrypted)}</p>
                     <p className="text-xs text-gray-400">{app.customer.email}</p>

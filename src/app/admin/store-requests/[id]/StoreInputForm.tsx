@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { completeStoreApplication } from "@/actions/admin";
+import { completeStoreApplication, saveStoreInputDraft } from "@/actions/admin";
 import { CardLanguage, ServiceLevel } from "@prisma/client";
 import type { ServicePrice } from "@prisma/client";
 
@@ -53,24 +53,69 @@ function newRow(): CardRow {
   };
 }
 
+/** 下書きJSON（unknown）を CardRow に正規化する */
+function toCardRow(raw: unknown): CardRow {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return {
+    tcgTitle: typeof r.tcgTitle === "string" ? r.tcgTitle : "",
+    cardName: typeof r.cardName === "string" ? r.cardName : "",
+    cardNumber: typeof r.cardNumber === "string" ? r.cardNumber : "",
+    rarity: typeof r.rarity === "string" ? r.rarity : "",
+    language: (typeof r.language === "string" ? r.language : "JAPANESE") as CardLanguage,
+    declaredValue: typeof r.declaredValue === "number" ? r.declaredValue : 0,
+    quantity: typeof r.quantity === "number" && r.quantity >= 1 ? r.quantity : 1,
+    notes: typeof r.notes === "string" ? r.notes : "",
+  };
+}
+
 export default function StoreInputForm({
   applicationId,
   servicePrices,
   masterNames = [],
+  initialDraft = null,
 }: {
   applicationId: string;
   servicePrices: ServicePrice[];
   masterNames?: string[];
+  initialDraft?: { serviceLevel?: string; cards?: unknown[] } | null;
 }) {
   const router = useRouter();
+  const draftCards = initialDraft?.cards?.map(toCardRow) ?? [];
   const [serviceLevel, setServiceLevel] = useState<ServiceLevel>(
-    servicePrices[0]?.serviceLevel ?? "REGULAR"
+    (initialDraft?.serviceLevel as ServiceLevel) ?? servicePrices[0]?.serviceLevel ?? "REGULAR"
   );
-  const [cards, setCards] = useState<CardRow[]>([newRow()]);
+  const [cards, setCards] = useState<CardRow[]>(draftCards.length > 0 ? draftCards : [newRow()]);
   const [loading, setLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const selected = servicePrices.find((p) => p.serviceLevel === serviceLevel);
+
+  async function handleSaveDraft() {
+    setError("");
+    setSavingDraft(true);
+    const result = await saveStoreInputDraft({
+      applicationId,
+      serviceLevel,
+      cards: cards.map((c) => ({
+        tcgTitle: c.tcgTitle,
+        cardName: c.cardName,
+        cardNumber: c.cardNumber,
+        rarity: c.rarity,
+        language: c.language,
+        declaredValue: c.declaredValue,
+        quantity: c.quantity,
+        notes: c.notes,
+      })),
+    });
+    setSavingDraft(false);
+    if (result.success) {
+      setSavedAt(new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }));
+    } else {
+      setError(result.error ?? "一時保存に失敗しました");
+    }
+  }
 
   function update<K extends keyof CardRow>(i: number, field: K, value: CardRow[K]) {
     setCards((prev) => prev.map((c, idx) => (idx === i ? { ...c, [field]: value } : c)));
@@ -137,6 +182,7 @@ export default function StoreInputForm({
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-gray-900">カード明細</h2>
           <button
+            type="button"
             onClick={() => setCards((p) => [...p, newRow()])}
             className="text-brand-600 text-sm font-medium hover:text-brand-800"
           >
@@ -150,6 +196,7 @@ export default function StoreInputForm({
               <p className="font-bold text-gray-800 text-sm">カード {i + 1}</p>
               {cards.length > 1 && (
                 <button
+                  type="button"
                   onClick={() => setCards((p) => p.filter((_, idx) => idx !== i))}
                   className="text-red-500 text-xs hover:text-red-700"
                 >
@@ -219,13 +266,27 @@ export default function StoreInputForm({
         </p>
       )}
 
-      <button
-        onClick={handleSubmit}
-        disabled={loading}
-        className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
-      >
-        {loading ? "確定中..." : "入力を確定する"}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSaveDraft}
+          disabled={savingDraft || loading}
+          className="flex-1 border border-brand-600 text-brand-700 font-bold py-3 rounded-lg hover:bg-brand-50 disabled:opacity-50 transition"
+        >
+          {savingDraft ? "保存中..." : "一時保存"}
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={loading || savingDraft}
+          className="flex-[2] bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
+        >
+          {loading ? "確定中..." : "入力を確定する"}
+        </button>
+      </div>
+      {savedAt && (
+        <p className="text-right text-xs text-gray-500">一時保存しました（{savedAt}）。この画面を離れても内容は復元されます。</p>
+      )}
     </div>
   );
 }

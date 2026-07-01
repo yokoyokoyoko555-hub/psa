@@ -72,8 +72,10 @@ export async function getDashboardStats() {
 
   const [total, psaWaiting, psaReturning, unpaid, upchargeCount] = await Promise.all([
     prisma.application.count({ where: { status: { not: "CANCELLED" } } }),
-    prisma.card.count({ where: { status: "READY_FOR_PSA" } }),
-    prisma.card.count({ where: { status: "SUBMITTED_TO_PSA" } }),
+    // PSA提出待ち: グループ割当済みだが未提出（PREPARING）の申込
+    prisma.application.count({ where: { psaSubmissionGroup: { status: "PREPARING" } } }),
+    // PSA返却待ち: 提出済み（SUBMITTED）グループの申込
+    prisma.application.count({ where: { psaSubmissionGroup: { status: "SUBMITTED" } } }),
     prisma.payment.count({ where: { status: "PENDING" } }),
     prisma.upcharge.count({ where: { status: "PENDING" } }),
   ]);
@@ -112,37 +114,30 @@ export async function updateCardStatus(
   });
 }
 
-export async function createPsaSubmissionGroup(cardIds: string[]) {
-  const user = await requireAdminOrStaff();
+/** 申込単位でPSA提出グループを作成し、選択した申込を割り当てる。ADR-0021 */
+export async function createPsaSubmissionGroup(applicationIds: string[]) {
+  await requireAdminOrStaff();
+  if (applicationIds.length === 0) return null;
 
   const groupNo = await generateGroupNo();
   const group = await prisma.$transaction(async (tx) => {
-    const g = await tx.psaSubmissionGroup.create({
-      data: { groupNo },
+    const g = await tx.psaSubmissionGroup.create({ data: { groupNo } });
+    await tx.application.updateMany({
+      where: { id: { in: applicationIds } },
+      data: { psaSubmissionGroupId: g.id },
     });
-    await tx.card.updateMany({
-      where: { id: { in: cardIds } },
-      data: {
-        psaSubmissionGroupId: g.id,
-        status: "READY_FOR_PSA",
-      },
-    });
-    for (const cardId of cardIds) {
-      await tx.cardStatusHistory.create({
-        data: { cardId, status: "READY_FOR_PSA", changedBy: user.id },
-      });
-    }
     return g;
   });
 
   return group;
 }
 
+/** グループにPSAサブミッションID・申請番号(order ID)・提出日を記録するのみ（紐づけ）。ADR-0021 */
 export async function submitPsaGroup(
   groupId: string,
   params: { psaSubmissionId: string; psaOrderId: string; submittedAt: Date }
 ) {
-  const user = await requireAdminOrStaff();
+  await requireAdminOrStaff();
 
   const group = await prisma.psaSubmissionGroup.update({
     where: { id: groupId },
@@ -152,44 +147,9 @@ export async function submitPsaGroup(
       submittedAt: params.submittedAt,
       status: "SUBMITTED",
     },
-    include: { cards: true },
   });
-
-  for (const card of group.cards) {
-    await prisma.card.update({
-      where: { id: card.id },
-      data: {
-        psaSubmissionId: params.psaSubmissionId,
-        psaOrderId: params.psaOrderId,
-        status: "SUBMITTED_TO_PSA",
-      },
-    });
-    await prisma.cardStatusHistory.create({
-      data: { cardId: card.id, status: "SUBMITTED_TO_PSA", changedBy: user.id },
-    });
-  }
 
   return group;
-}
-
-export async function recordGrade(
-  cardId: string,
-  params: { psaCertNo: string; psaGrade: string }
-) {
-  const user = await requireAdminOrStaff();
-
-  await prisma.card.update({
-    where: { id: cardId },
-    data: {
-      psaCertNo: params.psaCertNo,
-      psaGrade: params.psaGrade,
-      psaGradedAt: new Date(),
-      status: "GRADE_AVAILABLE",
-    },
-  });
-  await prisma.cardStatusHistory.create({
-    data: { cardId, status: "GRADE_AVAILABLE", changedBy: user.id },
-  });
 }
 
 const upchargeSchema = z.object({
@@ -296,50 +256,6 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
   return upcharge;
 }
 
-export async function getAdminCards(params: {
-  status?: CardStatus;
-  customerId?: string;
-  applicationId?: string;
-  search?: string;
-  page?: number;
-  limit?: number;
-}) {
-  await requireAdminOrStaff();
-
-  const page = params.page ?? 1;
-  const limit = params.limit ?? 50;
-  const skip = (page - 1) * limit;
-
-  const where = {
-    ...(params.status && { status: params.status }),
-    ...(params.customerId && { customerId: params.customerId }),
-    ...(params.applicationId && { applicationId: params.applicationId }),
-    ...(params.search && {
-      OR: [
-        { cardName: { contains: params.search, mode: "insensitive" as const } },
-        { cardNo: { contains: params.search, mode: "insensitive" as const } },
-        { psaCertNo: { contains: params.search, mode: "insensitive" as const } },
-      ],
-    }),
-  };
-
-  const [cards, total] = await Promise.all([
-    prisma.card.findMany({
-      where,
-      skip,
-      take: limit,
-      include: {
-        application: { select: { applicationNo: true } },
-        customer: { select: { email: true, nameEncrypted: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.card.count({ where }),
-  ]);
-
-  return { cards, total, page, limit };
-}
-
 export async function getAdminCustomers(params: {
   search?: string;
   page?: number;
@@ -382,8 +298,13 @@ export async function getAdminCustomers(params: {
 /** 要対応の代理申込（顧客が依頼し、店舗の入力待ち）一覧 */
 export async function getStoreRequests() {
   await requireAdminOrStaff();
+  // 先払い（SUCCEEDED）済みの STORE 申込のみ「要対応」に表示。決済前の申込は含めない。ADR-0020/0021
   const apps = await prisma.application.findMany({
-    where: { source: "STORE", status: "DRAFT" },
+    where: {
+      source: "STORE",
+      status: "DRAFT",
+      payments: { some: { status: "SUCCEEDED" } },
+    },
     include: { customer: { select: { email: true, nameEncrypted: true } }, agreement: true },
     orderBy: { createdAt: "asc" },
   });
@@ -408,6 +329,50 @@ const storeCardSchema = z.object({
   quantity: z.number().int().min(1).max(100),
   notes: z.string().max(1000).optional(),
 });
+
+// 代理入力の一時保存（下書き）。確定前の緩いバリデーション（空欄可）。
+const storeDraftCardSchema = z.object({
+  tcgTitle: z.string().max(200).default(""),
+  cardName: z.string().max(200).default(""),
+  cardNumber: z.string().max(100).default(""),
+  rarity: z.string().max(100).default(""),
+  language: z.nativeEnum(CardLanguage).default("JAPANESE"),
+  declaredValue: z.number().int().min(0).default(0),
+  quantity: z.number().int().min(1).max(100).default(1),
+  notes: z.string().max(1000).default(""),
+});
+
+const saveStoreDraftSchema = z.object({
+  applicationId: z.string(),
+  serviceLevel: z.nativeEnum(ServiceLevel),
+  cards: z.array(storeDraftCardSchema).max(200).default([]),
+});
+
+export type StoreInputDraft = z.infer<typeof saveStoreDraftSchema>;
+
+/**
+ * 代理入力（当社入力）の途中内容を一時保存する。Application.draftData に { serviceLevel, cards } を格納。
+ * 確定は completeStoreApplication。DRAFT の STORE 申込のみ。
+ */
+export async function saveStoreInputDraft(
+  input: z.infer<typeof saveStoreDraftSchema>
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdminOrStaff();
+  const parsed = saveStoreDraftSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
+
+  const app = await prisma.application.findUnique({ where: { id: parsed.data.applicationId } });
+  if (!app) return { success: false, error: "申込が見つかりません" };
+  if (app.source !== "STORE" || app.status !== "DRAFT") {
+    return { success: false, error: "対応可能な代理申込ではありません" };
+  }
+
+  await prisma.application.update({
+    where: { id: app.id },
+    data: { draftData: { serviceLevel: parsed.data.serviceLevel, cards: parsed.data.cards } },
+  });
+  return { success: true };
+}
 
 const completeStoreSchema = z.object({
   applicationId: z.string(),
@@ -453,7 +418,8 @@ export async function completeStoreApplication(
   const totalDeclaredValue = parsed.data.cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
   const cardCount = parsed.data.cards.reduce((s, c) => s + c.quantity, 0);
 
-  // 当社入力は手数料あり
+  // 当社入力は手数料あり。代理入力料金は「種類数 × 手数料」（同一カードは何枚でも1種）。
+  // 種類数 = 入力されたカード行数（行ごとに別カードを想定）。[ADR-0020 / PROXY_PREPAY 段階1]
   const fees = await calculateFees({
     serviceLevel: parsed.data.serviceLevel,
     region: app.region,
@@ -461,6 +427,7 @@ export async function completeStoreApplication(
     cardCount,
     totalDeclaredValue,
     applyAgencyFee: true,
+    agencyCardTypeCount: parsed.data.cards.length,
     customerId: app.customerId,
   });
 

@@ -64,6 +64,8 @@ export default function ApplyEntry(props: Props) {
           <StoreRequestForm
             profile={props.profile}
             addresses={props.addresses}
+            servicePrices={props.servicePrices}
+            stripePublishableKey={props.stripePublishableKey}
           />
         </main>
       </div>

@@ -421,6 +421,8 @@ export async function confirmApplicationPayment(
 
 const storeRequestSchema = z.object({
   region: z.nativeEnum(ServiceRegion),
+  serviceLevel: z.nativeEnum(ServiceLevel),
+  cardCount: z.number().int().min(1).max(500),
   returnMethod: z.nativeEnum(ReturnMethod),
   returnAddress: returnAddressSchema,
   shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/),
@@ -431,18 +433,37 @@ const storeRequestSchema = z.object({
 });
 
 /**
- * 代理申込（当社入力）の依頼を顧客が作成する。
- * カード明細は入れず、提出先・返却方法・同意のみ。管理画面に「要対応」(source=STORE, status=DRAFT)として表示される。
- * 料金確定後、管理画面から顧客へ請求し、顧客が決済する。
+ * 代理申込（当社入力）の依頼を顧客が作成し、概算（枚数×鑑定料＋税）を先払いする。ADR-0020 / PROXY_PREPAY
+ * カード明細は入れず、サービスレベル・枚数・提出先・返却方法・同意のみ。先払い決済後にカードお預け予約へ進む。
+ * 店舗到着後にスタッフが明細を確定し、差額は段階4で追加請求（本実装の対象外）。
+ * 返り値の clientSecret で顧客がカード決済し、confirmStorePrepayPayment で確定する。
  */
 export async function createStoreRequest(
   input: z.infer<typeof storeRequestSchema>
-): Promise<{ success: boolean; error?: string; applicationId?: string }> {
+): Promise<{ success: boolean; error?: string; applicationId?: string; clientSecret?: string }> {
   const customer = await getCustomerSession();
   if (!customer) return { success: false, error: "ログインが必要です" };
 
   const parsed = storeRequestSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
+
+  const servicePrice = await prisma.servicePrice.findUnique({
+    where: { serviceLevel_region: { serviceLevel: parsed.data.serviceLevel, region: parsed.data.region } },
+  });
+  if (!servicePrice) return { success: false, error: "サービスレベルが見つかりません" };
+
+  // 先払い概算: 枚数 × 鑑定料 ＋ 消費税(10%)。代理入力料金・送料・保険・事務手数料は含めない（差額側＝段階4）。
+  const psaFeeTotal = servicePrice.pricePerCard * parsed.data.cardCount;
+  const taxAmount = Math.floor(psaFeeTotal * 0.1);
+  const prepaidAmount = psaFeeTotal + taxAmount;
+
+  let stripeCustomerId: string;
+  try {
+    stripeCustomerId = await ensureStripeCustomer(customer);
+  } catch (err) {
+    console.error("Failed to ensure Stripe customer:", err);
+    return { success: false, error: paymentSetupErrorMessage(err) };
+  }
 
   const applicationNo = await generateApplicationNo("STORE");
 
@@ -451,13 +472,18 @@ export async function createStoreRequest(
       data: {
         applicationNo,
         customerId: customer.id,
-        serviceLevel: "REGULAR", // 仮（店舗が確定）
+        serviceLevel: parsed.data.serviceLevel, // 顧客選択（店舗が明細確定時に再確定しうる）
         region: parsed.data.region,
         source: "STORE",
         returnMethod: parsed.data.returnMethod,
         shippingAddressEncrypted: encrypt(JSON.stringify(parsed.data.returnAddress)),
         shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
         status: "DRAFT",
+        estimatedCardCount: parsed.data.cardCount,
+        prepaidAmount,
+        totalAmount: prepaidAmount,
+        psaFeeTotal,
+        taxAmount,
       },
     });
     await tx.agreement.create({
@@ -473,6 +499,31 @@ export async function createStoreRequest(
     return app;
   });
 
+  // Stripe PaymentIntent（概算先払い）
+  let paymentIntent;
+  try {
+    paymentIntent = await createPaymentIntent({
+      amount: prepaidAmount,
+      customerId: stripeCustomerId,
+      applicationId: application.id,
+      description: `PSA代理申込 先払い ${application.applicationNo}`,
+    });
+  } catch (err) {
+    console.error("Failed to create Stripe PaymentIntent:", err);
+    return { success: false, error: paymentSetupErrorMessage(err) };
+  }
+
+  await prisma.payment.create({
+    data: {
+      customerId: customer.id,
+      applicationId: application.id,
+      stripePaymentIntentId: paymentIntent.id,
+      amount: prepaidAmount,
+      status: "PENDING",
+      description: `PSA代理申込 先払い ${application.applicationNo}`,
+    },
+  });
+
   const hdrs = await headers();
   await logOperation({
     customerId: customer.id,
@@ -480,9 +531,112 @@ export async function createStoreRequest(
     action: "STORE_REQUEST_CREATE",
     targetType: "applications",
     targetId: application.id,
+    after: { applicationNo: application.applicationNo, prepaidAmount },
   });
 
-  return { success: true, applicationId: application.id };
+  return { success: true, applicationId: application.id, clientSecret: paymentIntent.client_secret! };
+}
+
+/**
+ * 代理申込の先払い決済を確定する。confirmApplicationPayment を踏襲しつつ、
+ * カード未入力のため status は DRAFT のまま（スタッフ明細入力で SUBMITTED に進む）。ADR-0020
+ */
+export async function confirmStorePrepayPayment(
+  input: z.infer<typeof confirmPaymentSchema>
+): Promise<{ success: boolean; error?: string; status?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const parsed = confirmPaymentSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "決済情報を確認してください" };
+
+  const application = await prisma.application.findFirst({
+    where: { id: parsed.data.applicationId, customerId: customer.id, source: "STORE" },
+    include: { payments: true },
+  });
+  if (!application) return { success: false, error: "申込が見つかりません" };
+
+  const payment = application.payments.find(
+    (p) => p.stripePaymentIntentId === parsed.data.paymentIntentId
+  );
+  if (!payment) return { success: false, error: "決済レコードが見つかりません" };
+  if (payment.status === "SUCCEEDED") {
+    return { success: true, status: "succeeded" };
+  }
+
+  const stripe = getStripe();
+  const paymentIntent = await stripe.paymentIntents.retrieve(parsed.data.paymentIntentId, {
+    expand: ["payment_method"],
+  });
+
+  if (paymentIntent.status !== "succeeded") {
+    if (paymentIntent.status === "processing") {
+      return { success: false, status: "processing", error: "決済処理中です。少し待ってから予約へ進んでください" };
+    }
+    return { success: false, status: paymentIntent.status, error: "決済が完了していません" };
+  }
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      status: "SUCCEEDED",
+      stripePaymentMethodId:
+        typeof paymentIntent.payment_method === "string"
+          ? paymentIntent.payment_method
+          : paymentIntent.payment_method?.id,
+      paidAt: new Date(),
+    },
+  });
+
+  // 保存カード登録（段階4の差額オフセッション課金に流用可）
+  const paymentMethod = paymentIntent.payment_method;
+  if (
+    typeof paymentMethod === "object" &&
+    paymentMethod?.id &&
+    paymentMethod.card &&
+    customer.stripeCustomerId
+  ) {
+    const existing = await prisma.savedPaymentMethod.findFirst({
+      where: { stripePaymentMethodId: paymentMethod.id },
+    });
+    if (!existing) {
+      const hasDefault = await prisma.savedPaymentMethod.findFirst({
+        where: { customerId: customer.id, isDefault: true },
+      });
+      await prisma.savedPaymentMethod.create({
+        data: {
+          customerId: customer.id,
+          stripePaymentMethodId: paymentMethod.id,
+          brand: paymentMethod.card.brand,
+          last4: paymentMethod.card.last4,
+          expMonth: paymentMethod.card.exp_month,
+          expYear: paymentMethod.card.exp_year,
+          isDefault: !hasDefault,
+        },
+      });
+    }
+  }
+
+  const hdrs = await headers();
+  await logOperation({
+    customerId: customer.id,
+    ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
+    action: "STORE_PREPAY_CONFIRMED",
+    targetType: "applications",
+    targetId: application.id,
+    after: { paymentIntentId: paymentIntent.id, status: paymentIntent.status },
+  });
+
+  // 受付メール（best-effort）
+  await sendTemplate("application_received", customer.email, {
+    name: decrypt(customer.nameEncrypted),
+    applicationNo: application.applicationNo,
+    amount: formatMoney(application.totalAmount, application.region),
+  });
+
+  revalidatePath("/mypage");
+  revalidatePath("/mypage/submission-booking");
+  return { success: true, status: paymentIntent.status };
 }
 
 const draftCardSchema = z.object({

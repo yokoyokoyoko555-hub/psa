@@ -2,7 +2,7 @@
 
 > Codex / Claude Code 共有用の自己完結ドキュメント。この1枚で機能の全体像・確定方針・実装タスクを把握できる。
 > 関連: [ADR-0012](DECISIONS.md) / 規約は [AGENTS.md](../AGENTS.md) / 全体像は [PROJECT_BRIEF.md](PROJECT_BRIEF.md)
-> 状態: **Phase 1 実装済 / Phase 0 課金配線は残** / 最終更新: 2026-06-21
+> 状態: **Phase 0・Phase 1 実装済＋本番稼働（Phase 0 env配線済・Stripe側は横山確認済）** / 最終更新: 2026-06-28
 
 ---
 
@@ -190,14 +190,14 @@ iOS Safari注意: `getUserMedia` はHTTPS必須（本番は充足）、`<video p
 ---
 
 ## 8. 実装タスク（Phase別）
-### Phase 0 — 課金基盤＋導線（コード実装済み。あとはStripe側設定＋env）
+### Phase 0 — 課金基盤＋導線（✅ 完了。本番 env 配線済・Stripe側設定は横山確認済 2026-06-28）
 - [x] `schema.prisma`: `SubscriptionStatus` enum・`Subscription` モデル追加、`Customer` に relation
 - [x] `lib/stripe.ts`: `createCheckoutSubscriptionSession()` / `createBillingPortalSession()`
 - [x] `actions/subscription.ts`: `startCenteringSubscription()`（Checkout） / `openBillingPortal()`（Portal）。`hasCenteringAccess()` は `actions/centering.ts`（ACTIVE/TRIALING かつ 期間内）
 - [x] `/api/stripe/webhook`: `customer.subscription.created/updated/deleted` で `Subscription` を upsert（invoice系は subscription.updated が renewal時に発火するため代替。既存 `payment_intent.*` は不変）
 - [x] `/mypage/centering`: 未加入→`SubscribeButton`（加入）／加入済→`ManageSubscriptionButton`（Portal）。`?subscribed=1` で反映待ち案内
 - [x] `/mypage`: クイックアクションに導線
-- [ ] **env `STRIPE_CENTERING_PRICE_ID` 設定**＋StripeでPrice作成・Portal有効化・Webhookエンドポイント登録（§テストモード手順）
+- [x] **env `STRIPE_CENTERING_PRICE_ID` 設定**＋StripeでPrice作成・Portal有効化・Webhookエンドポイント登録（本番 Railway 設定済・`CENTERING_DEV_UNLOCK=false`。Stripe側設定と実加入は横山確認済 2026-06-28）
 
 ### Phase 1 — 撮影＋測定（実装済）
 - [x] `/mypage/centering/measure`（client）: カメラ・ガイド枠・撮影・フォールバックアップロード
@@ -206,9 +206,9 @@ iOS Safari注意: `getUserMedia` はHTTPS必須（本番は充足）、`<video p
 - [x] 参考グレード対応表（`lib/centering.ts` 定数）＋判定（純関数）
 - [x] `actions/centering.ts`: `saveCenteringMeasurement()`（数値のみ）
 - [x] `/mypage/centering/[id]` 結果詳細＋免責、履歴一覧
-- [x] ゲート（`hasCenteringAccess`）を全ページ/Actionに適用。**Stripe未配線のため `CENTERING_DEV_UNLOCK=true` で開放**
+- [x] ゲート（`hasCenteringAccess`）を全ページ/Actionに適用。**本番は `CENTERING_DEV_UNLOCK=false`＝実サブスクで開放**
 
-> Phase 1（手動）＋AI自動検出（OpenCV.js 端末内）まで実装済み。手動測定は無料で全ログインユーザーに開放、AI自動検出は `aiEnabled`（サブスク or `CENTERING_DEV_UNLOCK=true`）時のみ。Stripeサブスク配線（Phase 0）は引き続き残。OpenCV.js は `https://docs.opencv.org/4.10.0/opencv.js` をAI測定時のみ遅延ロード（CSP無しのため読込可）。内枠の自動検出精度向上（フルアート対応のML化）は将来課題。
+> Phase 1（手動）＋AI自動検出（OpenCV.js 端末内）まで実装済み。手動測定は無料で全ログインユーザーに開放、AI自動検出は `aiEnabled`（サブスク or `CENTERING_DEV_UNLOCK=true`）時のみ。Stripeサブスク配線（Phase 0）は本番稼働済（`CENTERING_DEV_UNLOCK=false`・横山確認済 2026-06-28）。OpenCV.js は `https://docs.opencv.org/4.10.0/opencv.js` をAI測定時のみ遅延ロード（CSP無しのため読込可）。内枠の自動検出精度向上（フルアート対応のML化）は将来課題。
 
 ### Phase 2 — 付加価値（将来・任意）
 - [ ] 内枠自動検出の精度向上（ML/セグメンテーション検討は新ADR）

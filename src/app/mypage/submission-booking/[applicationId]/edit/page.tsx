@@ -23,18 +23,14 @@ export default async function EditBookingPage({
   if (!customer) redirect("/login");
 
   const { applicationId } = await params;
+  // 支払い済み（SUCCEEDED な決済あり）のみ予約可。STORE/CUSTOMER 共通。ADR-0020
+  // STORE は先払い後も status=DRAFT のため status では絞らず決済で判定する。
   const app = await prisma.application.findFirst({
     where: {
       id: applicationId,
       customerId: customer.id,
-      OR: [
-        { source: "STORE", status: { not: "CANCELLED" } },
-        {
-          source: "CUSTOMER",
-          status: { notIn: ["DRAFT", "CANCELLED"] },
-          payments: { some: { status: "SUCCEEDED" } },
-        },
-      ],
+      status: { not: "CANCELLED" },
+      payments: { some: { status: "SUCCEEDED" } },
     },
     include: { submissionBooking: true, _count: { select: { cards: true } } },
   });

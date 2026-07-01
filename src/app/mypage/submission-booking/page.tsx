@@ -19,18 +19,13 @@ export default async function SubmissionBookingPage() {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
 
-  // 代理申込(STORE)はお預け予約が先のため支払い前でも対象。通常(CUSTOMER)は支払い済みのみ。
+  // 支払い済み（SUCCEEDED な決済あり）のみ予約対象。STORE/CUSTOMER 共通（代理申込も先払い化）。ADR-0020
+  // STORE は先払い後も status=DRAFT のため status では絞らず決済で判定する。
   const applications = await prisma.application.findMany({
     where: {
       customerId: customer.id,
-      OR: [
-        { source: "STORE", status: { not: "CANCELLED" } },
-        {
-          source: "CUSTOMER",
-          status: { notIn: ["DRAFT", "CANCELLED"] },
-          payments: { some: { status: "SUCCEEDED" } },
-        },
-      ],
+      status: { not: "CANCELLED" },
+      payments: { some: { status: "SUCCEEDED" } },
     },
     include: {
       _count: { select: { cards: true } },

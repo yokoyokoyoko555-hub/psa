@@ -184,7 +184,8 @@
 - 決定: `CardNameMaster` を新設。管理画面 `/admin/card-masters` で手入力CRUD・検索。代理入力(StoreInputForm)のカード名入力に `<datalist>` でサジェスト。顧客入力の誤りはマスタを正とする運用。
 
 ## ADR-0020: 代理入力の先払い化（フロー刷新）
-- 日付: 2026-06-26 / 状態: Proposed（設計確定・実装は次フェーズ）。詳細は [PROXY_PREPAY.md](PROXY_PREPAY.md)。ADR-0011/0014 の代理フローを置換。
+- 日付: 2026-06-26（更新 2026-06-28）/ 状態: **段階1〜3 実装済 / 段階4（差額請求）は次フェーズ**。詳細は [PROXY_PREPAY.md](PROXY_PREPAY.md)。ADR-0011/0014 の代理フローを置換。
+- 実装メモ（2026-06-28 段階2＋3）: `createStoreRequest` を「サービスレベル＋枚数→概算(枚数×鑑定料＋税)を先払い」に拡張し PaymentIntent の `clientSecret` を返却、`confirmStorePrepayPayment` で確定（status=DRAFT 維持・カードはスタッフが後入力）。決済UIは共有 `components/StripeCardPayment.tsx`（ApplyForm から切り出し）。`Application` に `prepaidAmount`/`estimatedCardCount` 追加（db push）。予約ゲートは `submission-booking.ts` と予約ページ2枚で「SUCCEEDED な決済あり」を全 source 共通に統一し、旧 STORE 特例（未払いでも予約可）を撤去。段階4（最終料金確定→差額追加請求・完了メール、最終<先払い時の返金/充当）は未実装。
 - 決定:
   - 代理申込を「**サービスレベル＋カード枚数 入力 → 概算(枚数×鑑定料)を先に決済**」に変更。決済後にカードの**持込/配送を予約**（現行「支払い前に予約」は廃止＝一本化）。
   - 店舗到着→staffが明細入力→最終料金確定→**差額を追加請求**（Upchargeを流用 or 専用課金。送料・保険・事務手数料・代理入力料金差分を含む）。
@@ -192,5 +193,17 @@
   - 送料・保険は申告価格が必要なため**差額側にのせる**。返金が必要なケース（最終<先払い）の扱いは実装時に確定。
 - 影響: `StoreRequestForm` を「枚数入力＋先払い決済(Stripe)」に作り替え、提出予約ゲートを支払い後に統一、`submitStoreInput` に差額請求、fee-calculator に種類数代理料金。新規Stripe決済サーフェスのため**反復テスト前提で別実装**。
 
+
+## ADR-0021: 管理画面の申込単位化（カード管理廃止・PSA提出グループを申込単位へ）
+- 日付: 2026-07-01 / 状態: 実装済。
+- 背景: 従来はカード単位（`Card` 起点）で status/grade/upcharge/PSA提出グループを操作していたが、運用実態（申込＝カードのまとまりを複数まとめて1つのPSAサブミッションへ提出）に合わず煩雑だった。
+- 決定:
+  - **申込管理は自己入力(source=CUSTOMER)のみ表示**。代理(STORE)は既存「代理申込」画面(`/admin/store-requests`)に集約。一覧行→申込詳細へ遷移可能に。
+  - **代理入力フォームに一時保存**を追加（`Application.draftData` に `{serviceLevel, cards}`）。`saveStoreInputDraft` アクション、詳細ページで復元。全ボタン `type="button"` でデータ消失を防止。
+  - **カード単位の管理画面(`/admin/cards`)を廃止**。カードのステータス更新・Upcharge は申込詳細(`/admin/applications/[id]`)にインライン移設（`CardStatusForm`/`UpchargeForm` を `src/components/` へ移動）。**グレード登録機能(recordGrade/GradeForm)は廃止**（`psaCertNo`/`psaGrade`/`psaGradedAt` 列は破壊回避で残置・未使用）。
+  - **PSA提出グループを申込単位に変更**。`Application.psaSubmissionGroupId` ＋ `PsaSubmissionGroup.applications[]` を追加（旧 `Card.psaSubmissionGroupId`/`cards[]` は残置・未使用）。グループは**サブミッションID＋申請番号(Order ID)＋提出日の紐づけのみ**（カードstatus伝播は廃止）。1サブミッション＝複数申込。
+  - dashboard の PSA待ち/返却待ちはグループ status ベース（PREPARING/SUBMITTED の申込数）へ。
+- 影響: `Application`/`PsaSubmissionGroup` に列追加（db push）。`createPsaSubmissionGroup(applicationIds)`/`submitPsaGroup`（ID記録のみ）へ変更。QR は申込詳細へ誘導。
+- 未対応: 代理申込一覧(`getStoreRequests`)は STORE/DRAFT 全件表示のまま（未払い先払い前の申込も含む）。必要なら支払い済みフィルタを別途。
 
 

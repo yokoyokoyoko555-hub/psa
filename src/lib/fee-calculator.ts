@@ -111,6 +111,11 @@ export async function calculateFees(params: {
   totalDeclaredValue: number;
   /** 代行手数料を加算するか（当社入力=true / 顧客入力=false） */
   applyAgencyFee: boolean;
+  /**
+   * 代理入力料金を「カードの種類数 × 手数料」で課金する場合の種類数（同一カードは何枚でも1種）。
+   * 未指定なら従来どおり cardCount（枚数）ベース。後方互換のため任意。[ADR-0020 / PROXY_PREPAY]
+   */
+  agencyCardTypeCount?: number;
   /** 新規(初回)限定キャンペーンの判定に使用（任意） */
   customerId?: string;
 }): Promise<FeeBreakdown> {
@@ -125,8 +130,10 @@ export async function calculateFees(params: {
   const perCardCost = servicePrice.cost > 0 ? servicePrice.cost : Math.floor(servicePrice.pricePerCard * PSA_COST_RATE);
   const psaCostTotal = perCardCost * params.cardCount;
 
-  // 代理入力料金: リージョン別の一律額（/枚）× 枚数。代理入力(STORE)時のみ
-  const agencyFeeTotal = params.applyAgencyFee ? (setting?.proxyFee ?? 0) * params.cardCount : 0;
+  // 代理入力料金: リージョン別の一律額 × 種類数（同一カードは何枚でも1種）。
+  // 種類数(agencyCardTypeCount)未指定なら従来どおり枚数(cardCount)で算出（後方互換）。代理入力(STORE)時のみ。
+  const agencyUnits = params.agencyCardTypeCount ?? params.cardCount;
+  const agencyFeeTotal = params.applyAgencyFee ? (setting?.proxyFee ?? 0) * agencyUnits : 0;
   // 事務手数料: リージョン別の一律額（/枚）× 枚数
   const handlingFee = (setting?.handlingFee ?? 0) * params.cardCount;
 

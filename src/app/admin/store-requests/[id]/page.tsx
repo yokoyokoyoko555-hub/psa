@@ -38,6 +38,12 @@ export default async function StoreRequestDetailPage({
 
   const alreadyDone = app.status !== "DRAFT";
 
+  // 一時保存済みの下書き（{ serviceLevel, cards }）があれば復元用に取り出す
+  const draft =
+    app.draftData && typeof app.draftData === "object" && !Array.isArray(app.draftData)
+      ? (app.draftData as { serviceLevel?: string; cards?: unknown[] })
+      : null;
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <Link href="/admin/store-requests" className="text-sm text-brand-600 hover:underline">
@@ -75,6 +81,7 @@ export default async function StoreRequestDetailPage({
           applicationId={app.id}
           servicePrices={servicePrices}
           masterNames={masterNames}
+          initialDraft={draft}
         />
       )}
     </div>

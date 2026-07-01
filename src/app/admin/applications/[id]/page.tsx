@@ -5,6 +5,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import CopyButton from "@/components/CopyButton";
+import CardStatusForm from "@/components/CardStatusForm";
+import UpchargeForm from "@/components/UpchargeForm";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -59,10 +61,11 @@ export default async function AdminApplicationDetailPage({
     where: { id },
     include: {
       customer: true,
-      cards: { orderBy: { createdAt: "asc" } },
+      cards: { orderBy: { createdAt: "asc" }, include: { upcharges: { orderBy: { createdAt: "desc" } } } },
       payments: { orderBy: { createdAt: "desc" } },
       agreement: true,
       submissionBooking: true,
+      psaSubmissionGroup: true,
     },
   });
 
@@ -167,49 +170,73 @@ export default async function AdminApplicationDetailPage({
 
           {/* Cards */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-bold text-gray-900 mb-4">カード一覧</h2>
-            <div className="space-y-3">
+            <h2 className="font-bold text-gray-900 mb-4">カード一覧（{application.cards.length}枚）</h2>
+            <div className="space-y-4">
               {application.cards.map((card) => (
                 <div
                   key={card.id}
-                  className="border border-gray-100 rounded-lg p-4 hover:border-brand-200 transition"
+                  className="border border-gray-200 rounded-lg p-4"
                 >
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Link
-                          href={`/admin/cards/${card.id}`}
-                          className="font-medium text-brand-600 hover:underline"
-                        >
-                          {card.cardName}
-                        </Link>
+                        <span className="font-medium text-gray-900">{card.cardName}</span>
                         <CopyButton text={card.cardName} />
                       </div>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 mt-0.5">
                         {card.tcgTitle}
                         {card.cardNumber ? ` / ${card.cardNumber}` : ""}
                         {card.rarity ? ` / ${card.rarity}` : ""}
                       </p>
+                      <p className="mt-1 flex gap-3 text-xs text-gray-500">
+                        <span className="font-mono text-gray-400">{card.cardNo}</span>
+                        <span>申告額: ¥{card.declaredValue.toLocaleString()}</span>
+                        <span>言語: {card.language}</span>
+                        <span>{card.quantity}枚</span>
+                      </p>
                     </div>
                     <span
-                      className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      className={`shrink-0 text-xs px-2 py-1 rounded-full font-medium ${
                         STATUS_BADGE[card.status] ?? "bg-gray-100 text-gray-600"
                       }`}
                     >
                       {CARD_STATUS_LABELS[card.status] ?? card.status}
                     </span>
                   </div>
-                  <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                    <span>申告額: ¥{card.declaredValue.toLocaleString()}</span>
-                    <span>言語: {card.language}</span>
-                    {card.psaGrade && (
-                      <span className="text-green-600 font-medium">
-                        PSA {card.psaGrade}
-                      </span>
-                    )}
-                    {card.psaCertNo && (
-                      <span>認証番号: {card.psaCertNo}</span>
-                    )}
+
+                  {/* Upcharge履歴 */}
+                  {card.upcharges.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      {card.upcharges.map((u) => (
+                        <div key={u.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
+                          <span className="text-gray-600">Upcharge ¥{u.upchargeAmount.toLocaleString()}（{u.reason}）</span>
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${
+                            u.status === "PAID" ? "bg-green-100 text-green-700" :
+                            u.status === "FAILED" ? "bg-red-100 text-red-700" :
+                            "bg-yellow-100 text-yellow-700"
+                          }`}>{u.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 操作: ステータス更新 / Upcharge / QR */}
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-gray-100">
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 mb-1">ステータス更新</p>
+                      <CardStatusForm cardId={card.id} currentStatus={card.status} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 mb-1">Upcharge登録・請求</p>
+                      <UpchargeForm cardId={card.id} />
+                      <a
+                        href={`/api/qrcode?cardId=${card.id}`}
+                        target="_blank"
+                        className="mt-2 inline-block text-xs text-brand-600 hover:underline"
+                      >
+                        📱 QRコードを印刷
+                      </a>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -266,6 +293,31 @@ export default async function AdminApplicationDetailPage({
               className="mt-4 block text-sm text-brand-600 hover:underline"
             >
               顧客詳細を見る →
+            </Link>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="font-bold text-gray-900 mb-3">PSA提出グループ</h2>
+            {application.psaSubmissionGroup ? (
+              <dl className="space-y-2 text-sm">
+                <div>
+                  <dt className="text-gray-500 text-xs">グループ番号</dt>
+                  <dd className="font-mono">{application.psaSubmissionGroup.groupNo}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 text-xs">PSA Submission ID</dt>
+                  <dd className="font-mono font-bold">{application.psaSubmissionGroup.psaSubmissionId ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 text-xs">PSA Order ID（申請番号）</dt>
+                  <dd className="font-mono">{application.psaSubmissionGroup.psaOrderId ?? "—"}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-gray-500">未割当です。</p>
+            )}
+            <Link href="/admin/psa-groups" className="mt-4 block text-sm text-brand-600 hover:underline">
+              PSA提出グループ管理 →
             </Link>
           </div>
 

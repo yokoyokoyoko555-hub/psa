@@ -24,7 +24,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin/dashboard", label: "ダッシュボード", icon: "📊" },
     { href: "/admin/applications", label: "申込管理", icon: "📋" },
     { href: "/admin/store-requests", label: "代理申込", icon: "🏪" },
-    { href: "/admin/cards", label: "カード管理", icon: "🃏" },
     { href: "/admin/customers", label: "顧客管理", icon: "👥" },
     { href: "/admin/notifications", label: "お知らせ", icon: "📣" },
     { href: "/admin/submission-bookings", label: "提出予約", icon: "📅" },

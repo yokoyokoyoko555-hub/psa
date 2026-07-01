@@ -70,14 +70,10 @@ export async function upsertSubmissionBooking(
   if (application.status === "CANCELLED") {
     return { success: false, error: "この申込は予約できません" };
   }
-  // 代理申込(STORE)はカードお預けが先のため支払い前でも予約可。通常(CUSTOMER)は支払い済みのみ。
-  if (application.source !== "STORE") {
-    if (application.status === "DRAFT") {
-      return { success: false, error: "この申込は予約できません" };
-    }
-    if (!application.payments.some((p) => p.status === "SUCCEEDED")) {
-      return { success: false, error: "お支払い完了後に予約できます" };
-    }
+  // 支払い済み（SUCCEEDED な決済あり）のみ予約可。代理申込(STORE)も先払い化により同条件に統一。ADR-0020
+  // ※STORE は先払い後も status=DRAFT のまま（明細はスタッフが後で入力）のため、status ではなく決済で判定。
+  if (!application.payments.some((p) => p.status === "SUCCEEDED")) {
+    return { success: false, error: "お支払い完了後に予約できます" };
   }
 
   const booking = await prisma.submissionBooking.upsert({

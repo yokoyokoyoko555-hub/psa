@@ -44,7 +44,7 @@ export default function CardStatusForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="space-y-2">
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as CardStatus)}

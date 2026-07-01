@@ -40,7 +40,7 @@
 - Stripeを「ウォレット的」に扱う要否は別調査（TASKS）。先払い＋保存カードで差額オフセッション課金なら、ウォレット不要で実現可。
 
 ## 6. 段階
-1. fee-calculator: 種類数ベースの代理入力料金（パラメータ追加・後方互換）
-2. `StoreRequestForm`: 枚数入力＋先払い決済
-3. 予約ゲートを支払い後に統一（STORE特例撤去）
-4. `submitStoreInput`: 差額請求＋完了メール
+1. ✅ fee-calculator: 種類数ベースの代理入力料金（`calculateFees` に任意 `agencyCardTypeCount` 追加・未指定なら枚数ベースで後方互換）。`submitStoreInput`（admin.ts）が `cards.length`＝カード行数を種類数として渡す。
+2. ✅ `StoreRequestForm`: サービスレベル＋枚数入力＋概算先払い決済。`createStoreRequest` が概算(枚数×鑑定料＋税)で PaymentIntent を作成し `clientSecret` を返却、`confirmStorePrepayPayment` で確定（status は DRAFT のまま）。決済UIは共有 `components/StripeCardPayment.tsx`。Application に `prepaidAmount`/`estimatedCardCount` 追加。
+3. ✅ 予約ゲートを支払い後に統一（STORE特例撤去）。`submission-booking.ts` と予約ページ2枚（`page.tsx`・`[applicationId]/edit/page.tsx`）で「SUCCEEDED な決済あり」を全 source 共通条件に。
+4. `submitStoreInput`: 差額請求＋完了メール（**未実装＝次フェーズ**。現状は最終料金を再計算して上書きするのみ、差額の追加課金はまだ）
