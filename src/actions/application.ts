@@ -645,6 +645,7 @@ const draftCardSchema = z.object({
   cardNumber: z.string().default(""),
   cardName: z.string().default(""),
   rarity: z.string().default(""),
+  language: z.nativeEnum(CardLanguage).default("JAPANESE"),
   quantity: z.number().int().default(1),
   declaredValue: z.number().int().default(0),
 });

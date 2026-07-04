@@ -24,6 +24,7 @@ export type InitialDraft = {
     cardNumber: string;
     cardName: string;
     rarity: string;
+    language?: CardLanguage;
     quantity: number;
     declaredValue: number;
   }[];
@@ -31,8 +32,16 @@ export type InitialDraft = {
 };
 
 const DRAFT_KEY = "psa-apply-draft";
-import { ServiceLevel, ServiceRegion, ReturnMethod } from "@prisma/client";
+import { ServiceLevel, ServiceRegion, ReturnMethod, CardLanguage } from "@prisma/client";
 import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
+
+const LANGUAGE_LABELS: Record<CardLanguage, string> = {
+  JAPANESE: "日本語",
+  ENGLISH: "英語",
+  KOREAN: "韓国語",
+  CHINESE: "中国語",
+  OTHER: "その他",
+};
 import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
 import AddressManager from "../mypage/addresses/AddressManager";
@@ -75,6 +84,7 @@ interface CardItem {
   cardNumber: string;
   cardName: string;
   rarity: string;
+  language: CardLanguage;
   quantity: number;
   declaredValue: number;
 }
@@ -86,6 +96,7 @@ function emptyCard(): CardItem {
     cardNumber: "",
     cardName: "",
     rarity: "",
+    language: "JAPANESE",
     quantity: 1,
     declaredValue: 0,
   };
@@ -160,7 +171,9 @@ export default function ApplyForm({
     initialDraft?.returnMethod ?? "SHIPPING"
   );
 
-  const [cards, setCards] = useState<CardItem[]>(initialDraft?.cards ?? []);
+  const [cards, setCards] = useState<CardItem[]>(
+    (initialDraft?.cards ?? []).map((c) => ({ ...c, language: c.language ?? "JAPANESE" }))
+  );
   const [draft, setDraft] = useState<CardItem>(emptyCard());
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
@@ -274,7 +287,7 @@ export default function ApplyForm({
       if (d.region) setRegion(d.region);
       if (d.serviceLevel) setServiceLevel(d.serviceLevel);
       if (d.returnMethod) setReturnMethod(d.returnMethod);
-      if (Array.isArray(d.cards)) setCards(d.cards);
+      if (Array.isArray(d.cards)) setCards(d.cards.map((c: CardItem) => ({ ...c, language: c.language ?? "JAPANESE" })));
       if (typeof d.maxStep === "number") setMaxStep(Math.min(d.maxStep, 3));
       if (d.step && d.step !== "payment") setStep(d.step);
     } catch {
@@ -376,6 +389,7 @@ export default function ApplyForm({
           cardNumber: c.cardNumber,
           cardName: c.cardName,
           rarity: c.rarity,
+          language: c.language,
           quantity: c.quantity,
           declaredValue: c.declaredValue,
         })),
@@ -420,7 +434,7 @@ export default function ApplyForm({
           cardName: c.cardName,
           cardNumber: c.cardNumber || undefined,
           rarity: c.rarity || undefined,
-          language: "JAPANESE" as const,
+          language: c.language,
           declaredValue: c.declaredValue,
           quantity: c.quantity,
           damageImageKeys: [],
@@ -698,15 +712,6 @@ export default function ApplyForm({
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">タイトル *</label>
-                  <input
-                    className={inputCls}
-                    placeholder="例: ワンピースカードゲーム"
-                    value={draft.tcgTitle}
-                    onChange={(e) => setDraftField("tcgTitle", e.target.value)}
-                  />
-                </div>
-                <div>
                   <label className="block text-xs text-gray-500 mb-1">発行年</label>
                   <input
                     type="number"
@@ -717,7 +722,28 @@ export default function ApplyForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">カード番号</label>
+                  <label className="block text-xs text-gray-500 mb-1">タイトル *</label>
+                  <input
+                    className={inputCls}
+                    placeholder="例: ワンピースカードゲーム"
+                    value={draft.tcgTitle}
+                    onChange={(e) => setDraftField("tcgTitle", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">言語</label>
+                  <select
+                    className={inputCls}
+                    value={draft.language}
+                    onChange={(e) => setDraftField("language", e.target.value as CardLanguage)}
+                  >
+                    {Object.entries(LANGUAGE_LABELS).map(([v, label]) => (
+                      <option key={v} value={v}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">カード番号／型番</label>
                   <input
                     className={inputCls}
                     placeholder="例: OP01-003"

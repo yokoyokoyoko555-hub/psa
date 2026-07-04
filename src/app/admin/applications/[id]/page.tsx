@@ -30,6 +30,15 @@ const CARD_STATUS_LABELS: Record<string, string> = {
   CANCELLED: "キャンセル",
 };
 
+// PSA提出フォームは英語1行のため、言語は英語表記でコピーする
+const LANGUAGE_PSA: Record<string, string> = {
+  JAPANESE: "Japanese",
+  ENGLISH: "English",
+  KOREAN: "Korean",
+  CHINESE: "Chinese",
+  OTHER: "Other",
+};
+
 const STATUS_BADGE: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-600",
   SUBMITTED_BY_CUSTOMER: "bg-brand-100 text-brand-700",
@@ -172,7 +181,19 @@ export default async function AdminApplicationDetailPage({
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <h2 className="font-bold text-gray-900 mb-4">カード一覧（{application.cards.length}枚）</h2>
             <div className="space-y-4">
-              {application.cards.map((card) => (
+              {application.cards.map((card) => {
+                // PSA提出フォーム向け1行（発行年 タイトル 言語(英語) カード番号／型番 カード名 レアリティ・半角スペース区切り）
+                const psaLine = [
+                  card.releaseYear ?? "",
+                  card.tcgTitle,
+                  LANGUAGE_PSA[card.language] ?? card.language,
+                  card.cardNumber ?? "",
+                  card.cardName,
+                  card.rarity ?? "",
+                ]
+                  .filter((v) => v !== "" && v != null)
+                  .join(" ");
+                return (
                 <div
                   key={card.id}
                   className="border border-gray-200 rounded-lg p-4"
@@ -181,12 +202,12 @@ export default async function AdminApplicationDetailPage({
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{card.cardName}</span>
-                        <CopyButton text={card.cardName} />
+                        {/* PSA提出フォーム向け: 半角スペース区切り1行をコピー */}
+                        <CopyButton label="行コピー" text={psaLine} />
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {card.tcgTitle}
-                        {card.cardNumber ? ` / ${card.cardNumber}` : ""}
-                        {card.rarity ? ` / ${card.rarity}` : ""}
+                      {/* 顧客入力内容を半角スペース区切り1行で表示（コピー内容と同一） */}
+                      <p className="mt-1 text-xs font-mono text-gray-700 bg-gray-50 rounded px-2 py-1 break-all">
+                        {psaLine}
                       </p>
                       <p className="mt-1 flex gap-3 text-xs text-gray-500">
                         <span className="font-mono text-gray-400">{card.cardNo}</span>
@@ -239,7 +260,8 @@ export default async function AdminApplicationDetailPage({
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
