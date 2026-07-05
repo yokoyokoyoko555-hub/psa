@@ -21,8 +21,8 @@
 | `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `psaSubmissionId`/`psaOrderId`, `status` |
 | `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(Float, JP=円/US=USD小数2桁), `currency`(jpy/usd), `status`(PaymentStatus) |
 | `Upcharge` / upcharges | 追加請求 | `psaDeclaredValue`/`psaFinalValue`/`upchargeAmount`, `status`(UpchargeStatus) |
-| `ServicePrice` / service_prices | サービス料金 | `@@unique([serviceLevel, region, itemType])`, `region`(PSA_JP/PSA_US), `itemType`(既定TRADING_CARD), `pricePerCard`(Float, =顧客請求額。US=USD小数2桁対応。[ADR-0022](DECISIONS.md)), `agencyFee`(当社入力時のみ加算), `maxDeclaredValue`(Float?, 上限/null=無制限), `isActive` |
-| `AutographPricing` / autograph_pricing | オートグラフ追加料金 | `@@unique([region, serviceLevel])`。PSA_US×トレカのみ運用想定。`fee`(Float), `isActive`。[ADR-0023](DECISIONS.md) |
+| `ServicePrice` / service_prices | サービス料金（トレーディングカードのみ） | `@@unique([serviceLevel, region, itemType])`, `region`(PSA_JP/PSA_US), `itemType`(常にTRADING_CARD), `pricePerCard`(Float, =顧客請求額。US=USD小数2桁対応。[ADR-0022](DECISIONS.md)), `agencyFee`(当社入力時のみ加算), `maxDeclaredValue`(Float?, 上限/null=無制限。**常に円・整数**として扱う＝表示は`formatMoneyIn`), `isActive` |
+| `CustomServicePrice` / custom_service_prices | 動的サービスタイア（未開封パック/コミック・マガジン/オートグラフ） | `@@index([category, region])`。`category`(UNOPENED_PACK/COMIC_MAGAZINE/AUTOGRAPH), `name`(自由入力), `pricePerCard`/`cost`(Float, USD小数2桁), `maxDeclaredValue`(Int?, 円整数/null=無制限), `isActive`, `sortOrder`。管理画面から名称・価格・原価・申告上限を自由にCRUD可能。[ADR-0025](DECISIONS.md) |
 | `ShippingRule` / shipping_rules | 送料 | `returnMethod`, `itemType`(既定TRADING_CARD), `fee`, `minAmount`/`maxAmount`(帯), `sortOrder` |
 | `InsuranceRule` / insurance_rules | 保険料 | `itemType`(既定TRADING_CARD), `minValue`/`maxValue`(帯), `fee` または `feeRate`(%) |
 | `Agreement` / agreements | 電子同意書 | `applicationId`(uniq), `agreedAt`, `ipAddress`/`userAgent`, `agreementText`, `version` |

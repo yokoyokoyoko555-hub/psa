@@ -11,13 +11,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { confirmApplicationPayment, createApplication, previewFees, saveDraft as saveDraftServer } from "@/actions/application";
 import type { FeeBreakdown } from "@/lib/fee-calculator";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, formatMoneyIn } from "@/lib/currency";
 
 export type InitialDraft = {
   draftId: string;
   serviceLevel: ServiceLevel;
   region: ServiceRegion;
   itemType: ItemType;
+  customServiceLevelId?: string | null;
   returnMethod: ReturnMethod;
   cards: {
     tcgTitle: string;
@@ -29,13 +30,14 @@ export type InitialDraft = {
     quantity: number;
     declaredValue: number;
     autographRequested?: boolean;
+    autographCustomServiceLevelId?: string | null;
   }[];
   returnSel: string;
 };
 
 const DRAFT_KEY = "psa-apply-draft";
 import { ServiceLevel, ServiceRegion, ItemType, ReturnMethod } from "@prisma/client";
-import type { ServicePrice, ShippingRule, InsuranceRule, AutographPricing } from "@prisma/client";
+import type { ServicePrice, ShippingRule, InsuranceRule, CustomServicePrice } from "@prisma/client";
 
 const LANGUAGE_SUGGESTIONS = ["日本語", "英語", "韓国語", "中国語", "その他"];
 import type { CustomerProfile } from "@/actions/customer";
@@ -67,6 +69,7 @@ const SERVICE_LABELS: Record<ServiceLevel, string> = {
   COMIC_EXPRESS: "エクスプレス",
   COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
   COMIC_WALK_THROUGH: "ウォークスルー",
+  CUSTOM: "", // 非TRADING_CARD申込のプレースホルダー値（実際には表示されない）。ADR-0025
 };
 
 const REGION_LABELS: Record<ServiceRegion, string> = {
@@ -101,6 +104,7 @@ interface CardItem {
   quantity: number;
   declaredValue: number;
   autographRequested: boolean;
+  autographCustomServiceLevelId: string | null;
 }
 
 function emptyCard(): CardItem {
@@ -114,6 +118,7 @@ function emptyCard(): CardItem {
     quantity: 1,
     declaredValue: 0,
     autographRequested: false,
+    autographCustomServiceLevelId: null,
   };
 }
 
@@ -123,7 +128,7 @@ type Props = {
   servicePrices: ServicePrice[];
   shippingRules: ShippingRule[];
   insuranceRules: InsuranceRule[];
-  autographPricing: AutographPricing[];
+  customServicePrices: CustomServicePrice[];
   profile: CustomerProfile | null;
   addresses: Address[];
   initialDraft?: InitialDraft | null;
@@ -169,7 +174,7 @@ export default function ApplyForm({
   servicePrices,
   shippingRules,
   insuranceRules,
-  autographPricing,
+  customServicePrices,
   stripePublishableKey,
   profile,
   addresses,
@@ -185,6 +190,10 @@ export default function ApplyForm({
   const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(
     initialDraft?.serviceLevel ?? null
   );
+  // 非TRADING_CARD（未開封パック/コミック・マガジン）で選択したCustomServicePrice.id。ADR-0025
+  const [customServiceLevelId, setCustomServiceLevelId] = useState<string | null>(
+    initialDraft?.customServiceLevelId ?? null
+  );
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>(
     initialDraft?.returnMethod ?? "SHIPPING"
   );
@@ -194,6 +203,7 @@ export default function ApplyForm({
       ...c,
       language: c.language ?? "日本語",
       autographRequested: c.autographRequested ?? false,
+      autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? null,
     }))
   );
   const [draft, setDraft] = useState<CardItem>(emptyCard());
@@ -222,12 +232,20 @@ export default function ApplyForm({
 
   const regionPrices = servicePrices.filter((p) => p.region === region && p.itemType === itemType);
   const servicePrice = regionPrices.find((p) => p.serviceLevel === serviceLevel);
-  const cap = servicePrice?.maxDeclaredValue ?? null;
+  // 非TRADING_CARD（未開封パック/コミック・マガジン）の動的サービスタイア一覧。ADR-0025
+  const customTierOptions = customServicePrices
+    .filter((p) => p.region === region && p.category === itemType && p.isActive)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const selectedCustomTier = customTierOptions.find((p) => p.id === customServiceLevelId);
+  const cap = itemType === "TRADING_CARD" ? (servicePrice?.maxDeclaredValue ?? null) : (selectedCustomTier?.maxDeclaredValue ?? null);
+  const hasSelectedService = itemType === "TRADING_CARD" ? !!serviceLevel : !!customServiceLevelId;
 
-  // オートグラフ（デュアルサービス）: PSA_US×TRADING_CARDかつ選択中サービスレベルの価格が有効な場合のみ提示
+  // オートグラフ（デュアルサービス）: PSA_US×TRADING_CARDのみ提示。有効タイアが複数ならプルダウン、1件のみならチェックボックス。
   const isAutographEligible = region === "PSA_US" && itemType === "TRADING_CARD";
-  const autographActive =
-    isAutographEligible && autographPricing.some((a) => a.region === region && a.serviceLevel === serviceLevel && a.isActive);
+  const activeAutographTiers = isAutographEligible
+    ? customServicePrices.filter((p) => p.region === region && p.category === "AUTOGRAPH" && p.isActive)
+    : [];
+  const autographActive = activeAutographTiers.length > 0;
 
   function setDraftField<K extends keyof CardItem>(field: K, value: CardItem[K]) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -251,7 +269,7 @@ export default function ApplyForm({
     }
     if (cap !== null && draft.declaredValue > cap) {
       setError(
-        `申告金額が選択中のサービス上限（${formatMoney(cap, region)}）を超えています。上位サービスを選択してください。`
+        `申告金額が選択中のサービス上限（${formatMoneyIn(cap, "JPY")}）を超えています。上位サービスを選択してください。`
       );
       return;
     }
@@ -282,19 +300,37 @@ export default function ApplyForm({
 
   const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
   const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
-  const autographCount = cards.filter((c) => c.autographRequested).reduce((s, c) => s + c.quantity, 0);
+  // Autograph選択内訳（タイアID別に枚数を集計）
+  const autographSelections = (() => {
+    const map = new Map<string, number>();
+    for (const c of cards) {
+      if (!c.autographRequested || !c.autographCustomServiceLevelId) continue;
+      map.set(c.autographCustomServiceLevelId, (map.get(c.autographCustomServiceLevelId) ?? 0) + c.quantity);
+    }
+    return Array.from(map, ([customServiceLevelId, quantity]) => ({ customServiceLevelId, quantity }));
+  })();
 
   // 料金はサーバー(calculateFees)と同じ計算で取得し、請求額とプレビューを一致させる
   const [fees, setFees] = useState<FeeBreakdown | null>(null);
   useEffect(() => {
     let cancelled = false;
-    previewFees({ serviceLevel, region, itemType, returnMethod, cardCount, totalDeclaredValue, autographCount }).then((f) => {
+    previewFees({
+      serviceLevel,
+      region,
+      itemType,
+      customServiceLevelId: customServiceLevelId ?? undefined,
+      returnMethod,
+      cardCount,
+      totalDeclaredValue,
+      autographSelections,
+    }).then((f) => {
       if (!cancelled) setFees(f);
     });
     return () => {
       cancelled = true;
     };
-  }, [serviceLevel, region, itemType, returnMethod, cardCount, totalDeclaredValue, autographCount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceLevel, region, itemType, customServiceLevelId, returnMethod, cardCount, totalDeclaredValue, JSON.stringify(autographSelections)]);
 
   const psaFeeTotal = fees?.psaFeeTotal ?? 0;
   const autographFeeTotal = fees?.autographFeeTotal ?? 0;
@@ -316,6 +352,7 @@ export default function ApplyForm({
       if (d.region) setRegion(d.region);
       if (d.itemType) setItemType(d.itemType);
       if (d.serviceLevel) setServiceLevel(d.serviceLevel);
+      if (d.customServiceLevelId) setCustomServiceLevelId(d.customServiceLevelId);
       if (d.returnMethod) setReturnMethod(d.returnMethod);
       if (Array.isArray(d.cards))
         setCards(
@@ -323,6 +360,7 @@ export default function ApplyForm({
             ...c,
             language: c.language ?? "日本語",
             autographRequested: c.autographRequested ?? false,
+            autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? null,
           }))
         );
       if (typeof d.maxStep === "number") setMaxStep(Math.min(d.maxStep, 3));
@@ -403,7 +441,7 @@ export default function ApplyForm({
     try {
       localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ region, itemType, serviceLevel, returnMethod, cards, step, maxStep })
+        JSON.stringify({ region, itemType, serviceLevel, customServiceLevelId, returnMethod, cards, step, maxStep })
       );
     } catch {
       /* ignore */
@@ -413,12 +451,13 @@ export default function ApplyForm({
   async function handleSaveAndExit() {
     saveDraftToStorage();
     // サービス選択済みならサーバーにも下書き保存（端末をまたいで再開可能に）
-    if (serviceLevel) {
+    if (hasSelectedService) {
       const res = await saveDraftServer({
         draftId: draftId ?? undefined,
-        serviceLevel,
+        serviceLevel: serviceLevel ?? "CUSTOM",
         region,
         itemType,
+        customServiceLevelId: customServiceLevelId ?? undefined,
         returnMethod,
         returnSel,
         cards: cards.map((c) => ({
@@ -431,6 +470,7 @@ export default function ApplyForm({
           quantity: c.quantity,
           declaredValue: c.declaredValue,
           autographRequested: c.autographRequested,
+          autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? undefined,
         })),
       });
       if (res.success && res.draftId) setDraftId(res.draftId);
@@ -449,7 +489,7 @@ export default function ApplyForm({
       setError("利用規約に同意してください");
       return;
     }
-    if (!serviceLevel) {
+    if (!hasSelectedService) {
       setError("サービスを選択してください");
       return;
     }
@@ -464,9 +504,10 @@ export default function ApplyForm({
     try {
       const result = await createApplication({
         draftId: draftId ?? undefined,
-        serviceLevel,
+        serviceLevel: itemType === "TRADING_CARD" ? serviceLevel! : "CUSTOM",
         region,
         itemType,
+        customServiceLevelId: itemType !== "TRADING_CARD" ? customServiceLevelId ?? undefined : undefined,
         returnMethod,
         cards: cards.map((c) => ({
           tcgTitle: c.tcgTitle,
@@ -479,6 +520,7 @@ export default function ApplyForm({
           quantity: c.quantity,
           damageImageKeys: [],
           autographRequested: c.autographRequested,
+          autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? undefined,
         })),
         returnAddress:
           returnSel !== "registered" && selectedAddr
@@ -666,6 +708,8 @@ export default function ApplyForm({
                     onClick={() => {
                       setRegion(r);
                       if (r === "PSA_JP") setItemType("TRADING_CARD");
+                      setServiceLevel(null);
+                      setCustomServiceLevelId(null);
                     }}
                     className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                       region === r
@@ -689,6 +733,7 @@ export default function ApplyForm({
                       onClick={() => {
                         setItemType(it);
                         setServiceLevel(null);
+                        setCustomServiceLevelId(null);
                       }}
                       className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                         itemType === it
@@ -709,25 +754,47 @@ export default function ApplyForm({
                 申告金額の上限に応じてサービスを選んでください。選択後にカードを入力します。
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {regionPrices.map((sp) => (
-                  <button
-                    key={sp.id}
-                    onClick={() => setServiceLevel(sp.serviceLevel)}
-                    className={`border-2 rounded-xl p-4 text-left transition ${
-                      serviceLevel === sp.serviceLevel
-                        ? "border-brand-500 bg-brand-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <p className="font-bold text-gray-900">{SERVICE_LABELS[sp.serviceLevel]}</p>
-                    <p className="text-brand-600 font-medium">{formatMoney(sp.pricePerCard, region)}/枚</p>
-                    <p className="text-xs text-gray-500">
-                      申告価格上限{" "}
-                      {sp.maxDeclaredValue === null ? "なし" : formatMoney(sp.maxDeclaredValue, region)}
-                    </p>
-                  </button>
-                ))}
+                {itemType === "TRADING_CARD"
+                  ? regionPrices.map((sp) => (
+                      <button
+                        key={sp.id}
+                        onClick={() => setServiceLevel(sp.serviceLevel)}
+                        className={`border-2 rounded-xl p-4 text-left transition ${
+                          serviceLevel === sp.serviceLevel
+                            ? "border-brand-500 bg-brand-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <p className="font-bold text-gray-900">{SERVICE_LABELS[sp.serviceLevel]}</p>
+                        <p className="text-brand-600 font-medium">{formatMoney(sp.pricePerCard, region)}/枚</p>
+                        <p className="text-xs text-gray-500">
+                          申告価格上限{" "}
+                          {sp.maxDeclaredValue === null ? "なし" : formatMoneyIn(sp.maxDeclaredValue, "JPY")}
+                        </p>
+                      </button>
+                    ))
+                  : customTierOptions.map((tier) => (
+                      <button
+                        key={tier.id}
+                        onClick={() => setCustomServiceLevelId(tier.id)}
+                        className={`border-2 rounded-xl p-4 text-left transition ${
+                          customServiceLevelId === tier.id
+                            ? "border-brand-500 bg-brand-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <p className="font-bold text-gray-900">{tier.name}</p>
+                        <p className="text-brand-600 font-medium">{formatMoney(tier.pricePerCard, region)}/枚</p>
+                        <p className="text-xs text-gray-500">
+                          申告価格上限{" "}
+                          {tier.maxDeclaredValue === null ? "なし" : formatMoneyIn(tier.maxDeclaredValue, "JPY")}
+                        </p>
+                      </button>
+                    ))}
               </div>
+              {itemType !== "TRADING_CARD" && customTierOptions.length === 0 && (
+                <p className="text-sm text-gray-500">このアイテム種別のサービスは現在準備中です。</p>
+              )}
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
@@ -751,7 +818,7 @@ export default function ApplyForm({
 
             <button
               onClick={() => {
-                if (!serviceLevel) {
+                if (!hasSelectedService) {
                   setError("サービスレベルを選択してください");
                   return;
                 }
@@ -769,8 +836,8 @@ export default function ApplyForm({
         {step === "cards" && (
           <div className="space-y-6">
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
-              選択中: <strong>{REGION_LABELS[region]}{region === "PSA_US" ? ` / ${ITEM_TYPE_LABELS[itemType]}` : ""} / {serviceLevel && SERVICE_LABELS[serviceLevel]}</strong>
-              {cap !== null && <>（申告金額上限 {formatMoney(cap, region)}/枚）</>}
+              選択中: <strong>{REGION_LABELS[region]}{region === "PSA_US" ? ` / ${ITEM_TYPE_LABELS[itemType]}` : ""} / {itemType === "TRADING_CARD" ? (serviceLevel && SERVICE_LABELS[serviceLevel]) : selectedCustomTier?.name}</strong>
+              {cap !== null && <>（申告金額上限 {formatMoneyIn(cap, "JPY")}/枚）</>}
             </div>
 
             {/* Card entry form */}
@@ -861,17 +928,46 @@ export default function ApplyForm({
                     onChange={(e) => setDraftField("declaredValue", parseInt(e.target.value) || 0)}
                   />
                 </div>
-                {autographActive && (
+                {autographActive && activeAutographTiers.length === 1 && (
                   <div className="sm:col-span-2 flex items-center gap-2 pt-1">
                     <input
                       type="checkbox"
                       id="autographRequested"
                       checked={draft.autographRequested}
-                      onChange={(e) => setDraftField("autographRequested", e.target.checked)}
+                      onChange={(e) => {
+                        setDraftField("autographRequested", e.target.checked);
+                        setDraftField(
+                          "autographCustomServiceLevelId",
+                          e.target.checked ? activeAutographTiers[0].id : null
+                        );
+                      }}
                     />
                     <label htmlFor="autographRequested" className="text-sm text-gray-700">
-                      オートグラフ（デュアルサービス）認証を希望する
+                      オートグラフ（デュアルサービス）認証を希望する（{formatMoney(activeAutographTiers[0].pricePerCard, region)}/枚）
                     </label>
+                  </div>
+                )}
+                {autographActive && activeAutographTiers.length > 1 && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-gray-500 mb-1">
+                      オートグラフ（デュアルサービス）認証
+                    </label>
+                    <select
+                      className={inputCls}
+                      value={draft.autographRequested ? draft.autographCustomServiceLevelId ?? "" : ""}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setDraftField("autographRequested", !!id);
+                        setDraftField("autographCustomServiceLevelId", id || null);
+                      }}
+                    >
+                      <option value="">希望しない</option>
+                      {activeAutographTiers.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
@@ -896,7 +992,7 @@ export default function ApplyForm({
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-bold text-gray-800">アイテム（{cards.length}）</h3>
                 <span className="text-sm text-gray-500">
-                  申告合計 {formatMoney(totalDeclaredValue, region)}
+                  申告合計 {formatMoneyIn(totalDeclaredValue, "JPY")}
                 </span>
               </div>
               {cards.length === 0 ? (
@@ -919,7 +1015,7 @@ export default function ApplyForm({
                           )}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {c.quantity}枚 / 申告 {formatMoney(c.declaredValue * c.quantity, region)}
+                          {c.quantity}枚 / 申告 {formatMoneyIn(c.declaredValue * c.quantity, "JPY")}
                         </p>
                       </div>
                       <button
@@ -1052,7 +1148,7 @@ export default function ApplyForm({
                 {region === "PSA_US" && <> / <span className="font-medium">アイテム種別:</span> {ITEM_TYPE_LABELS[itemType]}</>}
                 {" / "}
                 <span className="font-medium">サービス:</span>{" "}
-                {serviceLevel && SERVICE_LABELS[serviceLevel]} /{" "}
+                {itemType === "TRADING_CARD" ? (serviceLevel && SERVICE_LABELS[serviceLevel]) : selectedCustomTier?.name} /{" "}
                 <span className="font-medium">返却:</span>{" "}
                 {returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}
               </div>
@@ -1084,9 +1180,9 @@ export default function ApplyForm({
               {autographFeeTotal > 0 && (
                 <div className="flex justify-between"><span className="text-gray-500">オートグラフ料金</span><span>{formatMoney(autographFeeTotal, region)}</span></div>
               )}
-              <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoney(shippingInsuranceFee, region)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoneyIn(shippingInsuranceFee, "JPY")}</span></div>
               {handlingFee > 0 && (
-                <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>{formatMoney(handlingFee, region)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>{formatMoneyIn(handlingFee, "JPY")}</span></div>
               )}
               {discountAmount > 0 && (
                 <div className="flex justify-between text-brand-700">

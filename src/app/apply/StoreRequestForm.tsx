@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createStoreRequest, confirmStorePrepayPayment } from "@/actions/application";
 import { ServiceRegion, ReturnMethod, ServiceLevel, ItemType } from "@prisma/client";
-import type { ServicePrice } from "@prisma/client";
+import type { ServicePrice, CustomServicePrice } from "@prisma/client";
 import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, formatMoneyIn } from "@/lib/currency";
 import StripeCardPayment from "@/components/StripeCardPayment";
 
 const REGION_LABELS: Record<ServiceRegion, string> = {
@@ -47,6 +47,7 @@ const SERVICE_LABELS: Record<ServiceLevel, string> = {
   COMIC_EXPRESS: "エクスプレス",
   COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
   COMIC_WALK_THROUGH: "ウォークスルー",
+  CUSTOM: "", // 非TRADING_CARD申込のプレースホルダー値（実際には表示されない）。ADR-0025
 };
 
 const AGREEMENT_TEXT = `PSA鑑定受付代行サービス（代理申込・先払い）利用規約
@@ -66,6 +67,7 @@ type Props = {
   profile: CustomerProfile | null;
   addresses: Address[];
   servicePrices: ServicePrice[];
+  customServicePrices: CustomServicePrice[];
   stripePublishableKey: string;
 };
 
@@ -87,12 +89,12 @@ function getProfileAddress(profile: CustomerProfile | null) {
   };
 }
 
-export default function StoreRequestForm({ profile, addresses, servicePrices, stripePublishableKey }: Props) {
+export default function StoreRequestForm({ profile, addresses, servicePrices, customServicePrices, stripePublishableKey }: Props) {
   const router = useRouter();
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
-  // サービスレベルごとの枚数（0または未入力は対象外）。複数レベル同時申込に対応。ADR-0024
-  const [quantities, setQuantities] = useState<Partial<Record<ServiceLevel, number>>>({});
+  // サービスレベル（トレカ）またはCustomServicePrice.id（非トレカ）ごとの枚数（0または未入力は対象外）。複数レベル同時申込に対応。ADR-0024/0025
+  const [quantities, setQuantities] = useState<Partial<Record<string, number>>>({});
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
   const addressOptions = [
     ...(getProfileAddress(profile) ? [getProfileAddress(profile)!] : []),
@@ -124,16 +126,34 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
   const regionPrices = servicePrices
     .filter((p) => p.region === region && p.itemType === itemType && p.isActive)
     .sort((a, b) => a.pricePerCard - b.pricePerCard);
-  const lines = regionPrices
-    .map((p) => ({ price: p, qty: quantities[p.serviceLevel] ?? 0 }))
+  const customTierOptions = customServicePrices
+    .filter((p) => p.region === region && p.category === itemType && p.isActive)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  // トレカ＝ServiceLevel固定enum方式、非トレカ＝CustomServicePrice.id方式の統一行データ。ADR-0025
+  const tierRows =
+    itemType === "TRADING_CARD"
+      ? regionPrices.map((p) => ({
+          id: p.serviceLevel as string,
+          label: SERVICE_LABELS[p.serviceLevel],
+          pricePerCard: p.pricePerCard,
+          maxDeclaredValue: p.maxDeclaredValue,
+        }))
+      : customTierOptions.map((p) => ({
+          id: p.id,
+          label: p.name,
+          pricePerCard: p.pricePerCard,
+          maxDeclaredValue: p.maxDeclaredValue,
+        }));
+  const lines = tierRows
+    .map((row) => ({ row, qty: quantities[row.id] ?? 0 }))
     .filter((l) => l.qty > 0);
   const cardCount = lines.reduce((s, l) => s + l.qty, 0);
-  const psaFeeTotal = lines.reduce((s, l) => s + l.price.pricePerCard * l.qty, 0);
+  const psaFeeTotal = lines.reduce((s, l) => s + l.row.pricePerCard * l.qty, 0);
   const taxAmount = Math.floor(psaFeeTotal * 0.1);
   const prepaidAmount = psaFeeTotal + taxAmount;
 
-  function setQty(sl: ServiceLevel, qty: number) {
-    setQuantities((prev) => ({ ...prev, [sl]: Math.max(0, Math.floor(qty) || 0) }));
+  function setQty(id: string, qty: number) {
+    setQuantities((prev) => ({ ...prev, [id]: Math.max(0, Math.floor(qty) || 0) }));
   }
 
   async function handleSubmit() {
@@ -159,7 +179,14 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
       const result = await createStoreRequest({
         region,
         itemType,
-        serviceLevels: lines.map((l) => ({ serviceLevel: l.price.serviceLevel, quantity: l.qty })),
+        serviceLevels:
+          itemType === "TRADING_CARD"
+            ? lines.map((l) => ({ serviceLevel: l.row.id as ServiceLevel, quantity: l.qty }))
+            : [],
+        customServiceLevels:
+          itemType !== "TRADING_CARD"
+            ? lines.map((l) => ({ customServiceLevelId: l.row.id, quantity: l.qty }))
+            : [],
         returnMethod,
         returnAddress: {
           name: selectedAddress.name,
@@ -248,9 +275,9 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
         <h2 className="text-lg font-bold text-gray-900">概算のお支払い</h2>
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           {lines.map((l) => (
-            <div key={l.price.id} className="flex justify-between text-sm text-gray-700">
-              <span>{SERVICE_LABELS[l.price.serviceLevel]} × {l.qty}枚（鑑定料）</span>
-              <span>{formatMoney(l.price.pricePerCard * l.qty, region)}</span>
+            <div key={l.row.id} className="flex justify-between text-sm text-gray-700">
+              <span>{l.row.label} × {l.qty}枚（鑑定料）</span>
+              <span>{formatMoney(l.row.pricePerCard * l.qty, region)}</span>
             </div>
           ))}
           <div className="flex justify-between text-sm text-gray-700">
@@ -347,15 +374,15 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
         <p className="text-xs text-gray-500">
           複数のサービスレベルにまたがって枚数を入力できます（例: レギュラー3枚＋エクスプレス2枚）。
         </p>
-        {regionPrices.length > 0 ? (
+        {tierRows.length > 0 ? (
           <div className="divide-y divide-gray-100">
-            {regionPrices.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-3 py-3">
+            {tierRows.map((row) => (
+              <div key={row.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="font-bold text-gray-900">{SERVICE_LABELS[p.serviceLevel]}</p>
+                  <p className="font-bold text-gray-900">{row.label}</p>
                   <p className="text-xs text-gray-500">
-                    {formatMoney(p.pricePerCard, region)} / 枚・申告上限{" "}
-                    {p.maxDeclaredValue === null ? "なし" : formatMoney(p.maxDeclaredValue, region)}
+                    {formatMoney(row.pricePerCard, region)} / 枚・申告上限{" "}
+                    {row.maxDeclaredValue === null ? "なし" : formatMoneyIn(row.maxDeclaredValue, "JPY")}
                   </p>
                 </div>
                 <input
@@ -363,8 +390,8 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
                   min={0}
                   max={500}
                   placeholder="0"
-                  value={quantities[p.serviceLevel] || ""}
-                  onChange={(e) => setQty(p.serviceLevel, Number(e.target.value))}
+                  value={quantities[row.id] || ""}
+                  onChange={(e) => setQty(row.id, Number(e.target.value))}
                   className="w-24 shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
                 />
               </div>

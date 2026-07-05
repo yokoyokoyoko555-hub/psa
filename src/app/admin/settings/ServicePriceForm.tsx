@@ -18,17 +18,6 @@ const SERVICE_LABELS: Record<string, string> = {
   PREMIUM_3: "プレミアム 3",
   PREMIUM_5: "プレミアム 5",
   PREMIUM_10: "プレミアム 10",
-  PACK_VALUE: "バリュー",
-  PACK_ECONOMY: "エコノミー",
-  PACK_EXPRESS: "エクスプレス",
-  COMIC_MODERN: "モダン",
-  COMIC_MODERN_PLUS: "モダンプラス",
-  COMIC_VINTAGE: "ビンテージ",
-  COMIC_VINTAGE_PLUS: "ビンテージプラス",
-  COMIC_HIGH_VALUE: "ハイバリュー",
-  COMIC_EXPRESS: "エクスプレス",
-  COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
-  COMIC_WALK_THROUGH: "ウォークスルー",
 };
 
 type Cell = {
@@ -87,12 +76,14 @@ export default function ServicePriceForm({
     const parseAmount = isUsd
       ? (v: string) => Math.round((parseFloat(v) || 0) * 100) / 100
       : (v: string) => parseInt(v) || 0;
+    // 申告上限は常に円・整数（リージョンに関わらず）。ADR-0025
+    const parseCap = (v: string) => parseInt(v) || 0;
 
     const updates = cells.map((c) => ({
       id: c.id,
       pricePerCard: parseAmount(c.pricePerCard),
       cost: parseAmount(c.cost),
-      maxDeclaredValue: c.maxDeclaredValue === "" ? null : parseAmount(c.maxDeclaredValue),
+      maxDeclaredValue: c.maxDeclaredValue === "" ? null : parseCap(c.maxDeclaredValue),
       isActive: c.isActive,
     }));
 
@@ -113,7 +104,7 @@ export default function ServicePriceForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <p className="text-xs text-gray-500">鑑定料・原価は1枚あたりの金額です（{unit}）。</p>
+      <p className="text-xs text-gray-500">鑑定料・原価は1枚あたりの金額です（{unit}）。申告上限は常に円・整数です。</p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 font-medium">
@@ -121,7 +112,7 @@ export default function ServicePriceForm({
               <th className="text-left px-3 py-2">サービス</th>
               <th className="text-left px-3 py-2">鑑定料（{unit}）</th>
               <th className="text-left px-3 py-2">原価（{unit}）</th>
-              <th className="text-left px-3 py-2">申告上限（{unit}）</th>
+              <th className="text-left px-3 py-2">申告上限（円）</th>
               <th className="text-center px-3 py-2">表示</th>
             </tr>
           </thead>
@@ -138,7 +129,7 @@ export default function ServicePriceForm({
                   <input type="number" min={0} step={numStep} value={c.cost} onChange={(e) => update(c.id, { cost: e.target.value })} className={inputCls} />
                 </td>
                 <td className="px-3 py-2">
-                  <input type="number" min={0} step={numStep} placeholder="なし" value={c.maxDeclaredValue} onChange={(e) => update(c.id, { maxDeclaredValue: e.target.value })} className={inputCls} />
+                  <input type="number" min={0} step="1" placeholder="なし" value={c.maxDeclaredValue} onChange={(e) => update(c.id, { maxDeclaredValue: e.target.value })} className={inputCls} />
                 </td>
                 <td className="px-3 py-2 text-center">
                   <input type="checkbox" checked={c.isActive} onChange={(e) => update(c.id, { isActive: e.target.checked })} />

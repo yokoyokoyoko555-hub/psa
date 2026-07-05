@@ -7,7 +7,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
 import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe } from "@/lib/stripe";
 import { sendTemplate } from "@/lib/mailer";
-import { formatMoney, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
+import { formatMoney, formatMoneyIn, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { ServiceLevel, ServiceRegion, ItemType, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -29,6 +29,8 @@ const cardSchema = z.object({
   notes: z.string().max(1000).optional(),
   // オートグラフ（デュアルサービス）希望。PSA_US×TRADING_CARD以外は保存時にfalseへ補正。ADR-0023
   autographRequested: z.boolean().default(false),
+  // 希望するオートグラフタイア（CustomServicePrice参照）。有効タイアが1件のみの場合は省略可（サーバー側で自動解決）。ADR-0025
+  autographCustomServiceLevelId: z.string().optional(),
 });
 
 const returnAddressSchema = z.object({
@@ -48,6 +50,8 @@ const applicationSchema = z.object({
   serviceLevel: z.nativeEnum(ServiceLevel),
   region: z.nativeEnum(ServiceRegion),
   itemType: z.nativeEnum(ItemType).default("TRADING_CARD"), // PSA_JPは常にTRADING_CARDへサーバー側で補正。ADR-0023
+  // itemType!=="TRADING_CARD"のとき必須。選択したCustomServicePrice.id。ADR-0025
+  customServiceLevelId: z.string().optional(),
   returnMethod: z.nativeEnum(ReturnMethod),
   cards: z.array(cardSchema).min(1).max(200),
   returnAddress: returnAddressSchema.optional(), // 未指定なら登録住所を使用
@@ -116,32 +120,59 @@ export async function createApplication(
   // PSA_JPは常にTRADING_CARD（クライアント値を信用しない）。ADR-0023
   const itemType: ItemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
   const isAutographEligible = parsed.data.region === "PSA_US" && itemType === "TRADING_CARD";
-  const cardsInput = parsed.data.cards.map((c) => ({
-    ...c,
-    autographRequested: isAutographEligible ? c.autographRequested : false,
-  }));
 
-  // 申告価格上限のバリデーション（選択サービスレベル×地域×アイテム種別の上限を超えるカードは不可）
-  const servicePrice = await prisma.servicePrice.findUnique({
-    where: {
-      serviceLevel_region_itemType: {
-        serviceLevel: parsed.data.serviceLevel,
-        region: parsed.data.region,
-        itemType,
-      },
-    },
-  });
-  if (!servicePrice) {
-    return { success: false, error: "サービスレベルが見つかりません" };
+  // トレカ=既存ServicePrice / それ以外=CustomServicePrice（管理画面でCRUD可能な動的タイア）。ADR-0025
+  let maxDeclaredValue: number | null = null;
+  let customServiceLevelName: string | null = null;
+  let unitPricePerCard = 0;
+  let unitCost = 0;
+  if (itemType === "TRADING_CARD") {
+    const servicePrice = await prisma.servicePrice.findUnique({
+      where: { serviceLevel_region_itemType: { serviceLevel: parsed.data.serviceLevel, region: parsed.data.region, itemType } },
+    });
+    if (!servicePrice) return { success: false, error: "サービスレベルが見つかりません" };
+    maxDeclaredValue = servicePrice.maxDeclaredValue;
+    unitPricePerCard = servicePrice.pricePerCard;
+    unitCost = servicePrice.cost;
+  } else {
+    if (!parsed.data.customServiceLevelId) return { success: false, error: "サービスを選択してください" };
+    const customPrice = await prisma.customServicePrice.findFirst({
+      where: { id: parsed.data.customServiceLevelId, category: itemType, region: parsed.data.region, isActive: true },
+    });
+    if (!customPrice) return { success: false, error: "サービスが見つかりません" };
+    maxDeclaredValue = customPrice.maxDeclaredValue;
+    customServiceLevelName = customPrice.name;
+    unitPricePerCard = customPrice.pricePerCard;
+    unitCost = customPrice.cost;
   }
-  if (servicePrice.maxDeclaredValue !== null) {
-    const over = cardsInput.find(
-      (c) => c.declaredValue > servicePrice.maxDeclaredValue!
-    );
+
+  // オートグラフ有効タイア（PSA_US×TRADING_CARDのみ）を一括取得し、1件のみなら自動解決
+  const activeAutographTiers = isAutographEligible
+    ? await prisma.customServicePrice.findMany({
+        where: { category: "AUTOGRAPH", region: parsed.data.region, isActive: true },
+      })
+    : [];
+  const autographById = new Map(activeAutographTiers.map((t) => [t.id, t]));
+  const soleAutographTier = activeAutographTiers.length === 1 ? activeAutographTiers[0] : null;
+
+  const cardsInput = parsed.data.cards.map((c) => {
+    if (!isAutographEligible || !c.autographRequested) {
+      return { ...c, autographRequested: false, resolvedAutographId: null as string | null };
+    }
+    const resolvedId = c.autographCustomServiceLevelId ?? soleAutographTier?.id ?? null;
+    if (!resolvedId || !autographById.has(resolvedId)) {
+      return { ...c, autographRequested: false, resolvedAutographId: null as string | null };
+    }
+    return { ...c, resolvedAutographId: resolvedId };
+  });
+
+  // 申告価格上限のバリデーション（選択サービス×地域×アイテム種別の上限を超えるカードは不可。常に円で表示）
+  if (maxDeclaredValue !== null) {
+    const over = cardsInput.find((c) => c.declaredValue > maxDeclaredValue!);
     if (over) {
       return {
         success: false,
-        error: `このサービスレベルの申告価格上限（${formatMoney(servicePrice.maxDeclaredValue, parsed.data.region)}）を超えるカードがあります（${over.cardName || "無題"}: ${formatMoney(over.declaredValue, parsed.data.region)}）。上位のサービスレベルを選択してください。`,
+        error: `このサービスの申告価格上限（${formatMoneyIn(maxDeclaredValue, "JPY")}）を超えるカードがあります（${over.cardName || "無題"}: ${formatMoneyIn(over.declaredValue, "JPY")}）。上位のサービスを選択してください。`,
       };
     }
   }
@@ -151,20 +182,26 @@ export async function createApplication(
     0
   );
   const cardCount = cardsInput.reduce((sum, c) => sum + c.quantity, 0);
-  const autographCount = cardsInput
-    .filter((c) => c.autographRequested)
-    .reduce((sum, c) => sum + c.quantity, 0);
+
+  // Autograph選択内訳（タイアID別に枚数を集計）
+  const autographSelectionMap = new Map<string, number>();
+  for (const c of cardsInput) {
+    if (!c.resolvedAutographId) continue;
+    autographSelectionMap.set(c.resolvedAutographId, (autographSelectionMap.get(c.resolvedAutographId) ?? 0) + c.quantity);
+  }
+  const autographSelections = Array.from(autographSelectionMap, ([customServiceLevelId, quantity]) => ({ customServiceLevelId, quantity }));
 
   // 顧客自身の申込は手数料なし（当社入力=STORE は管理画面の代理申込で別途）
   const fees = await calculateFees({
     serviceLevel: parsed.data.serviceLevel,
     region: parsed.data.region,
     itemType,
+    customServiceLevelId: itemType !== "TRADING_CARD" ? parsed.data.customServiceLevelId : undefined,
     returnMethod: parsed.data.returnMethod,
     cardCount,
     totalDeclaredValue,
     applyAgencyFee: false,
-    autographCount,
+    autographSelections,
     customerId: customer.id,
   });
 
@@ -189,9 +226,11 @@ export async function createApplication(
 
   const application = await prisma.$transaction(async (tx) => {
     const commonData = {
-      serviceLevel: parsed.data.serviceLevel,
+      serviceLevel: itemType === "TRADING_CARD" ? parsed.data.serviceLevel : ("CUSTOM" as const),
       region: parsed.data.region,
       itemType,
+      customServiceLevelId: itemType !== "TRADING_CARD" ? parsed.data.customServiceLevelId : null,
+      customServiceLevelName: itemType !== "TRADING_CARD" ? customServiceLevelName : null,
       source: "CUSTOMER" as const,
       returnMethod: parsed.data.returnMethod,
       shippingAddressEncrypted: parsed.data.returnAddress
@@ -226,19 +265,17 @@ export async function createApplication(
         });
 
     // カード作成（顧客入力のため代行手数料は0）
-    const servicePriceData = servicePrice;
-    const autographPricing = isAutographEligible
-      ? await tx.autographPricing.findUnique({
-          where: { region_serviceLevel: { region: parsed.data.region, serviceLevel: parsed.data.serviceLevel } },
-        })
-      : null;
-
+    // トレカは既存挙動を維持（cost設定の有無に関わらず鑑定料×80%で算出）。非トレカのみcost設定があれば優先する。
     for (const cardInput of cardsInput) {
       const cardNo = await generateCardNo();
-      const psaFee = (servicePriceData?.pricePerCard ?? 0) * cardInput.quantity;
-      const psaCost = roundMoney(psaFee * 0.8, parsed.data.region);
+      const psaFee = unitPricePerCard * cardInput.quantity;
+      const perCardCost =
+        itemType !== "TRADING_CARD" && unitCost > 0 ? unitCost : roundMoney(unitPricePerCard * 0.8, parsed.data.region);
+      const psaCost = perCardCost * cardInput.quantity;
       const agencyFee = 0; // 顧客入力は手数料なし
-      const autographFee = cardInput.autographRequested ? (autographPricing?.fee ?? 0) * cardInput.quantity : 0;
+      const autographTier = cardInput.resolvedAutographId ? autographById.get(cardInput.resolvedAutographId) : null;
+      const autographFee = autographTier ? autographTier.pricePerCard * cardInput.quantity : 0;
+      const autographCost = autographTier ? autographTier.cost * cardInput.quantity : 0;
 
       await tx.card.create({
         data: {
@@ -260,8 +297,11 @@ export async function createApplication(
           psaFee,
           psaCost,
           agencyFee,
-          autographRequested: cardInput.autographRequested,
+          autographRequested: !!autographTier,
           autographFee,
+          autographCost,
+          autographCustomServiceLevelId: autographTier?.id ?? null,
+          autographCustomServiceLevelName: autographTier?.name ?? null,
           status: "DRAFT",
           statusHistory: {
             create: {
@@ -453,19 +493,31 @@ const storeRequestLevelSchema = z.object({
   quantity: z.number().int().min(1).max(500),
 });
 
-const storeRequestSchema = z.object({
-  region: z.nativeEnum(ServiceRegion),
-  itemType: z.nativeEnum(ItemType).default("TRADING_CARD"), // PSA_JPは常にTRADING_CARDへサーバー側で補正。ADR-0023
-  // サービスレベル別の枚数内訳（複数レベル同時申込に対応。実際のPSA提出振り分けは当社側で行う）。ADR-0024
-  serviceLevels: z.array(storeRequestLevelSchema).min(1).max(20),
-  returnMethod: z.nativeEnum(ReturnMethod),
-  returnAddress: returnAddressSchema,
-  shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/),
-  agreementText: z.string().min(1),
-  agreementVersion: z.string().min(1),
-  ipAddress: z.string(),
-  userAgent: z.string().optional(),
+const storeRequestCustomLevelSchema = z.object({
+  customServiceLevelId: z.string().min(1),
+  quantity: z.number().int().min(1).max(500),
 });
+
+const storeRequestSchema = z
+  .object({
+    region: z.nativeEnum(ServiceRegion),
+    itemType: z.nativeEnum(ItemType).default("TRADING_CARD"), // PSA_JPは常にTRADING_CARDへサーバー側で補正。ADR-0023
+    // サービスレベル別の枚数内訳（複数レベル同時申込に対応。実際のPSA提出振り分けは当社側で行う）。ADR-0024
+    serviceLevels: z.array(storeRequestLevelSchema).max(20).default([]),
+    // 非TRADING_CARD（未開封パック/コミック・マガジン）の場合の内訳。ADR-0025
+    customServiceLevels: z.array(storeRequestCustomLevelSchema).max(20).default([]),
+    returnMethod: z.nativeEnum(ReturnMethod),
+    returnAddress: returnAddressSchema,
+    shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/),
+    agreementText: z.string().min(1),
+    agreementVersion: z.string().min(1),
+    ipAddress: z.string(),
+    userAgent: z.string().optional(),
+  })
+  .refine(
+    (d) => (d.itemType === "TRADING_CARD" ? d.serviceLevels.length > 0 : d.customServiceLevels.length > 0),
+    { message: "少なくとも1つのサービスに枚数を入力してください" }
+  );
 
 /**
  * 代理申込（当社入力）の依頼を顧客が作成し、概算（サービスレベル別枚数×鑑定料の合計＋税）を先払いする。
@@ -486,24 +538,58 @@ export async function createStoreRequest(
   // PSA_JPは常にTRADING_CARD（クライアント値を信用しない）。ADR-0023
   const itemType: ItemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
 
-  const servicePrices = await prisma.servicePrice.findMany({
-    where: {
-      region: parsed.data.region,
-      itemType,
-      serviceLevel: { in: parsed.data.serviceLevels.map((l) => l.serviceLevel) },
-      isActive: true,
-    },
-  });
-  const priceByLevel = new Map(servicePrices.map((p) => [p.serviceLevel, p]));
-  const missing = parsed.data.serviceLevels.find((l) => !priceByLevel.has(l.serviceLevel));
-  if (missing) return { success: false, error: "サービスレベルが見つかりません" };
+  let cardCount: number;
+  let psaFeeTotal: number;
+  // estimatedServiceLevels（既存Json列）に保存する内訳。トレカ=enum、非トレカ=CustomServicePrice参照+名前スナップショット
+  let estimatedServiceLevelsData: unknown;
 
-  // 先払い概算: Σ(サービスレベル別 枚数×鑑定料) ＋ 消費税(10%)。代理入力料金・送料・保険・事務手数料は含めない（差額側＝段階4）。
-  const cardCount = parsed.data.serviceLevels.reduce((s, l) => s + l.quantity, 0);
-  const psaFeeTotal = parsed.data.serviceLevels.reduce(
-    (s, l) => s + priceByLevel.get(l.serviceLevel)!.pricePerCard * l.quantity,
-    0
-  );
+  if (itemType === "TRADING_CARD") {
+    if (parsed.data.serviceLevels.length === 0) return { success: false, error: "サービスレベルを選択してください" };
+    const servicePrices = await prisma.servicePrice.findMany({
+      where: {
+        region: parsed.data.region,
+        itemType,
+        serviceLevel: { in: parsed.data.serviceLevels.map((l) => l.serviceLevel) },
+        isActive: true,
+      },
+    });
+    const priceByLevel = new Map(servicePrices.map((p) => [p.serviceLevel, p]));
+    const missing = parsed.data.serviceLevels.find((l) => !priceByLevel.has(l.serviceLevel));
+    if (missing) return { success: false, error: "サービスレベルが見つかりません" };
+
+    cardCount = parsed.data.serviceLevels.reduce((s, l) => s + l.quantity, 0);
+    psaFeeTotal = parsed.data.serviceLevels.reduce(
+      (s, l) => s + priceByLevel.get(l.serviceLevel)!.pricePerCard * l.quantity,
+      0
+    );
+    estimatedServiceLevelsData = parsed.data.serviceLevels;
+  } else {
+    if (parsed.data.customServiceLevels.length === 0) return { success: false, error: "サービスを選択してください" };
+    const customPrices = await prisma.customServicePrice.findMany({
+      where: {
+        region: parsed.data.region,
+        category: itemType,
+        id: { in: parsed.data.customServiceLevels.map((l) => l.customServiceLevelId) },
+        isActive: true,
+      },
+    });
+    const priceById = new Map(customPrices.map((p) => [p.id, p]));
+    const missing = parsed.data.customServiceLevels.find((l) => !priceById.has(l.customServiceLevelId));
+    if (missing) return { success: false, error: "サービスが見つかりません" };
+
+    cardCount = parsed.data.customServiceLevels.reduce((s, l) => s + l.quantity, 0);
+    psaFeeTotal = parsed.data.customServiceLevels.reduce(
+      (s, l) => s + priceById.get(l.customServiceLevelId)!.pricePerCard * l.quantity,
+      0
+    );
+    estimatedServiceLevelsData = parsed.data.customServiceLevels.map((l) => ({
+      customServiceLevelId: l.customServiceLevelId,
+      customServiceLevelName: priceById.get(l.customServiceLevelId)!.name,
+      quantity: l.quantity,
+    }));
+  }
+
+  // 先払い概算: Σ(サービス別 枚数×鑑定料) ＋ 消費税(10%)。代理入力料金・送料・保険・事務手数料は含めない（差額側＝段階4）。
   const taxAmount = roundMoney(psaFeeTotal * 0.1, parsed.data.region);
   const prepaidAmount = roundMoney(psaFeeTotal + taxAmount, parsed.data.region);
 
@@ -522,7 +608,8 @@ export async function createStoreRequest(
       data: {
         applicationNo,
         customerId: customer.id,
-        serviceLevel: parsed.data.serviceLevels[0].serviceLevel, // 代表値（店舗が明細確定時に再確定しうる）。内訳は estimatedServiceLevels 参照
+        // 代表値（店舗が明細確定時に再確定しうる）。内訳は estimatedServiceLevels 参照。非トレカは"CUSTOM"。ADR-0025
+        serviceLevel: itemType === "TRADING_CARD" ? parsed.data.serviceLevels[0].serviceLevel : "CUSTOM",
         region: parsed.data.region,
         itemType,
         source: "STORE",
@@ -531,7 +618,7 @@ export async function createStoreRequest(
         shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
         status: "DRAFT",
         estimatedCardCount: cardCount,
-        estimatedServiceLevels: parsed.data.serviceLevels,
+        estimatedServiceLevels: estimatedServiceLevelsData as Prisma.InputJsonValue,
         prepaidAmount,
         totalAmount: prepaidAmount,
         psaFeeTotal,
@@ -585,7 +672,7 @@ export async function createStoreRequest(
     action: "STORE_REQUEST_CREATE",
     targetType: "applications",
     targetId: application.id,
-    after: { applicationNo: application.applicationNo, prepaidAmount, serviceLevels: parsed.data.serviceLevels },
+    after: { applicationNo: application.applicationNo, prepaidAmount, serviceLevels: estimatedServiceLevelsData },
   });
 
   return { success: true, applicationId: application.id, clientSecret: paymentIntent.client_secret! };
@@ -703,6 +790,7 @@ const draftCardSchema = z.object({
   quantity: z.number().int().default(1),
   declaredValue: z.number().int().default(0),
   autographRequested: z.boolean().default(false),
+  autographCustomServiceLevelId: z.string().optional(),
 });
 
 const saveDraftSchema = z.object({
@@ -710,6 +798,7 @@ const saveDraftSchema = z.object({
   serviceLevel: z.nativeEnum(ServiceLevel),
   region: z.nativeEnum(ServiceRegion),
   itemType: z.nativeEnum(ItemType).default("TRADING_CARD"),
+  customServiceLevelId: z.string().optional(),
   returnMethod: z.nativeEnum(ReturnMethod),
   returnSel: z.string().default("registered"),
   cards: z.array(draftCardSchema).default([]),
@@ -743,6 +832,7 @@ export async function saveDraft(
         serviceLevel: parsed.data.serviceLevel,
         region: parsed.data.region,
         itemType: parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType,
+        customServiceLevelId: parsed.data.region === "PSA_JP" ? null : parsed.data.customServiceLevelId,
         returnMethod: parsed.data.returnMethod,
         draftData,
       },
@@ -760,6 +850,7 @@ export async function saveDraft(
       serviceLevel: parsed.data.serviceLevel,
       region: parsed.data.region,
       itemType: parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType,
+      customServiceLevelId: parsed.data.region === "PSA_JP" ? null : parsed.data.customServiceLevelId,
       source: "CUSTOMER",
       returnMethod: parsed.data.returnMethod,
       status: "DRAFT",
@@ -777,6 +868,7 @@ export async function getDraft(id: string): Promise<{
   serviceLevel: ServiceLevel;
   region: ServiceRegion;
   itemType: ItemType;
+  customServiceLevelId: string | null;
   returnMethod: ReturnMethod;
   cards: z.infer<typeof draftCardSchema>[];
   returnSel: string;
@@ -793,6 +885,7 @@ export async function getDraft(id: string): Promise<{
     serviceLevel: app.serviceLevel,
     region: app.region,
     itemType: app.itemType,
+    customServiceLevelId: app.customServiceLevelId,
     returnMethod: app.returnMethod,
     cards: data.cards ?? [],
     returnSel: data.returnSel ?? "registered",
@@ -826,23 +919,27 @@ export async function previewFees(input: {
   serviceLevel: ServiceLevel | null;
   region: ServiceRegion;
   itemType: ItemType;
+  customServiceLevelId?: string;
   returnMethod: ReturnMethod;
   cardCount: number;
   totalDeclaredValue: number;
-  autographCount?: number;
+  autographSelections?: { customServiceLevelId: string; quantity: number }[];
 }) {
-  if (!input.serviceLevel) return null;
+  const itemType = input.region === "PSA_JP" ? "TRADING_CARD" : input.itemType;
+  if (itemType === "TRADING_CARD" && !input.serviceLevel) return null;
+  if (itemType !== "TRADING_CARD" && !input.customServiceLevelId) return null;
   const customer = await getCustomerSession();
   try {
     return await calculateFees({
-      serviceLevel: input.serviceLevel,
+      serviceLevel: input.serviceLevel ?? "CUSTOM",
       region: input.region,
-      itemType: input.region === "PSA_JP" ? "TRADING_CARD" : input.itemType,
+      itemType,
+      customServiceLevelId: input.customServiceLevelId,
       returnMethod: input.returnMethod,
       cardCount: input.cardCount,
       totalDeclaredValue: input.totalDeclaredValue,
       applyAgencyFee: false,
-      autographCount: input.autographCount,
+      autographSelections: input.autographSelections,
       customerId: customer?.id,
     });
   } catch {

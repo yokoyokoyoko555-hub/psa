@@ -20,6 +20,20 @@ export function roundMoney(amount: number, region: string | null | undefined): n
   return Math.floor(amount);
 }
 
+/**
+ * 明示通貨での金額表示（regionに依存しない）。円=整数 / USD=小数点以下2桁。
+ * 申告上限（ServicePrice/CustomServicePriceのmaxDeclaredValue）など、
+ * リージョンに関わらず常に特定の通貨で扱うべき値に使う。ADR-0025
+ */
+export function formatMoneyIn(amount: number, currency: "JPY" | "USD"): string {
+  const isUsd = currency === "USD";
+  const formatted = (amount ?? 0).toLocaleString(undefined, {
+    minimumFractionDigits: isUsd ? 2 : 0,
+    maximumFractionDigits: isUsd ? 2 : 0,
+  });
+  return `${isUsd ? "$" : "¥"}${formatted}`;
+}
+
 /** Stripe API向け最小通貨単位への変換（JPYは無位取りのため整数そのまま / USDはセント）。 */
 export function toStripeAmount(amount: number, region: string | null | undefined): number {
   return region === "PSA_US" ? Math.round(amount * 100) : Math.round(amount);

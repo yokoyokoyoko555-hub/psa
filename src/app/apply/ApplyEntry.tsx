@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import ApplyForm, { type InitialDraft } from "./ApplyForm";
 import StoreRequestForm from "./StoreRequestForm";
-import type { ServicePrice, ShippingRule, InsuranceRule, AutographPricing } from "@prisma/client";
+import type { ServicePrice, ShippingRule, InsuranceRule, CustomServicePrice } from "@prisma/client";
 import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
 
@@ -14,7 +14,7 @@ type Props = {
   servicePrices: ServicePrice[];
   shippingRules: ShippingRule[];
   insuranceRules: InsuranceRule[];
-  autographPricing: AutographPricing[];
+  customServicePrices: CustomServicePrice[];
   profile: CustomerProfile | null;
   addresses: Address[];
   initialDraft?: InitialDraft | null;
@@ -66,6 +66,7 @@ export default function ApplyEntry(props: Props) {
             profile={props.profile}
             addresses={props.addresses}
             servicePrices={props.servicePrices}
+            customServicePrices={props.customServicePrices}
             stripePublishableKey={props.stripePublishableKey}
           />
         </main>

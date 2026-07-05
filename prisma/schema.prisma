@@ -71,6 +71,8 @@ enum ServiceLevel {
   COMIC_EXPRESS
   COMIC_SUPER_EXPRESS
   COMIC_WALK_THROUGH
+  // ---- 非TRADING_CARD申込のプレースホルダー値。実体はcustomServiceLevelId参照。ADR-0025 ----
+  CUSTOM
 }
 
 enum ReturnMethod {
@@ -89,6 +91,13 @@ enum ItemType {
   TRADING_CARD
   UNOPENED_PACK
   COMIC_MAGAZINE // コミックとマガジンは1区分に統合
+}
+
+// 動的サービスタイア（管理画面でCRUD可能）のカテゴリ。ADR-0025
+enum CustomServiceCategory {
+  UNOPENED_PACK
+  COMIC_MAGAZINE
+  AUTOGRAPH
 }
 
 // 申込の入力経路（手数料の有無を分岐）
@@ -313,9 +322,12 @@ model Application {
   id             String            @id @default(cuid())
   applicationNo  String            @unique // 表示用申込番号 APP-YYYYMMDD-XXXX
   customerId     String
-  serviceLevel   ServiceLevel
+  serviceLevel   ServiceLevel // 非TRADING_CARDの場合は"CUSTOM"（実体はcustomServiceLevelId参照）。ADR-0025
   region         ServiceRegion     @default(PSA_JP) // 提出先（PSA日本 / PSA US）
   itemType       ItemType          @default(TRADING_CARD) // 鑑定対象アイテム種別（PSA_USのみ複数）。ADR-0023
+  // 非TRADING_CARDアイテム種別で選択したCustomServicePrice（管理画面でCRUD可能な動的サービスタイア）。ADR-0025
+  customServiceLevelId   String?
+  customServiceLevelName String? // スナップショット（タイア削除・改名後も過去申込の表示を保つ）
   source         ApplicationSource @default(CUSTOMER) // 顧客入力 / 当社(店舗)入力
   returnMethod   ReturnMethod
   // 返送先住所（暗号化JSON）。null の場合は顧客の登録住所を使用
@@ -390,7 +402,10 @@ model Card {
   psaCost   Float @default(0) // PSA原価（80%）
   agencyFee Int   @default(0) // 代行手数料
   autographRequested Boolean @default(false) // オートグラフ（デュアルサービス）希望。PSA_US×TRADING_CARDのみ意味を持つ。ADR-0023
-  autographFee       Float   @default(0) // 確定時点のAutographPricing.feeのスナップショット（1枚あたり）
+  autographFee       Float   @default(0) // 確定時点のCustomServicePrice(category=AUTOGRAPH).pricePerCardのスナップショット合計
+  autographCost      Float   @default(0) // 同・原価スナップショット合計。ADR-0025
+  autographCustomServiceLevelId   String? // 選択したAutographタイア（CustomServicePrice参照）
+  autographCustomServiceLevelName String? // スナップショット
 
   // ステータス
   status        CardStatus          @default(DRAFT)
@@ -518,7 +533,7 @@ model ServicePrice {
   itemType         ItemType      @default(TRADING_CARD) // ADR-0023
   pricePerCard     Float // 1枚あたり鑑定料 = 顧客請求額（JP=円・整数 / US=USD・小数点以下2桁）。ADR-0022
   cost             Float         @default(0) // 1枚あたり原価（JP=円 / US=USD）。0なら鑑定料×80%で代替
-  maxDeclaredValue Float? // 申告価格の上限。nullは上限なし
+  maxDeclaredValue Float? // 申告価格の上限。値自体は常に円・整数として扱う（表示・検証はformatMoneyIn経由）。ADR-0025
   isActive         Boolean       @default(true)
   updatedAt        DateTime      @updatedAt
   updatedBy        String?
@@ -527,18 +542,23 @@ model ServicePrice {
   @@map("service_prices")
 }
 
-// オートグラフ（デュアルサービス）追加料金。PSA_US×TRADING_CARDの個別カード単位オプション。ADR-0023
-model AutographPricing {
-  id           String        @id @default(cuid())
-  region       ServiceRegion @default(PSA_US)
-  serviceLevel ServiceLevel // トレーディングカードの既存レベルのいずれか（PSA_US分のみ運用想定）
-  fee          Float         @default(0) // 1枚あたり追加料金。JP=円 / US=USD。未設定は0
-  isActive     Boolean       @default(false) // 価格未確定のため既定で非表示
-  updatedAt    DateTime      @updatedAt
-  updatedBy    String?
+// 動的サービスタイア（管理画面で自由に追加・編集・削除可能）。未開封パック/コミック・マガジン/オートグラフの
+// 名称・価格・原価・申告上限を管理する。トレーディングカードは既存ServicePrice(固定enum)のまま。ADR-0025
+model CustomServicePrice {
+  id               String                @id @default(cuid())
+  category         CustomServiceCategory
+  region           ServiceRegion         @default(PSA_US)
+  name             String // 表示名（自由入力）
+  pricePerCard     Float // 1枚あたり価格（USD・小数点以下2桁）。Autographはカード単位の追加料金
+  cost             Float                 @default(0) // 原価（USD・小数点以下2桁）。0なら鑑定料×80%で代替
+  maxDeclaredValue Int? // 申告価格の上限（円・整数）。nullは上限なし
+  isActive         Boolean               @default(true)
+  sortOrder        Int                   @default(0)
+  updatedAt        DateTime              @updatedAt
+  updatedBy        String?
 
-  @@unique([region, serviceLevel])
-  @@map("autograph_pricing")
+  @@index([category, region])
+  @@map("custom_service_prices")
 }
 
 // 料金の一律設定（リージョン×アイテム種別別。id は既存分は "PSA_JP"/"PSA_US"、新規分は "{region}_{itemType}"）。

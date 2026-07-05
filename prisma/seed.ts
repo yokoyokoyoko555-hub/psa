@@ -1,4 +1,4 @@
-import { PrismaClient, ServiceLevel, ItemType } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { createCipheriv, randomBytes } from "crypto";
@@ -77,47 +77,11 @@ async function main() {
     }
   }
 
-  // 新アイテム種別（未開封パック・コミック/マガジン）。PSA_USのみ。実価格は未確定のため
-  // プレースホルダー（0円・非表示）で投入し、管理画面で後日入力する。ADR-0023
-  const newItemTypeLevels: Record<"UNOPENED_PACK" | "COMIC_MAGAZINE", ServiceLevel[]> = {
-    UNOPENED_PACK: ["PACK_VALUE", "PACK_ECONOMY", "PACK_EXPRESS"],
-    COMIC_MAGAZINE: [
-      "COMIC_MODERN",
-      "COMIC_MODERN_PLUS",
-      "COMIC_VINTAGE",
-      "COMIC_VINTAGE_PLUS",
-      "COMIC_HIGH_VALUE",
-      "COMIC_EXPRESS",
-      "COMIC_SUPER_EXPRESS",
-      "COMIC_WALK_THROUGH",
-    ],
-  };
-  for (const [itemType, levels] of Object.entries(newItemTypeLevels) as [ItemType, ServiceLevel[]][]) {
-    for (const serviceLevel of levels) {
-      await prisma.servicePrice.upsert({
-        where: { serviceLevel_region_itemType: { serviceLevel, region: "PSA_US", itemType } },
-        update: {},
-        create: {
-          serviceLevel,
-          region: "PSA_US",
-          itemType,
-          pricePerCard: 0,
-          cost: 0,
-          maxDeclaredValue: null,
-          isActive: false,
-        },
-      });
-    }
-  }
-
-  // Autograph（デュアルサービス）追加料金。PSA_US×トレーディングカードの既存レベル分。実価格未確定のためプレースホルダー。ADR-0023
-  for (const l of baseLevels) {
-    await prisma.autographPricing.upsert({
-      where: { region_serviceLevel: { region: "PSA_US", serviceLevel: l.serviceLevel } },
-      update: {},
-      create: { region: "PSA_US", serviceLevel: l.serviceLevel, fee: 0, isActive: false },
-    });
-  }
+  // 旧固定enumタイア（未開封パック・コミック/マガジン）のプレースホルダー行は撤去。
+  // 未開封パック・コミック/マガジン・オートグラフは CustomServicePrice として管理画面から追加する運用に変更。ADR-0025
+  await prisma.servicePrice.deleteMany({
+    where: { itemType: { in: ["UNOPENED_PACK", "COMIC_MAGAZINE"] } },
+  });
 
   // Shipping rules（itemType未指定=TRADING_CARD。新アイテム種別は当面$0フォールバックとなる）
   await prisma.shippingRule.deleteMany();

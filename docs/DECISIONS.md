@@ -252,3 +252,18 @@
   - 管理画面（代理申込詳細 `admin/store-requests/[id]/page.tsx`）: 顧客が先払い時に申告したサービスレベル別内訳を表示し、スタッフが明細確定時の参考にできるようにした（実際の確定内容と一致しなくてもよい）。
 - 影響: `Application.estimatedServiceLevels`列追加（db push、非破壊・nullable）。`createStoreRequest`のAPIシグネチャ変更（後方互換なし、呼び出し元は`StoreRequestForm.tsx`のみのため影響範囲は限定的）。
 
+## ADR-0025: 動的サービスタイア（`CustomServicePrice`）CRUD化 + 通貨表示修正
+
+- 日付: 2026-07-05 / 状態: Accepted（実装済）
+- 背景: ADR-0023で追加した未開封パック・コミック/マガジン・Autographは、サービスレベルを固定enum（`PACK_VALUE`等11個 + `AutographPricing`）+ 事前seedしたプレースホルダー行として実装したため、管理画面では既存行の価格編集しかできず、**名称の追加・変更・削除ができなかった**（名称はTSXにハードコードされたラベルmap）。あわせて、申告上限（`maxDeclaredValue`）がPSA_US配下で誤ってドル小数点表示になる、代理入力料金・事務手数料・送料保険料（元々常に円建て）がPSA_USグループ配下で`$`ラベル表示になる、という通貨表示バグが見つかった。
+- 決定:
+  - **新モデル`CustomServicePrice`を追加**（`category: UNOPENED_PACK|COMIC_MAGAZINE|AUTOGRAPH`, `region`, `name`, `pricePerCard`, `cost`, `maxDeclaredValue`, `isActive`, `sortOrder`）。管理画面から名称・価格・原価・申告上限を自由に追加・編集・削除できる（`CustomServicePriceForm.tsx`、`CampaignForm.tsx`と同じ「一覧+編集/削除+＋追加+ドラフトパネル」パターン）。`@@index([category, region])`のみ（ADR-0023追記の教訓どおり、新規テーブルでも将来の衝突を避けるため`@@unique`は使わない）。
+  - **`AutographPricing`モデルを削除**（破壊的だが全行`fee:0, isActive:false`のプレースホルダーで実データ無しのため安全。`db push --accept-data-loss`で削除）。
+  - **`ServiceLevel`enumに`CUSTOM`を追加**（非TRADING_CARD申込の`Application.serviceLevel`用プレースホルダー値。実体は`customServiceLevelId`/`customServiceLevelName`参照）。`Application`/`Card`に`customServiceLevelId`・`customServiceLevelName`（スナップショット）等のID参照列を追加。
+  - **ダブルパス方式**: `itemType === "TRADING_CARD"`は既存の固定enum + `ServicePrice`のロジックを一切変更しない。それ以外（`UNOPENED_PACK`/`COMIC_MAGAZINE`）とAutographは`CustomServicePrice`をID参照で扱う。`fee-calculator.ts`/`application.ts`/`admin.ts`/`ApplyForm.tsx`/`StoreRequestForm.tsx`/`StoreInputForm.tsx`すべてで同じ分岐条件を使用。
+  - **通貨表示の修正**: `formatMoneyIn(amount, "JPY"|"USD")`（region非依存の明示的通貨指定フォーマッタ）を新設。`maxDeclaredValue`（`ServicePrice`・`CustomServicePrice`両方）は常に`formatMoneyIn(x, "JPY")`で表示・エラーメッセージに使用（`Card.declaredValue`と比較する値であり、常に円整数のため）。顧客の申告金額（`declaredValue`）自体も同様に常に円整数として`formatMoneyIn`表示に統一。代理入力料金・事務手数料・送料保険料（`PricingSetting`/`ShippingInsuranceRate`由来、常に円整数）も`formatMoneyIn(x, "JPY")`表示に統一し、管理画面の`HandlingFeeForm`/`ShippingInsuranceForm`の単位ラベルも常に「円」固定にした。鑑定料・原価・Autograph料金（`pricePerCard`/`cost`）は従来通りリージョン依存の`formatMoney(x, region)`のまま（PSA_USはドル小数点表示）。
+  - **スコープ外（保留）**: 為替レートによるドル→円換算、および合計金額(`totalAmount`)・Stripe決済通貨のロジック変更は今回一切触っていない。USD建てのサービス料金と円建ての他手数料が混在する場合の合計金額計算・決済通貨の扱いは、ユーザーの明示的な指示により保留。
+- 影響: `prisma/schema.prisma`（`AutographPricing`削除、`CustomServicePrice`追加、ID参照列追加）。`prisma/seed.ts`から旧`PACK_*`/`COMIC_*`プレースホルダーseedと`AutographPricing`seedを削除し、既存の`UNOPENED_PACK`/`COMIC_MAGAZINE`の`ServicePrice`行を`deleteMany`でクリーンアップ（`CustomServicePrice`は管理画面から追加する運用のためseed不要）。
+- 未対応: 為替レート・合計金額の通貨統一ロジック（上記の通り保留）。
+
+

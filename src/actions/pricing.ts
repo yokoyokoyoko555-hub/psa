@@ -95,19 +95,50 @@ export async function saveUniformFees(input: {
   return { success: true };
 }
 
-const autographRowSchema = z.object({ id: z.string(), fee: z.number().min(0), isActive: z.boolean() });
-const saveAutographSchema = z.object({ rows: z.array(autographRowSchema) });
+// 動的サービスタイア（未開封パック/コミック・マガジン/オートグラフ）の管理画面CRUD。ADR-0025
+const customServiceCategoryEnum = z.enum(["UNOPENED_PACK", "COMIC_MAGAZINE", "AUTOGRAPH"]);
 
-/** オートグラフ（デュアルサービス）追加料金（サービスレベル別）を保存 */
-export async function saveAutographPricing(
-  input: z.infer<typeof saveAutographSchema>
+const customServicePriceSchema = z.object({
+  id: z.string().optional(),
+  category: customServiceCategoryEnum,
+  region: regionEnum,
+  name: z.string().min(1).max(100),
+  pricePerCard: z.number().min(0), // USD小数点2桁
+  cost: z.number().min(0), // USD小数点2桁
+  maxDeclaredValue: z.number().int().min(0).nullable(), // 円・整数。nullは上限なし
+  isActive: z.boolean(),
+  sortOrder: z.number().int().default(0),
+});
+
+export async function saveCustomServicePrice(
+  input: z.infer<typeof customServicePriceSchema>
 ): Promise<{ success: boolean; error?: string }> {
   await requireAdmin();
-  const parsed = saveAutographSchema.safeParse(input);
+  const parsed = customServicePriceSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容を確認してください" };
-  for (const r of parsed.data.rows) {
-    await prisma.autographPricing.update({ where: { id: r.id }, data: { fee: r.fee, isActive: r.isActive } });
+  const d = parsed.data;
+  const data = {
+    category: d.category,
+    region: d.region,
+    name: d.name,
+    pricePerCard: Math.round(d.pricePerCard * 100) / 100,
+    cost: Math.round(d.cost * 100) / 100,
+    maxDeclaredValue: d.maxDeclaredValue,
+    isActive: d.isActive,
+    sortOrder: d.sortOrder,
+  };
+  if (d.id) {
+    await prisma.customServicePrice.update({ where: { id: d.id }, data });
+  } else {
+    await prisma.customServicePrice.create({ data });
   }
+  revalidatePath("/admin/settings");
+  return { success: true };
+}
+
+export async function deleteCustomServicePrice(id: string): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin();
+  await prisma.customServicePrice.delete({ where: { id } });
   revalidatePath("/admin/settings");
   return { success: true };
 }

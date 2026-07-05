@@ -5,7 +5,7 @@ import ServicePriceForm from "./ServicePriceForm";
 import ShippingInsuranceForm from "./ShippingInsuranceForm";
 import HandlingFeeForm from "./HandlingFeeForm";
 import CampaignForm from "./CampaignForm";
-import AutographPricingForm from "./AutographPricingForm";
+import CustomServicePriceForm from "./CustomServicePriceForm";
 
 const groupCls = "bg-white rounded-xl border border-gray-200 p-6";
 const subCls = "border border-gray-100 rounded-lg p-4";
@@ -17,12 +17,12 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 };
 
 export default async function SettingsPage() {
-  const [servicePrices, siRates, settings, campaigns, autographPricing] = await Promise.all([
+  const [servicePrices, siRates, settings, campaigns, customServicePrices] = await Promise.all([
     prisma.servicePrice.findMany({ orderBy: { pricePerCard: "asc" } }),
     prisma.shippingInsuranceRate.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.pricingSetting.findMany(),
     prisma.campaign.findMany({ orderBy: { startAt: "desc" } }),
-    prisma.autographPricing.findMany({ orderBy: { serviceLevel: "asc" } }),
+    prisma.customServicePrice.findMany({ orderBy: { sortOrder: "asc" } }),
   ]);
 
   const settingFor = (region: string, itemType: string) =>
@@ -53,14 +53,18 @@ export default async function SettingsPage() {
                 <div className="space-y-4">
                   <div className={subCls}>
                     <h3 className="font-bold text-gray-800 mb-3">サービス料金（鑑定料・原価・申告上限）</h3>
-                    <ServicePriceForm servicePrices={servicePrices} region={region} itemType={itemType} unit={unit} />
+                    {itemType === "TRADING_CARD" ? (
+                      <ServicePriceForm servicePrices={servicePrices} region={region} itemType={itemType} unit={unit} />
+                    ) : (
+                      <CustomServicePriceForm items={customServicePrices} category={itemType} region={region} />
+                    )}
                   </div>
                   <div className={subCls}>
                     <h3 className="font-bold text-gray-800 mb-3">代理入力料金・事務手数料（一律）</h3>
                     <HandlingFeeForm
                       region={region}
                       itemType={itemType}
-                      unit={unit}
+                      unit="円"
                       proxyFee={ps?.proxyFee ?? 0}
                       handlingFee={ps?.handlingFee ?? 0}
                       freeShipInsQty={ps?.freeShipInsQty ?? 0}
@@ -68,7 +72,7 @@ export default async function SettingsPage() {
                   </div>
                   <div className={subCls}>
                     <h3 className="font-bold text-gray-800 mb-3">送料・保険料</h3>
-                    <ShippingInsuranceForm rates={siRates} region={region} itemType={itemType} unit={unit} />
+                    <ShippingInsuranceForm rates={siRates} region={region} itemType={itemType} unit="円" />
                   </div>
                 </div>
               );
@@ -94,7 +98,7 @@ export default async function SettingsPage() {
           オートグラフ（デュアルサービス）料金 — PSA US
         </summary>
         <div className="mt-4">
-          <AutographPricingForm pricing={autographPricing} unit="$" />
+          <CustomServicePriceForm items={customServicePrices} category="AUTOGRAPH" region="PSA_US" />
         </div>
       </details>
 

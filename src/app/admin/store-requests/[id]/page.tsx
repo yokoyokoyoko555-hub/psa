@@ -62,9 +62,20 @@ export default async function StoreRequestDetailPage({
     where: { region: app.region, itemType: app.itemType, isActive: true },
     orderBy: { pricePerCard: "asc" },
   });
+  // 非トレカ（未開封パック/コミック・マガジン）の動的サービスタイア。ADR-0025
+  const customServicePrices =
+    app.itemType !== "TRADING_CARD"
+      ? await prisma.customServicePrice.findMany({
+          where: { region: app.region, category: app.itemType, isActive: true },
+          orderBy: { sortOrder: "asc" },
+        })
+      : [];
   const autographPricing =
     app.region === "PSA_US" && app.itemType === "TRADING_CARD"
-      ? await prisma.autographPricing.findMany({ where: { region: app.region, isActive: true } })
+      ? await prisma.customServicePrice.findMany({
+          where: { region: app.region, category: "AUTOGRAPH", isActive: true },
+          orderBy: { sortOrder: "asc" },
+        })
       : [];
   const masters = await prisma.cardNameMaster.findMany({
     select: { cardName: true },
@@ -75,15 +86,20 @@ export default async function StoreRequestDetailPage({
 
   const alreadyDone = app.status !== "DRAFT";
 
-  // 顧客が先払い時に申告したサービスレベル別枚数内訳（複数レベル同時申込に対応）。ADR-0024
+  // 顧客が先払い時に申告したサービスレベル別枚数内訳（複数レベル同時申込に対応）。ADR-0024/0025
   const estimatedLevels = Array.isArray(app.estimatedServiceLevels)
-    ? (app.estimatedServiceLevels as unknown as { serviceLevel: string; quantity: number }[])
+    ? (app.estimatedServiceLevels as unknown as {
+        serviceLevel?: string;
+        customServiceLevelId?: string;
+        customServiceLevelName?: string;
+        quantity: number;
+      }[])
     : [];
 
-  // 一時保存済みの下書き（{ serviceLevel, cards }）があれば復元用に取り出す
+  // 一時保存済みの下書き（{ serviceLevel, customServiceLevelId, cards }）があれば復元用に取り出す
   const draft =
     app.draftData && typeof app.draftData === "object" && !Array.isArray(app.draftData)
-      ? (app.draftData as { serviceLevel?: string; cards?: unknown[] })
+      ? (app.draftData as { serviceLevel?: string; customServiceLevelId?: string; cards?: unknown[] })
       : null;
 
   return (
@@ -126,7 +142,11 @@ export default async function StoreRequestDetailPage({
           <ul className="text-sm text-gray-700 divide-y divide-gray-100">
             {estimatedLevels.map((l, i) => (
               <li key={i} className="flex justify-between py-1.5">
-                <span>{SERVICE_LABELS[l.serviceLevel] ?? l.serviceLevel}</span>
+                <span>
+                  {l.serviceLevel
+                    ? SERVICE_LABELS[l.serviceLevel] ?? l.serviceLevel
+                    : l.customServiceLevelName ?? l.customServiceLevelId}
+                </span>
                 <span className="font-medium">{l.quantity}枚</span>
               </li>
             ))}
@@ -147,6 +167,7 @@ export default async function StoreRequestDetailPage({
           region={app.region}
           itemType={app.itemType}
           servicePrices={servicePrices}
+          customServicePrices={customServicePrices}
           autographPricing={autographPricing}
           masterNames={masterNames}
           initialDraft={draft}

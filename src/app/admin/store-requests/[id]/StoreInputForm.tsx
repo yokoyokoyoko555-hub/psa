@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeStoreApplication, saveStoreInputDraft } from "@/actions/admin";
 import { ServiceLevel } from "@prisma/client";
-import type { ServicePrice, AutographPricing } from "@prisma/client";
-import { formatMoney } from "@/lib/currency";
+import type { ServicePrice, CustomServicePrice } from "@prisma/client";
+import { formatMoney, formatMoneyIn } from "@/lib/currency";
 
 const SERVICE_LABELS: Record<string, string> = {
   VALUE_BULK: "バリューバルク",
@@ -51,6 +51,7 @@ interface CardRow {
   quantity: number;
   notes: string;
   autographRequested: boolean;
+  autographCustomServiceLevelId: string | null;
 }
 
 function newRow(): CardRow {
@@ -64,6 +65,7 @@ function newRow(): CardRow {
     quantity: 1,
     notes: "",
     autographRequested: false,
+    autographCustomServiceLevelId: null,
   };
 }
 
@@ -80,6 +82,8 @@ function toCardRow(raw: unknown): CardRow {
     quantity: typeof r.quantity === "number" && r.quantity >= 1 ? r.quantity : 1,
     notes: typeof r.notes === "string" ? r.notes : "",
     autographRequested: typeof r.autographRequested === "boolean" ? r.autographRequested : false,
+    autographCustomServiceLevelId:
+      typeof r.autographCustomServiceLevelId === "string" ? r.autographCustomServiceLevelId : null,
   };
 }
 
@@ -88,6 +92,7 @@ export default function StoreInputForm({
   region,
   itemType,
   servicePrices,
+  customServicePrices = [],
   autographPricing = [],
   masterNames = [],
   initialDraft = null,
@@ -96,14 +101,19 @@ export default function StoreInputForm({
   region: string;
   itemType: string;
   servicePrices: ServicePrice[];
-  autographPricing?: AutographPricing[];
+  customServicePrices?: CustomServicePrice[];
+  autographPricing?: CustomServicePrice[];
   masterNames?: string[];
-  initialDraft?: { serviceLevel?: string; cards?: unknown[] } | null;
+  initialDraft?: { serviceLevel?: string; customServiceLevelId?: string; cards?: unknown[] } | null;
 }) {
   const router = useRouter();
   const draftCards = initialDraft?.cards?.map(toCardRow) ?? [];
-  const [serviceLevel, setServiceLevel] = useState<ServiceLevel>(
-    (initialDraft?.serviceLevel as ServiceLevel) ?? servicePrices[0]?.serviceLevel ?? "REGULAR"
+  const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(
+    (initialDraft?.serviceLevel as ServiceLevel) ?? (itemType === "TRADING_CARD" ? servicePrices[0]?.serviceLevel ?? "REGULAR" : null)
+  );
+  // 非TRADING_CARDで選択したCustomServicePrice.id。ADR-0025
+  const [customServiceLevelId, setCustomServiceLevelId] = useState<string | null>(
+    initialDraft?.customServiceLevelId ?? (itemType !== "TRADING_CARD" ? customServicePrices[0]?.id ?? null : null)
   );
   const [cards, setCards] = useState<CardRow[]>(draftCards.length > 0 ? draftCards : [newRow()]);
   const [loading, setLoading] = useState(false);
@@ -112,16 +122,19 @@ export default function StoreInputForm({
   const [error, setError] = useState("");
 
   const selected = servicePrices.find((p) => p.serviceLevel === serviceLevel);
+  const selectedCustomTier = customServicePrices.find((p) => p.id === customServiceLevelId);
+  const hasSelectedService = itemType === "TRADING_CARD" ? !!serviceLevel : !!customServiceLevelId;
   const isAutographEligible = region === "PSA_US" && itemType === "TRADING_CARD";
-  const autographActive =
-    isAutographEligible && autographPricing.some((a) => a.serviceLevel === serviceLevel && a.isActive);
+  const activeAutographTiers = isAutographEligible ? autographPricing.filter((a) => a.isActive) : [];
+  const autographActive = activeAutographTiers.length > 0;
 
   async function handleSaveDraft() {
     setError("");
     setSavingDraft(true);
     const result = await saveStoreInputDraft({
       applicationId,
-      serviceLevel,
+      serviceLevel: itemType === "TRADING_CARD" ? serviceLevel ?? undefined : undefined,
+      customServiceLevelId: itemType !== "TRADING_CARD" ? customServiceLevelId ?? undefined : undefined,
       cards: cards.map((c) => ({
         tcgTitle: c.tcgTitle,
         cardName: c.cardName,
@@ -132,6 +145,7 @@ export default function StoreInputForm({
         quantity: c.quantity,
         notes: c.notes,
         autographRequested: c.autographRequested,
+        autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? undefined,
       })),
     });
     setSavingDraft(false);
@@ -148,6 +162,10 @@ export default function StoreInputForm({
 
   async function handleSubmit() {
     setError("");
+    if (!hasSelectedService) {
+      setError("サービスレベルを選択してください");
+      return;
+    }
     if (cards.some((c) => !c.tcgTitle || !c.cardName || c.declaredValue < 1)) {
       setError("各カードのTCGタイトル・カード名・申告価格（1円以上）を入力してください");
       return;
@@ -155,7 +173,8 @@ export default function StoreInputForm({
     setLoading(true);
     const result = await completeStoreApplication({
       applicationId,
-      serviceLevel,
+      serviceLevel: itemType === "TRADING_CARD" ? serviceLevel ?? undefined : undefined,
+      customServiceLevelId: itemType !== "TRADING_CARD" ? customServiceLevelId ?? undefined : undefined,
       cards: cards.map((c) => ({
         tcgTitle: c.tcgTitle,
         cardName: c.cardName,
@@ -166,6 +185,7 @@ export default function StoreInputForm({
         quantity: c.quantity,
         notes: c.notes || undefined,
         autographRequested: c.autographRequested,
+        autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? undefined,
       })),
     });
     setLoading(false);
@@ -193,18 +213,34 @@ export default function StoreInputForm({
         {region === "PSA_US" && (
           <p className="text-xs text-gray-500 mb-2">アイテム種別: {ITEM_TYPE_LABELS[itemType] ?? itemType}</p>
         )}
-        <select
-          value={serviceLevel}
-          onChange={(e) => setServiceLevel(e.target.value as ServiceLevel)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
-        >
-          {servicePrices.map((p) => (
-            <option key={p.id} value={p.serviceLevel}>
-              {SERVICE_LABELS[p.serviceLevel] ?? p.serviceLevel}（{formatMoney(p.pricePerCard, region)}/枚）
-              {p.maxDeclaredValue !== null ? ` 上限${formatMoney(p.maxDeclaredValue, region)}` : ""}
-            </option>
-          ))}
-        </select>
+        {itemType === "TRADING_CARD" ? (
+          <select
+            value={serviceLevel ?? ""}
+            onChange={(e) => setServiceLevel(e.target.value as ServiceLevel)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+          >
+            {servicePrices.map((p) => (
+              <option key={p.id} value={p.serviceLevel}>
+                {SERVICE_LABELS[p.serviceLevel] ?? p.serviceLevel}（{formatMoney(p.pricePerCard, region)}/枚）
+                {p.maxDeclaredValue !== null ? ` 上限${formatMoneyIn(p.maxDeclaredValue, "JPY")}` : ""}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select
+            value={customServiceLevelId ?? ""}
+            onChange={(e) => setCustomServiceLevelId(e.target.value || null)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+          >
+            <option value="">選択してください</option>
+            {customServicePrices.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}（{formatMoney(p.pricePerCard, region)}/枚）
+                {p.maxDeclaredValue !== null ? ` 上限${formatMoneyIn(p.maxDeclaredValue, "JPY")}` : ""}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
@@ -282,15 +318,43 @@ export default function StoreInputForm({
                 onChange={(e) => update(i, "quantity", parseInt(e.target.value) || 1)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
               />
-              {autographActive && (
+              {autographActive && activeAutographTiers.length === 1 && (
                 <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
                   <input
                     type="checkbox"
                     checked={c.autographRequested}
-                    onChange={(e) => update(i, "autographRequested", e.target.checked)}
+                    onChange={(e) => {
+                      update(i, "autographRequested", e.target.checked);
+                      update(
+                        i,
+                        "autographCustomServiceLevelId",
+                        e.target.checked ? activeAutographTiers[0].id : null
+                      );
+                    }}
                   />
-                  オートグラフ（デュアルサービス）認証希望
+                  オートグラフ（デュアルサービス）認証希望（{formatMoney(activeAutographTiers[0].pricePerCard, region)}/枚）
                 </label>
+              )}
+              {autographActive && activeAutographTiers.length > 1 && (
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">オートグラフ（デュアルサービス）認証</label>
+                  <select
+                    className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 w-full"
+                    value={c.autographRequested ? c.autographCustomServiceLevelId ?? "" : ""}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      update(i, "autographRequested", !!id);
+                      update(i, "autographCustomServiceLevelId", id || null);
+                    }}
+                  >
+                    <option value="">希望しない</option>
+                    {activeAutographTiers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
           </div>
@@ -302,7 +366,7 @@ export default function StoreInputForm({
         ))}
       </datalist>
 
-      {selected && (
+      {(selected || selectedCustomTier) && (
         <p className="text-sm text-gray-500">
           ※ 確定すると料金が計算され（手数料あり）、申込が確定します。決済はStripe統合後に通電予定です。
         </p>

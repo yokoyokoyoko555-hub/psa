@@ -19,11 +19,11 @@ export default async function ApplyPage({
   const { draft: draftId } = await searchParams;
   const initialDraft = draftId ? await getDraft(draftId) : null;
 
-  const [servicePrices, shippingRules, insuranceRules, autographPricing, profile, addresses] = await Promise.all([
+  const [servicePrices, shippingRules, insuranceRules, customServicePrices, profile, addresses] = await Promise.all([
     prisma.servicePrice.findMany({ where: { isActive: true }, orderBy: { pricePerCard: "asc" } }),
     prisma.shippingRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     prisma.insuranceRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.autographPricing.findMany({ where: { isActive: true } }),
+    prisma.customServicePrice.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     getCustomerProfile(),
     getMyAddresses(),
   ]);
@@ -35,7 +35,7 @@ export default async function ApplyPage({
       servicePrices={servicePrices}
       shippingRules={shippingRules}
       insuranceRules={insuranceRules}
-      autographPricing={autographPricing}
+      customServicePrices={customServicePrices}
       profile={profile}
       addresses={addresses}
       initialDraft={initialDraft}
