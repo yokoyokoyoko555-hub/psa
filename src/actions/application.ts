@@ -486,10 +486,12 @@ const storeRequestSchema = z.object({
 });
 
 /**
- * 代理申込（当社入力）の依頼を顧客が作成し、代理入力費用（代理入力数×代理入力料＋事務手数料。内税）を先払いする。
+ * 代理申込（当社入力）の依頼を顧客が作成し、代理入力費用（代理入力数×代理入力料。内税）を先払いする。
  * ADR-0020 / ADR-0026
+ * 事務手数料はここでは請求しない（サービス単位×事務手数料のため、実際のサービスレベルが確定する
+ * completeStoreApplication 側で計算・請求する）。
  * カード明細・サービスレベルは入れず、代理入力数・提出先・返却方法・同意のみ。先払い決済後にカードお預け予約へ進む。
- * 店舗到着後にスタッフが明細・サービスレベルを確定し、鑑定料は別途メールで請求する（本実装の対象外）。
+ * 店舗到着後にスタッフが明細・サービスレベルを確定し、鑑定料・事務手数料は別途メールで請求する（本実装の対象外）。
  * 返り値の clientSecret で顧客がカード決済し、confirmStorePrepayPayment で確定する。
  */
 export async function createStoreRequest(
@@ -506,9 +508,8 @@ export async function createStoreRequest(
 
   const setting = await prisma.pricingSetting.findFirst({ where: { region: parsed.data.region, itemType } });
   const agencyFeeTotal = (setting?.proxyFee ?? 0) * parsed.data.agencyQuantity;
-  const handlingFee = (setting?.handlingFee ?? 0) * parsed.data.agencyQuantity;
-  // 代理入力費用は内税（消費税を別途加算しない）。
-  const prepaidAmount = agencyFeeTotal + handlingFee;
+  // 代理入力費用は内税（消費税を別途加算しない）。事務手数料はサービス単位で後日課金するためここには含めない。
+  const prepaidAmount = agencyFeeTotal;
 
   let stripeCustomerId: string;
   try {
@@ -535,7 +536,6 @@ export async function createStoreRequest(
         status: "DRAFT",
         estimatedCardCount: parsed.data.agencyQuantity,
         agencyFeeTotal,
-        handlingFee,
         prepaidAmount,
         totalAmount: prepaidAmount,
       },

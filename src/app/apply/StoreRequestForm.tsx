@@ -25,7 +25,7 @@ const ITEM_TYPE_LABELS: Record<ItemType, string> = {
 const AGREEMENT_TEXT = `PSA鑑定受付代行サービス（代理入力・先払い）利用規約
 
 1. 代理入力では、お客様に入力いただくのは代理入力する枚数・返送先・電話番号・クレジットカード情報のみです。
-2. お申込み時には、代理入力する枚数×代理入力費用（事務手数料込み・消費税込み）を先にお支払いいただきます。
+2. お申込み時には、代理入力する枚数×代理入力費用（消費税込み）を先にお支払いいただきます。事務手数料は、実際のサービスが確定した際に別途ご請求します。
 3. お支払い後、カードのお預け（店頭持込・郵送）をご予約ください。
 4. 当社で代理入力が完了次第、ご提出いただいたカードの内容に応じた鑑定料を別途メールにてご請求いたします。
 5. お申込み後のキャンセルはお受けできません。
@@ -95,11 +95,9 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
 
   const setting = pricingSettings.find((p) => p.region === region && p.itemType === itemType);
   const proxyFee = setting?.proxyFee ?? 0;
-  const handlingFeePerUnit = setting?.handlingFee ?? 0;
   const agencyFeeTotal = proxyFee * agencyQuantity;
-  const handlingFeeTotal = handlingFeePerUnit * agencyQuantity;
-  // 代理入力費用は内税（消費税を別途加算しない）。
-  const prepaidAmount = agencyFeeTotal + handlingFeeTotal;
+  // 代理入力費用は内税（消費税を別途加算しない）。事務手数料はサービス単位で確定時に別途請求するため、ここには含めない。
+  const prepaidAmount = agencyFeeTotal;
 
   async function handleSubmit() {
     if (agencyQuantity < 1) {
@@ -216,17 +214,13 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
             <span>代理入力数 {agencyQuantity} 点 × 代理入力料</span>
             <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
           </div>
-          <div className="flex justify-between text-sm text-gray-700">
-            <span>事務手数料</span>
-            <span>{formatMoneyIn(handlingFeeTotal, "JPY")}</span>
-          </div>
           <p className="text-xs text-gray-500">※ 消費税は全て内税です。</p>
           <div className="border-t border-gray-200 pt-3 flex justify-between font-bold text-gray-900">
             <span>合計金額</span>
             <span>{formatMoneyIn(prepaidAmount, "JPY")}</span>
           </div>
           <p className="text-xs text-gray-500">
-            鑑定料は、当社で代理入力が完了次第、内容に応じて別途メールにてご請求します。
+            事務手数料・鑑定料は、当社で代理入力が完了次第、内容に応じて別途メールにてご請求します。
           </p>
         </div>
 
@@ -307,15 +301,17 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h3 className="font-bold text-gray-800">代理入力数</h3>
         <p className="text-xs text-gray-500">同一カードは1としてカウントしてください。</p>
-        <input
-          type="number"
-          min={1}
-          max={500}
-          placeholder="例: 5"
-          value={agencyQuantity || ""}
-          onChange={(e) => setAgencyQuantity(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
-          className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
-        />
+        <div className="flex justify-end">
+          <input
+            type="number"
+            min={1}
+            max={500}
+            placeholder="例: 5"
+            value={agencyQuantity || ""}
+            onChange={(e) => setAgencyQuantity(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
+            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
+          />
+        </div>
 
         {agencyQuantity > 0 && (
           <div className="rounded-lg bg-gray-50 p-4 space-y-1 text-sm">
@@ -323,17 +319,13 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
               <span>代理入力数 {agencyQuantity} 点 × 代理入力料</span>
               <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
             </div>
-            <div className="flex justify-between text-gray-700">
-              <span>事務手数料</span>
-              <span>{formatMoneyIn(handlingFeeTotal, "JPY")}</span>
-            </div>
             <p className="text-xs text-gray-500">※ 消費税は全て内税です。</p>
             <div className="flex justify-between font-bold text-gray-900 pt-1 border-t border-gray-200">
               <span>合計金額</span>
               <span>{formatMoneyIn(prepaidAmount, "JPY")}</span>
             </div>
             <p className="text-xs text-gray-500 pt-1">
-              鑑定料は、代理入力完了後にカード内容に応じて別途メールにてご請求します。
+              事務手数料・鑑定料は、代理入力完了後にカード内容に応じて別途メールにてご請求します。
             </p>
           </div>
         )}
