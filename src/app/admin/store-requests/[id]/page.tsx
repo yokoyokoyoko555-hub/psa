@@ -17,6 +17,33 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
+const SERVICE_LABELS: Record<string, string> = {
+  VALUE: "バリュー",
+  VALUE_BULK: "バリューバルク",
+  VALUE_PLUS: "バリュープラス",
+  VALUE_MAX: "バリューマックス",
+  REGULAR: "レギュラー",
+  EXPRESS: "エクスプレス",
+  SUPER_EXPRESS: "スーパー・エクスプレス",
+  WALK_THROUGH: "ウォーク・スルー",
+  PREMIUM_1: "プレミアム 1",
+  PREMIUM_2: "プレミアム 2",
+  PREMIUM_3: "プレミアム 3",
+  PREMIUM_5: "プレミアム 5",
+  PREMIUM_10: "プレミアム 10",
+  PACK_VALUE: "バリュー",
+  PACK_ECONOMY: "エコノミー",
+  PACK_EXPRESS: "エクスプレス",
+  COMIC_MODERN: "モダン",
+  COMIC_MODERN_PLUS: "モダンプラス",
+  COMIC_VINTAGE: "ビンテージ",
+  COMIC_VINTAGE_PLUS: "ビンテージプラス",
+  COMIC_HIGH_VALUE: "ハイバリュー",
+  COMIC_EXPRESS: "エクスプレス",
+  COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
+  COMIC_WALK_THROUGH: "ウォークスルー",
+};
+
 export default async function StoreRequestDetailPage({
   params,
 }: {
@@ -47,6 +74,11 @@ export default async function StoreRequestDetailPage({
   const masterNames = Array.from(new Set(masters.map((m) => m.cardName)));
 
   const alreadyDone = app.status !== "DRAFT";
+
+  // 顧客が先払い時に申告したサービスレベル別枚数内訳（複数レベル同時申込に対応）。ADR-0024
+  const estimatedLevels = Array.isArray(app.estimatedServiceLevels)
+    ? (app.estimatedServiceLevels as unknown as { serviceLevel: string; quantity: number }[])
+    : [];
 
   // 一時保存済みの下書き（{ serviceLevel, cards }）があれば復元用に取り出す
   const draft =
@@ -87,6 +119,23 @@ export default async function StoreRequestDetailPage({
           </div>
         </dl>
       </div>
+
+      {estimatedLevels.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="font-bold text-gray-900 mb-3">顧客申告の枚数内訳（先払い概算時）</h2>
+          <ul className="text-sm text-gray-700 divide-y divide-gray-100">
+            {estimatedLevels.map((l, i) => (
+              <li key={i} className="flex justify-between py-1.5">
+                <span>{SERVICE_LABELS[l.serviceLevel] ?? l.serviceLevel}</span>
+                <span className="font-medium">{l.quantity}枚</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-gray-400">
+            実際のカード明細・サービスレベルは下記入力で確定してください（顧客申告と異なっても構いません）。
+          </p>
+        </div>
+      )}
 
       {alreadyDone ? (
         <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-6 text-center">

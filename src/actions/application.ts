@@ -448,11 +448,16 @@ export async function confirmApplicationPayment(
   return { success: true, status: paymentIntent.status };
 }
 
+const storeRequestLevelSchema = z.object({
+  serviceLevel: z.nativeEnum(ServiceLevel),
+  quantity: z.number().int().min(1).max(500),
+});
+
 const storeRequestSchema = z.object({
   region: z.nativeEnum(ServiceRegion),
   itemType: z.nativeEnum(ItemType).default("TRADING_CARD"), // PSA_JPは常にTRADING_CARDへサーバー側で補正。ADR-0023
-  serviceLevel: z.nativeEnum(ServiceLevel),
-  cardCount: z.number().int().min(1).max(500),
+  // サービスレベル別の枚数内訳（複数レベル同時申込に対応。実際のPSA提出振り分けは当社側で行う）。ADR-0024
+  serviceLevels: z.array(storeRequestLevelSchema).min(1).max(20),
   returnMethod: z.nativeEnum(ReturnMethod),
   returnAddress: returnAddressSchema,
   shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/),
@@ -463,8 +468,9 @@ const storeRequestSchema = z.object({
 });
 
 /**
- * 代理申込（当社入力）の依頼を顧客が作成し、概算（枚数×鑑定料＋税）を先払いする。ADR-0020 / PROXY_PREPAY
- * カード明細は入れず、サービスレベル・枚数・提出先・返却方法・同意のみ。先払い決済後にカードお預け予約へ進む。
+ * 代理申込（当社入力）の依頼を顧客が作成し、概算（サービスレベル別枚数×鑑定料の合計＋税）を先払いする。
+ * ADR-0020 / ADR-0024 / PROXY_PREPAY
+ * カード明細は入れず、サービスレベル別枚数・提出先・返却方法・同意のみ。先払い決済後にカードお預け予約へ進む。
  * 店舗到着後にスタッフが明細を確定し、差額は段階4で追加請求（本実装の対象外）。
  * 返り値の clientSecret で顧客がカード決済し、confirmStorePrepayPayment で確定する。
  */
@@ -480,13 +486,24 @@ export async function createStoreRequest(
   // PSA_JPは常にTRADING_CARD（クライアント値を信用しない）。ADR-0023
   const itemType: ItemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
 
-  const servicePrice = await prisma.servicePrice.findUnique({
-    where: { serviceLevel_region_itemType: { serviceLevel: parsed.data.serviceLevel, region: parsed.data.region, itemType } },
+  const servicePrices = await prisma.servicePrice.findMany({
+    where: {
+      region: parsed.data.region,
+      itemType,
+      serviceLevel: { in: parsed.data.serviceLevels.map((l) => l.serviceLevel) },
+      isActive: true,
+    },
   });
-  if (!servicePrice) return { success: false, error: "サービスレベルが見つかりません" };
+  const priceByLevel = new Map(servicePrices.map((p) => [p.serviceLevel, p]));
+  const missing = parsed.data.serviceLevels.find((l) => !priceByLevel.has(l.serviceLevel));
+  if (missing) return { success: false, error: "サービスレベルが見つかりません" };
 
-  // 先払い概算: 枚数 × 鑑定料 ＋ 消費税(10%)。代理入力料金・送料・保険・事務手数料は含めない（差額側＝段階4）。
-  const psaFeeTotal = servicePrice.pricePerCard * parsed.data.cardCount;
+  // 先払い概算: Σ(サービスレベル別 枚数×鑑定料) ＋ 消費税(10%)。代理入力料金・送料・保険・事務手数料は含めない（差額側＝段階4）。
+  const cardCount = parsed.data.serviceLevels.reduce((s, l) => s + l.quantity, 0);
+  const psaFeeTotal = parsed.data.serviceLevels.reduce(
+    (s, l) => s + priceByLevel.get(l.serviceLevel)!.pricePerCard * l.quantity,
+    0
+  );
   const taxAmount = roundMoney(psaFeeTotal * 0.1, parsed.data.region);
   const prepaidAmount = roundMoney(psaFeeTotal + taxAmount, parsed.data.region);
 
@@ -505,7 +522,7 @@ export async function createStoreRequest(
       data: {
         applicationNo,
         customerId: customer.id,
-        serviceLevel: parsed.data.serviceLevel, // 顧客選択（店舗が明細確定時に再確定しうる）
+        serviceLevel: parsed.data.serviceLevels[0].serviceLevel, // 代表値（店舗が明細確定時に再確定しうる）。内訳は estimatedServiceLevels 参照
         region: parsed.data.region,
         itemType,
         source: "STORE",
@@ -513,7 +530,8 @@ export async function createStoreRequest(
         shippingAddressEncrypted: encrypt(JSON.stringify(parsed.data.returnAddress)),
         shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
         status: "DRAFT",
-        estimatedCardCount: parsed.data.cardCount,
+        estimatedCardCount: cardCount,
+        estimatedServiceLevels: parsed.data.serviceLevels,
         prepaidAmount,
         totalAmount: prepaidAmount,
         psaFeeTotal,
@@ -567,7 +585,7 @@ export async function createStoreRequest(
     action: "STORE_REQUEST_CREATE",
     targetType: "applications",
     targetId: application.id,
-    after: { applicationNo: application.applicationNo, prepaidAmount },
+    after: { applicationNo: application.applicationNo, prepaidAmount, serviceLevels: parsed.data.serviceLevels },
   });
 
   return { success: true, applicationId: application.id, clientSecret: paymentIntent.client_secret! };

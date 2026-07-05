@@ -331,6 +331,8 @@ model Application {
   prepaidAmount      Float   @default(0)
   // 代理入力(STORE)の先払い時に顧客が申告したカード枚数（概算根拠）
   estimatedCardCount Int?
+  // 先払い概算のサービスレベル別内訳（複数レベル同時申込に対応。例: [{serviceLevel,quantity}]）。ADR-0024
+  estimatedServiceLevels Json?
   totalAmount    Float             @default(0) // JP=円 / US=USD（小数点以下2桁）。ADR-0022
   psaFeeTotal    Float             @default(0)
   agencyFeeTotal Int               @default(0)

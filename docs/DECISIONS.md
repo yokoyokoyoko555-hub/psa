@@ -241,3 +241,14 @@
 - 未対応: 未開封パック・コミック/マガジン・Autographの実価格は未確定（管理画面から入力が必要）。`Campaign`固定額割引・`Upcharge`は引き続きTRADING_CARD/itemType非対応のまま。
 - **追記（デプロイ障害・即日修正）**: `PricingSetting`に`@@unique([region, itemType])`を追加してデプロイしたところ、既存2行(id="PSA_JP"/"PSA_US")が`db push`時点で`region`/`itemType`ともに同一デフォルト値（PSA_JP/TRADING_CARD）を取り、ユニークインデックス作成が`P2002`で衝突 → 本番ヘルスチェックが失敗し続ける障害が発生（2026-07-05）。**教訓: 複数の既存行を持つテーブルに新規列＋ユニーク制約を同一`db push`で追加すると、行ごとに異なるはずの値が全行同一のデフォルトになり衝突しうる**。対応として`@@unique`を`@@index`に変更し、一意性はアプリ側（`findFirst`→`create`/`update`）で担保する方式に変更（`saveUniformFees`/`fee-calculator.ts`/`admin.ts`）。同種の変更をする場合は「新規列追加→（必要なら別デプロイでバックフィル確認）→ユニーク制約追加」の順に分けるか、初めからアプリ側一意性担保に倒すこと。
 
+## ADR-0024: 代理申込（先払い概算）の複数サービスレベル同時申請対応
+- 日付: 2026-07-05 / 状態: Accepted（実装済）
+- 背景: 代理申込の先払い見積り画面（`StoreRequestForm.tsx`）は従来「サービスレベルを1つ選択→枚数を1つ入力」という作りだったが、実運用では「レギュラー3枚＋エクスプレス2枚」のように複数レベルを1回の申込にまとめたい要望があった。実際のPSA提出の振り分けは当社（店舗スタッフ）側で行うため、顧客側は枚数内訳の申告のみでよい。
+- 決定:
+  - `Application`に`estimatedServiceLevels Json?`を追加（`[{serviceLevel, quantity}]`形式）。`estimatedCardCount`は全レベル合計枚数を格納（既存通り）。
+  - `createStoreRequest`のスキーマを`serviceLevel: ServiceLevel, cardCount: number` → `serviceLevels: {serviceLevel, quantity}[]`（1〜20件）に変更。各レベルのService Priceを取得し`Σ(pricePerCard×quantity)`で鑑定料合計を算出、消費税・先払い概算を計算。
+  - `Application.serviceLevel`（既存の必須フィールド）には代表値として配列の先頭要素を格納（店舗スタッフが明細確定時に別途選び直すため、実質的な意味は薄い）。
+  - 顧客画面（`StoreRequestForm.tsx`）: サービスレベル一覧の各行に枚数入力欄を配置（右側）、申告上限も併記。入力された全レベルの合計枚数・合計金額をリアルタイム表示。
+  - 管理画面（代理申込詳細 `admin/store-requests/[id]/page.tsx`）: 顧客が先払い時に申告したサービスレベル別内訳を表示し、スタッフが明細確定時の参考にできるようにした（実際の確定内容と一致しなくてもよい）。
+- 影響: `Application.estimatedServiceLevels`列追加（db push、非破壊・nullable）。`createStoreRequest`のAPIシグネチャ変更（後方互換なし、呼び出し元は`StoreRequestForm.tsx`のみのため影響範囲は限定的）。
+

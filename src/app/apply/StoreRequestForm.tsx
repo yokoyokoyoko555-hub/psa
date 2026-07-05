@@ -91,8 +91,8 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
   const router = useRouter();
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
-  const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(null);
-  const [cardCount, setCardCount] = useState(1);
+  // サービスレベルごとの枚数（0または未入力は対象外）。複数レベル同時申込に対応。ADR-0024
+  const [quantities, setQuantities] = useState<Partial<Record<ServiceLevel, number>>>({});
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
   const addressOptions = [
     ...(getProfileAddress(profile) ? [getProfileAddress(profile)!] : []),
@@ -124,18 +124,21 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
   const regionPrices = servicePrices
     .filter((p) => p.region === region && p.itemType === itemType && p.isActive)
     .sort((a, b) => a.pricePerCard - b.pricePerCard);
-  const selectedPrice = regionPrices.find((p) => p.serviceLevel === serviceLevel) ?? null;
-  const psaFeeTotal = selectedPrice ? selectedPrice.pricePerCard * cardCount : 0;
+  const lines = regionPrices
+    .map((p) => ({ price: p, qty: quantities[p.serviceLevel] ?? 0 }))
+    .filter((l) => l.qty > 0);
+  const cardCount = lines.reduce((s, l) => s + l.qty, 0);
+  const psaFeeTotal = lines.reduce((s, l) => s + l.price.pricePerCard * l.qty, 0);
   const taxAmount = Math.floor(psaFeeTotal * 0.1);
   const prepaidAmount = psaFeeTotal + taxAmount;
 
+  function setQty(sl: ServiceLevel, qty: number) {
+    setQuantities((prev) => ({ ...prev, [sl]: Math.max(0, Math.floor(qty) || 0) }));
+  }
+
   async function handleSubmit() {
-    if (!serviceLevel) {
-      setError("サービスレベルを選択してください");
-      return;
-    }
-    if (!Number.isInteger(cardCount) || cardCount < 1) {
-      setError("カード枚数を正しく入力してください");
+    if (lines.length === 0) {
+      setError("少なくとも1つのサービスレベルに枚数を入力してください");
       return;
     }
     if (!agreed) {
@@ -156,8 +159,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
       const result = await createStoreRequest({
         region,
         itemType,
-        serviceLevel,
-        cardCount,
+        serviceLevels: lines.map((l) => ({ serviceLevel: l.price.serviceLevel, quantity: l.qty })),
         returnMethod,
         returnAddress: {
           name: selectedAddress.name,
@@ -245,10 +247,12 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
       <div className="space-y-6">
         <h2 className="text-lg font-bold text-gray-900">概算のお支払い</h2>
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-          <div className="flex justify-between text-sm text-gray-700">
-            <span>{SERVICE_LABELS[serviceLevel!]} × {cardCount}枚（鑑定料）</span>
-            <span>{formatMoney(psaFeeTotal, region)}</span>
-          </div>
+          {lines.map((l) => (
+            <div key={l.price.id} className="flex justify-between text-sm text-gray-700">
+              <span>{SERVICE_LABELS[l.price.serviceLevel]} × {l.qty}枚（鑑定料）</span>
+              <span>{formatMoney(l.price.pricePerCard * l.qty, region)}</span>
+            </div>
+          ))}
           <div className="flex justify-between text-sm text-gray-700">
             <span>消費税</span>
             <span>{formatMoney(taxAmount, region)}</span>
@@ -300,7 +304,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
               onClick={() => {
                 setRegion(r);
                 if (r === "PSA_JP") setItemType("TRADING_CARD");
-                setServiceLevel(null);
+                setQuantities({});
               }}
               className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                 region === r
@@ -323,7 +327,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
                 key={it}
                 onClick={() => {
                   setItemType(it);
-                  setServiceLevel(null);
+                  setQuantities({});
                 }}
                 className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                   itemType === it
@@ -339,44 +343,45 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h3 className="font-bold text-gray-800">サービスレベル</h3>
+        <h3 className="font-bold text-gray-800">サービスレベル・枚数</h3>
+        <p className="text-xs text-gray-500">
+          複数のサービスレベルにまたがって枚数を入力できます（例: レギュラー3枚＋エクスプレス2枚）。
+        </p>
         {regionPrices.length > 0 ? (
-          <div className="space-y-2">
+          <div className="divide-y divide-gray-100">
             {regionPrices.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setServiceLevel(p.serviceLevel)}
-                className={`w-full flex items-center justify-between rounded-xl border-2 p-4 text-left transition ${
-                  serviceLevel === p.serviceLevel
-                    ? "border-brand-500 bg-brand-50"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <span className="font-bold text-gray-900">{SERVICE_LABELS[p.serviceLevel]}</span>
-                <span className="text-sm text-gray-700">{formatMoney(p.pricePerCard, region)} / 枚</span>
-              </button>
+              <div key={p.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900">{SERVICE_LABELS[p.serviceLevel]}</p>
+                  <p className="text-xs text-gray-500">
+                    {formatMoney(p.pricePerCard, region)} / 枚・申告上限{" "}
+                    {p.maxDeclaredValue === null ? "なし" : formatMoney(p.maxDeclaredValue, region)}
+                  </p>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  max={500}
+                  placeholder="0"
+                  value={quantities[p.serviceLevel] || ""}
+                  onChange={(e) => setQty(p.serviceLevel, Number(e.target.value))}
+                  className="w-24 shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
+                />
+              </div>
             ))}
           </div>
         ) : (
           <p className="text-sm text-gray-500">このリージョンの料金が未設定です。</p>
         )}
-      </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h3 className="font-bold text-gray-800">カード枚数</h3>
-        <input
-          type="number"
-          min={1}
-          max={500}
-          value={cardCount}
-          onChange={(e) => setCardCount(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-          className="w-32 rounded-lg border border-gray-300 px-3 py-3 text-sm focus:border-brand-500 focus:outline-none"
-        />
-        {selectedPrice && (
+        {lines.length > 0 && (
           <div className="rounded-lg bg-gray-50 p-4 space-y-1 text-sm">
             <div className="flex justify-between text-gray-700">
-              <span>鑑定料（{cardCount}枚）</span>
+              <span>合計枚数</span>
+              <span>{cardCount}枚</span>
+            </div>
+            <div className="flex justify-between text-gray-700">
+              <span>鑑定料</span>
               <span>{formatMoney(psaFeeTotal, region)}</span>
             </div>
             <div className="flex justify-between text-gray-700">
