@@ -212,7 +212,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         <h2 className="text-lg font-bold text-gray-900">代理入力費用のお支払い</h2>
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           <div className="flex justify-between text-sm text-gray-700">
-            <span>代理入力数 {agencyQuantity} 点 × 代理入力料</span>
+            <span>代理入力数 {agencyQuantity} 点 × 代理入力料（{formatMoneyIn(proxyFee, "JPY")}/点）</span>
             <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
           </div>
           <p className="text-xs text-gray-500">（内消費税 {formatMoneyIn(innerTax, "JPY")}）</p>
@@ -317,7 +317,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         {agencyQuantity > 0 && (
           <div className="rounded-lg bg-gray-50 p-4 space-y-1 text-sm">
             <div className="flex justify-between text-gray-700">
-              <span>代理入力数 {agencyQuantity} 点 × 代理入力料</span>
+              <span>代理入力数 {agencyQuantity} 点 × 代理入力料（{formatMoneyIn(proxyFee, "JPY")}/点）</span>
               <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
             </div>
             <p className="text-xs text-gray-500">（内消費税 {formatMoneyIn(innerTax, "JPY")}）</p>
