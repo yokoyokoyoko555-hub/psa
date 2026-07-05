@@ -98,6 +98,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
   const agencyFeeTotal = proxyFee * agencyQuantity;
   // 代理入力費用は内税（消費税を別途加算しない）。事務手数料はサービス単位で確定時に別途請求するため、ここには含めない。
   const prepaidAmount = agencyFeeTotal;
+  const innerTax = Math.floor((agencyFeeTotal * 10) / 110);
 
   async function handleSubmit() {
     if (agencyQuantity < 1) {
@@ -214,7 +215,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
             <span>代理入力数 {agencyQuantity} 点 × 代理入力料</span>
             <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
           </div>
-          <p className="text-xs text-gray-500">※ 消費税は全て内税です。</p>
+          <p className="text-xs text-gray-500">（内消費税 {formatMoneyIn(innerTax, "JPY")}）</p>
           <div className="border-t border-gray-200 pt-3 flex justify-between font-bold text-gray-900">
             <span>合計金額</span>
             <span>{formatMoneyIn(prepaidAmount, "JPY")}</span>
@@ -319,7 +320,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
               <span>代理入力数 {agencyQuantity} 点 × 代理入力料</span>
               <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
             </div>
-            <p className="text-xs text-gray-500">※ 消費税は全て内税です。</p>
+            <p className="text-xs text-gray-500">（内消費税 {formatMoneyIn(innerTax, "JPY")}）</p>
             <div className="flex justify-between font-bold text-gray-900 pt-1 border-t border-gray-200">
               <span>合計金額</span>
               <span>{formatMoneyIn(prepaidAmount, "JPY")}</span>
