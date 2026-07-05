@@ -743,7 +743,11 @@ export default function ApplyForm({
                       }}
                     />
                     <span className="text-sm text-gray-700">
-                      デュアルサービスを希望する（{formatMoney(activeAutographTiers[0].pricePerCard, region)}/枚）
+                      デュアルサービスを希望する（{formatMoney(activeAutographTiers[0].pricePerCard, region)}/枚・申告上限{" "}
+                      {activeAutographTiers[0].maxDeclaredValue === null
+                        ? "なし"
+                        : formatMoneyInt(activeAutographTiers[0].maxDeclaredValue, region)}
+                      ）
                     </span>
                   </label>
                 ) : (
@@ -773,6 +777,10 @@ export default function ApplyForm({
                           >
                             <p className="font-bold text-gray-900">{t.name}</p>
                             <p className="text-brand-600 font-medium">{formatMoney(t.pricePerCard, region)}/枚</p>
+                            <p className="text-xs text-gray-500">
+                              申告価格上限{" "}
+                              {t.maxDeclaredValue === null ? "なし" : formatMoneyInt(t.maxDeclaredValue, region)}
+                            </p>
                           </button>
                         ))}
                       </div>
