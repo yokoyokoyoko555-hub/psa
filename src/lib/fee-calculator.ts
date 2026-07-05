@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { ReturnMethod, ServiceRegion, ItemType } from "@prisma/client";
 import { roundMoney } from "./currency";
+import { pricingSettingId } from "./pricing-setting-id";
 
 const TAX_RATE = 0.1;
 const PSA_COST_RATE = 0.8; // 代理店価格: 定価の80%
@@ -149,8 +150,8 @@ export async function calculateFees(params: {
   const psaFeeTotal = pricePerCard * params.cardCount;
   const psaCostTotal = perCardCost * params.cardCount;
 
-  const setting = await prisma.pricingSetting.findFirst({
-    where: { region: params.region, itemType: params.itemType },
+  const setting = await prisma.pricingSetting.findUnique({
+    where: { id: pricingSettingId(params.region, params.itemType) },
   });
 
   // オートグラフ（デュアルサービス）追加料金: PSA_US×TRADING_CARDのみ、選択タイアごとの単価 × 枚数を合算

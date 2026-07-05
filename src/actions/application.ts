@@ -9,6 +9,7 @@ import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe 
 import { sendTemplate } from "@/lib/mailer";
 import { formatMoney, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
+import { pricingSettingId } from "@/lib/pricing-setting-id";
 import { ServiceRegion, ItemType, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { headers } from "next/headers";
@@ -506,7 +507,7 @@ export async function createStoreRequest(
   // PSA_JPは常にTRADING_CARD（クライアント値を信用しない）。ADR-0023
   const itemType: ItemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
 
-  const setting = await prisma.pricingSetting.findFirst({ where: { region: parsed.data.region, itemType } });
+  const setting = await prisma.pricingSetting.findUnique({ where: { id: pricingSettingId(parsed.data.region, itemType) } });
   const agencyFeeTotal = (setting?.proxyFee ?? 0) * parsed.data.agencyQuantity;
   // 代理入力費用は内税（消費税を別途加算しない）。事務手数料はサービス単位で後日課金するためここには含めない。
   const prepaidAmount = agencyFeeTotal;

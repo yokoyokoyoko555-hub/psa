@@ -292,3 +292,14 @@
 - 影響: 既存データは変更していないが、PSA_USの`CustomServicePrice(category=TRADING_CARD).maxDeclaredValue`はADR-0026の移行処理で旧`ServicePrice`（円換算の暫定値）からそのまま複製された数値が入っており、**USD金額として見ると桁が大きすぎる状態になっている**。管理画面から実際のUSD上限値に手動で修正する必要がある（運用上のフォローアップ、コード上の対応は不要）。
 - 未対応: 為替レート・合計金額の通貨統一ロジックは引き続き未対応（ADR-0025/0026から継続）。
 
+## ADR-0028: 本番障害 — `PricingSetting`のregion/itemTypeカラム不整合によるP2002（`saveUniformFees`）
+
+- 日付: 2026-07-05 / 状態: Accepted（実装済・即日修正）
+- 背景: 管理画面でPSA USの代理入力料金・事務手数料（`HandlingFeeForm`→`saveUniformFees`）を保存しようとすると、`prisma.pricingSetting.create()`が`Unique constraint failed on the fields: (id)`（P2002）で毎回失敗し、本番でアプリケーションエラーになっていた。
+- 原因: ADR-0023の追記で記録した既知の問題（既存2行 id="PSA_JP"/"PSA_US" が `db push` 時点で `region`/`itemType` カラムともに同一デフォルト値になる）が、本番では一度も是正されていなかった。是正用の`seed.ts`の`upsert`は本番の起動コマンド（`prisma db push --accept-data-loss && next start`）では自動実行されないため、id="PSA_US"の行は`region`カラムが実際には`"PSA_JP"`のままだった。`saveUniformFees`は`findFirst({ where: { region, itemType } })`で既存行を探してから無ければ`create`する実装だったため、PSA_USを検索すると（region列が食い違っていて）該当行が見つからず、既存のid="PSA_US"と衝突する`create`を発行してP2002になっていた。同じ理由で、`fee-calculator.ts`・`application.ts`・`admin.ts`の`findFirst`によるPSA_US設定の**読み取り**も無言で失敗し、`proxyFee`/`handlingFee`が常に0として扱われていた（金額計算バグ・エラーにはならないため気づきにくい）。
+- 決定:
+  - **`PricingSetting`の参照・更新は常に主キー`id`で行う**よう統一（`region`/`itemType`カラムでの`findFirst`は廃止）。新規共有ヘルパー`src/lib/pricing-setting-id.ts`の`pricingSettingId(region, itemType)`を導入し、`pricing.ts`（`saveUniformFees`）・`fee-calculator.ts`・`application.ts`・`admin.ts`・`admin/settings/page.tsx`の全参照箇所をこれに統一。
+  - `saveUniformFees`は`findFirst`→`create`/`update`から**`upsert({ where: { id } })`に変更**し、`update`時にも`region`/`itemType`を書き戻すようにした。これにより、次回いずれかのリージョンの設定を保存した時点でカラムの不整合が自己修復される（再データ移行は不要）。
+- 影響: コード変更のみ（スキーマ変更なし）。既存の`PricingSetting`データは壊れたままだが、`id`ベースの参照に統一したことで実害はなくなった。ただし`region`/`itemType`カラムの値自体は、admin/settingsから該当リージョンの代理入力料金・事務手数料を一度保存するまで不正確なまま（表示上は影響しない）。
+- 教訓: 「idベースのlookupで十分な場合は、非主キー列（`region`/`itemType`など、db push時にデフォルト値で衝突しうる列）でfindFirstしない」。ADR-0023のインシデントは`db push`時の一過性の問題として片付けていたが、実際には**恒久的にデータが壊れたまま**残り得ることを見落としていた。
+

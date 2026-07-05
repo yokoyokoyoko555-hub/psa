@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { pricingSettingId } from "@/lib/pricing-setting-id";
 
 async function requireAdmin() {
   const session = await auth();
@@ -23,11 +24,6 @@ const bandSchema = z.object({
 const regionEnum = z.enum(["PSA_JP", "PSA_US"]);
 const itemTypeEnum = z.enum(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"]);
 const saveSchema = z.object({ region: regionEnum, itemType: itemTypeEnum.default("TRADING_CARD"), bands: z.array(bandSchema) });
-
-/** リージョン×アイテム種別から PricingSetting.id を採番（既存2行は従来通りregion文字列のまま）。ADR-0023 */
-function pricingSettingId(region: string, itemType: string): string {
-  return itemType === "TRADING_CARD" ? region : `${region}_${itemType}`;
-}
 
 /**
  * 送料・保険 合算マトリクス（リージョン×アイテム種別別）を保存。
@@ -72,25 +68,15 @@ export async function saveUniformFees(input: {
   const proxyFee = Math.max(0, Math.floor(Number(input.proxyFee) || 0));
   const handlingFee = Math.max(0, Math.floor(Number(input.handlingFee) || 0));
   const freeShipInsQty = Math.max(0, Math.floor(Number(input.freeShipInsQty) || 0));
-  // region_itemType はDBレベルのユニーク制約ではないため、findFirst→create/updateで一意性を担保する
-  const existing = await prisma.pricingSetting.findFirst({ where: { region: region.data, itemType: itemType.data } });
-  if (existing) {
-    await prisma.pricingSetting.update({
-      where: { id: existing.id },
-      data: { proxyFee, handlingFee, freeShipInsQty },
-    });
-  } else {
-    await prisma.pricingSetting.create({
-      data: {
-        id: pricingSettingId(region.data, itemType.data),
-        region: region.data,
-        itemType: itemType.data,
-        proxyFee,
-        handlingFee,
-        freeShipInsQty,
-      },
-    });
-  }
+  // idベースのupsertで一意性を担保する（region/itemTypeカラムでのfindFirstは既存行の
+  // カラム不整合により一致しないことがあるため使わない。ADR-0023追記 / lib/pricing-setting-id.ts参照）。
+  // updateでもregion/itemTypeを書き戻すことで、不整合な既存行を自己修復する。
+  const id = pricingSettingId(region.data, itemType.data);
+  await prisma.pricingSetting.upsert({
+    where: { id },
+    update: { region: region.data, itemType: itemType.data, proxyFee, handlingFee, freeShipInsQty },
+    create: { id, region: region.data, itemType: itemType.data, proxyFee, handlingFee, freeShipInsQty },
+  });
   revalidatePath("/admin/settings");
   return { success: true };
 }

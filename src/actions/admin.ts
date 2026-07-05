@@ -9,6 +9,7 @@ import { chargeOffSession } from "@/lib/stripe";
 import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
 import { formatMoney, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
+import { pricingSettingId } from "@/lib/pricing-setting-id";
 import { CardStatus } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -499,7 +500,7 @@ export async function completeStoreApplication(
     });
 
     const proxyFeePerCard =
-      (await prisma.pricingSetting.findFirst({ where: { region: app.region, itemType: app.itemType } }))
+      (await prisma.pricingSetting.findUnique({ where: { id: pricingSettingId(app.region, app.itemType) } }))
         ?.proxyFee ?? 0;
 
     for (const c of cardsInput) {

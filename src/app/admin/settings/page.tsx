@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
 import { ensureTradingCardCustomPrices } from "@/actions/pricing";
+import { pricingSettingId } from "@/lib/pricing-setting-id";
 import ShippingInsuranceForm from "./ShippingInsuranceForm";
 import HandlingFeeForm from "./HandlingFeeForm";
 import CampaignForm from "./CampaignForm";
@@ -26,8 +27,10 @@ export default async function SettingsPage() {
     prisma.customServicePrice.findMany({ orderBy: { sortOrder: "asc" } }),
   ]);
 
-  const settingFor = (region: string, itemType: string) =>
-    settings.find((s) => s.region === region && s.itemType === itemType);
+  // region/itemTypeカラムでの照合は既存行のカラム不整合により一致しないことがあるため、idで照合する。
+  // lib/pricing-setting-id.ts参照（ADR-0023追記の教訓）。
+  const settingFor = (region: "PSA_JP" | "PSA_US", itemType: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE") =>
+    settings.find((s) => s.id === pricingSettingId(region, itemType));
 
   // PSA日本はトレーディングカードのみ（アイテム種別のネストなし＝従来通り）。PSA USのみ複数アイテム種別。
   const regions = [
