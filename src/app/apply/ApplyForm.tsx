@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { confirmApplicationPayment, createApplication, previewFees, saveDraft as saveDraftServer } from "@/actions/application";
 import type { FeeBreakdown } from "@/lib/fee-calculator";
-import { formatMoney, formatMoneyIn } from "@/lib/currency";
+import { formatMoney, formatMoneyIn, formatMoneyInt, currencySymbol } from "@/lib/currency";
 
 export type InitialDraft = {
   draftId: string;
@@ -233,7 +233,7 @@ export default function ApplyForm({
     }
     if (cap !== null && draft.declaredValue > cap) {
       setError(
-        `申告金額が選択中のサービス上限（${formatMoneyIn(cap, "JPY")}）を超えています。上位サービスを選択してください。`
+        `申告金額が選択中のサービス上限（${formatMoneyInt(cap, region)}）を超えています。上位サービスを選択してください。`
       );
       return;
     }
@@ -726,7 +726,7 @@ export default function ApplyForm({
                     <p className="text-brand-600 font-medium">{formatMoney(tier.pricePerCard, region)}/枚</p>
                     <p className="text-xs text-gray-500">
                       申告価格上限{" "}
-                      {tier.maxDeclaredValue === null ? "なし" : formatMoneyIn(tier.maxDeclaredValue, "JPY")}
+                      {tier.maxDeclaredValue === null ? "なし" : formatMoneyInt(tier.maxDeclaredValue, region)}
                     </p>
                   </button>
                 ))}
@@ -776,7 +776,7 @@ export default function ApplyForm({
           <div className="space-y-6">
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
               選択中: <strong>{REGION_LABELS[region]}{region === "PSA_US" ? ` / ${ITEM_TYPE_LABELS[itemType]}` : ""} / {selectedCustomTier?.name}</strong>
-              {cap !== null && <>（申告金額上限 {formatMoneyIn(cap, "JPY")}/枚）</>}
+              {cap !== null && <>（申告金額上限 {formatMoneyInt(cap, region)}/枚）</>}
             </div>
 
             {/* Card entry form */}
@@ -857,12 +857,12 @@ export default function ApplyForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">申告金額（円） *</label>
+                  <label className="block text-xs text-gray-500 mb-1">申告金額（{currencySymbol(region)}） *</label>
                   <input
                     type="number"
                     min={1}
                     className={inputCls}
-                    placeholder="例: 50000"
+                    placeholder={region === "PSA_US" ? "例: 500" : "例: 50000"}
                     value={draft.declaredValue || ""}
                     onChange={(e) => setDraftField("declaredValue", parseInt(e.target.value) || 0)}
                   />
@@ -931,7 +931,7 @@ export default function ApplyForm({
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-bold text-gray-800">アイテム（{cards.length}）</h3>
                 <span className="text-sm text-gray-500">
-                  申告合計 {formatMoneyIn(totalDeclaredValue, "JPY")}
+                  申告合計 {formatMoneyInt(totalDeclaredValue, region)}
                 </span>
               </div>
               {cards.length === 0 ? (
@@ -954,7 +954,7 @@ export default function ApplyForm({
                           )}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {c.quantity}枚 / 申告 {formatMoneyIn(c.declaredValue * c.quantity, "JPY")}
+                          {c.quantity}枚 / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
                         </p>
                       </div>
                       <button
@@ -1107,7 +1107,7 @@ export default function ApplyForm({
                       {c.cardName}（{c.tcgTitle}）× {c.quantity}枚
                     </span>
                     <span className="text-gray-500">
-                      申告 {formatMoneyIn(c.declaredValue * c.quantity, "JPY")}
+                      申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
                     </span>
                   </div>
                 ))}

@@ -22,8 +22,7 @@ export function roundMoney(amount: number, region: string | null | undefined): n
 
 /**
  * 明示通貨での金額表示（regionに依存しない）。円=整数 / USD=小数点以下2桁。
- * 申告上限（ServicePrice/CustomServicePriceのmaxDeclaredValue）など、
- * リージョンに関わらず常に特定の通貨で扱うべき値に使う。ADR-0025
+ * 代理入力料金・事務手数料・送料保険料など、リージョンに関わらず常に円で扱うべき値に使う。ADR-0025
  */
 export function formatMoneyIn(amount: number, currency: "JPY" | "USD"): string {
   const isUsd = currency === "USD";
@@ -32,6 +31,15 @@ export function formatMoneyIn(amount: number, currency: "JPY" | "USD"): string {
     maximumFractionDigits: isUsd ? 2 : 0,
   });
   return `${isUsd ? "$" : "¥"}${formatted}`;
+}
+
+/**
+ * 申告金額・申告上限（Card.declaredValue / CustomServicePrice.maxDeclaredValue）専用の表示。
+ * リージョン通貨（PSA_US=$ / PSA_JP=¥）だが、小数点以下は常に非表示（整数）。ADR-0027
+ */
+export function formatMoneyInt(amount: number, region: string | null | undefined): string {
+  const formatted = Math.round(amount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return `${currencySymbol(region)}${formatted}`;
 }
 
 /** Stripe API向け最小通貨単位への変換（JPYは無位取りのため整数そのまま / USDはセント）。 */

@@ -6,7 +6,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import CustomerHeader from "@/components/CustomerHeader";
-import { formatMoney } from "@/lib/currency";
+import { formatMoneyInt } from "@/lib/currency";
 import CancelBookingButton from "../CancelBookingButton";
 import { format } from "date-fns";
 
@@ -126,7 +126,7 @@ export default async function BookingDetailPage({
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-bold text-gray-900">×{card.quantity}</p>
-                    <p className="text-xs text-gray-400">{formatMoney(card.declaredValue, app.region)}</p>
+                    <p className="text-xs text-gray-400">{formatMoneyInt(card.declaredValue, app.region)}</p>
                   </div>
                 </div>
               ))}

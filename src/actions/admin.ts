@@ -8,7 +8,7 @@ import { logOperation } from "@/lib/operation-log";
 import { chargeOffSession } from "@/lib/stripe";
 import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
-import { formatMoney, formatMoneyIn, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
+import { formatMoney, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { CardStatus } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -427,7 +427,7 @@ export async function completeStoreApplication(
     if (over) {
       return {
         success: false,
-        error: `申告価格上限（${formatMoneyIn(maxDeclaredValue, "JPY")}）を超えるカードがあります（${over.cardName}: ${formatMoneyIn(over.declaredValue, "JPY")}）。`,
+        error: `申告価格上限（${formatMoneyInt(maxDeclaredValue, app.region)}）を超えるカードがあります（${over.cardName}: ${formatMoneyInt(over.declaredValue, app.region)}）。`,
       };
     }
   }

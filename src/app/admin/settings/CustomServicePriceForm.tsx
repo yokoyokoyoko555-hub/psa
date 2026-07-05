@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { CustomServicePrice } from "@prisma/client";
 import { saveCustomServicePrice, deleteCustomServicePrice } from "@/actions/pricing";
-import { formatMoney, formatMoneyIn } from "@/lib/currency";
+import { formatMoney, formatMoneyInt } from "@/lib/currency";
 
 type Draft = {
   id?: string;
@@ -97,7 +97,7 @@ export default function CustomServicePriceForm({
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        価格・原価は{region === "PSA_US" ? "USD・小数点以下2桁" : "円・整数"}、申告上限は円・整数（空欄=上限なし）です。
+        価格・原価は{region === "PSA_US" ? "USD・小数点以下2桁" : "円・整数"}、申告上限は{currencySymbol}・整数（小数点なし・空欄=上限なし）です。
       </p>
 
       <div className="space-y-2">
@@ -116,7 +116,7 @@ export default function CustomServicePriceForm({
               </p>
               <p className="text-gray-500 shrink-0">
                 {formatMoney(i.pricePerCard, region)}/枚 ・ 原価{formatMoney(i.cost, region)} ・ 申告上限{" "}
-                {i.maxDeclaredValue === null ? "なし" : formatMoneyIn(i.maxDeclaredValue, "JPY")}
+                {i.maxDeclaredValue === null ? "なし" : formatMoneyInt(i.maxDeclaredValue, region)}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -143,7 +143,7 @@ export default function CustomServicePriceForm({
               <input type="number" min={0} step={priceStep} value={draft.cost} onChange={(e) => setDraft({ ...draft, cost: e.target.value })} className={inputCls} />
             </label>
             <label className="text-sm space-y-1">
-              <span className="text-gray-700">申告上限（円・空欄=上限なし）</span>
+              <span className="text-gray-700">申告上限（{currencySymbol}・整数・空欄=上限なし）</span>
               <input type="number" min={0} step="1" placeholder="なし" value={draft.maxDeclaredValue} onChange={(e) => setDraft({ ...draft, maxDeclaredValue: e.target.value })} className={inputCls} />
             </label>
             <label className="text-sm space-y-1">

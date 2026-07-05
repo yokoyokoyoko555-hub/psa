@@ -7,7 +7,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
 import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe } from "@/lib/stripe";
 import { sendTemplate } from "@/lib/mailer";
-import { formatMoney, formatMoneyIn, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
+import { formatMoney, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { ServiceRegion, ItemType, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -150,13 +150,13 @@ export async function createApplication(
     return { ...c, resolvedAutographId: resolvedId };
   });
 
-  // 申告価格上限のバリデーション（選択サービス×地域×アイテム種別の上限を超えるカードは不可。常に円で表示）
+  // 申告価格上限のバリデーション（選択サービス×地域×アイテム種別の上限を超えるカードは不可。リージョン通貨・整数で表示）
   if (maxDeclaredValue !== null) {
     const over = cardsInput.find((c) => c.declaredValue > maxDeclaredValue!);
     if (over) {
       return {
         success: false,
-        error: `このサービスの申告価格上限（${formatMoneyIn(maxDeclaredValue, "JPY")}）を超えるカードがあります（${over.cardName || "無題"}: ${formatMoneyIn(over.declaredValue, "JPY")}）。上位のサービスを選択してください。`,
+        error: `このサービスの申告価格上限（${formatMoneyInt(maxDeclaredValue, parsed.data.region)}）を超えるカードがあります（${over.cardName || "無題"}: ${formatMoneyInt(over.declaredValue, parsed.data.region)}）。上位のサービスを選択してください。`,
       };
     }
   }

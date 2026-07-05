@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeStoreApplication, saveStoreInputDraft } from "@/actions/admin";
 import type { CustomServicePrice } from "@prisma/client";
-import { formatMoney, formatMoneyIn } from "@/lib/currency";
+import { formatMoney, formatMoneyInt, currencySymbol } from "@/lib/currency";
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
   TRADING_CARD: "トレーディングカード",
@@ -133,7 +133,7 @@ export default function StoreInputForm({
       return;
     }
     if (cards.some((c) => !c.tcgTitle || !c.cardName || c.declaredValue < 1)) {
-      setError("各カードのTCGタイトル・カード名・申告価格（1円以上）を入力してください");
+      setError(`各カードのTCGタイトル・カード名・申告価格（1${currencySymbol(region)}以上）を入力してください`);
       return;
     }
     setLoading(true);
@@ -187,7 +187,7 @@ export default function StoreInputForm({
           {customServicePrices.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}（{formatMoney(p.pricePerCard, region)}/枚）
-              {p.maxDeclaredValue !== null ? ` 上限${formatMoneyIn(p.maxDeclaredValue, "JPY")}` : ""}
+              {p.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(p.maxDeclaredValue, region)}` : ""}
             </option>
           ))}
         </select>
@@ -254,7 +254,7 @@ export default function StoreInputForm({
               />
               <input
                 type="number"
-                placeholder="申告価格（円）"
+                placeholder={`申告価格（${currencySymbol(region)}）`}
                 value={c.declaredValue || ""}
                 min={1}
                 onChange={(e) => update(i, "declaredValue", parseInt(e.target.value) || 0)}

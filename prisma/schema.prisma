@@ -396,7 +396,7 @@ model Card {
   cardNumber    String? // カード番号
   rarity        String? // レアリティ
   language      String  @default("日本語") // 自由記述（旧CardLanguage enumから変更）。ADR-0023
-  declaredValue Int // 申告価格（円）
+  declaredValue Int // 申告価格。リージョン通貨・常に整数（JP=円 / US=USD、小数点以下は扱わない）。ADR-0027
   quantity      Int          @default(1)
 
   // 料金
@@ -537,7 +537,7 @@ model ServicePrice {
   itemType         ItemType      @default(TRADING_CARD) // ADR-0023
   pricePerCard     Float // 1枚あたり鑑定料 = 顧客請求額（JP=円・整数 / US=USD・小数点以下2桁）。ADR-0022
   cost             Float         @default(0) // 1枚あたり原価（JP=円 / US=USD）。0なら鑑定料×80%で代替
-  maxDeclaredValue Float? // 申告価格の上限。値自体は常に円・整数として扱う（表示・検証はformatMoneyIn経由）。ADR-0025
+  maxDeclaredValue Float? // 申告価格の上限。リージョン通貨・常に整数（表示はformatMoneyInt経由）。ADR-0025/0027
   isActive         Boolean       @default(true)
   updatedAt        DateTime      @updatedAt
   updatedBy        String?
@@ -555,7 +555,7 @@ model CustomServicePrice {
   name             String // 表示名（自由入力）
   pricePerCard     Float // 1枚あたり価格（USD・小数点以下2桁）。Autographはカード単位の追加料金
   cost             Float                 @default(0) // 原価（USD・小数点以下2桁）。0なら鑑定料×80%で代替
-  maxDeclaredValue Int? // 申告価格の上限（円・整数）。nullは上限なし
+  maxDeclaredValue Int? // 申告価格の上限。リージョン通貨・常に整数（JP=円 / US=USD）。nullは上限なし。ADR-0027
   isActive         Boolean               @default(true)
   sortOrder        Int                   @default(0)
   updatedAt        DateTime              @updatedAt

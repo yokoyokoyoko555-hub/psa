@@ -9,7 +9,7 @@ import CardStatusForm from "@/components/CardStatusForm";
 import UpchargeForm from "@/components/UpchargeForm";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, formatMoneyInt } from "@/lib/currency";
 
 const CARD_STATUS_LABELS: Record<string, string> = {
   DRAFT: "下書き",
@@ -242,7 +242,7 @@ export default async function AdminApplicationDetailPage({
                       </p>
                       <p className="mt-1 flex gap-3 text-xs text-gray-500">
                         <span className="font-mono text-gray-400">{card.cardNo}</span>
-                        <span>申告額: {formatMoney(card.declaredValue, application.region)}</span>
+                        <span>申告額: {formatMoneyInt(card.declaredValue, application.region)}</span>
                         <span>言語: {card.language}</span>
                         <span>{card.quantity}枚</span>
                       </p>

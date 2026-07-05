@@ -280,3 +280,15 @@
 - 影響: `prisma/schema.prisma`（`CustomServiceCategory`に`TRADING_CARD`追加のみ、破壊的変更なし）。`Application.estimatedServiceLevels`は代理入力の新規申込では使われなくなる（過去データの表示コードはそのまま残置・後方互換）。`createStoreRequest`のAPIシグネチャ変更（`serviceLevels`/`customServiceLevels` → `agencyQuantity`。呼び出し元は`StoreRequestForm.tsx`のみのため影響範囲は限定的）。
 - 未対応: 為替レート・合計金額の通貨統一ロジックは引き続き未対応（ADR-0025から継続）。代理入力完了後の鑑定料請求（Stripe off-session課金）は引き続き`TODO`のまま（本ADRのスコープ外）。
 
+## ADR-0027: PSA US の申告金額・申告上限をUSD建てに変更
+
+- 日付: 2026-07-05 / 状態: Accepted（実装済）
+- 背景: ADR-0025で「申告上限（`maxDeclaredValue`）は常に円」という前提を置いていたが、これは顧客が入力する申告金額（`Card.declaredValue`）が常に円だったための整合措置だった。今回、PSA USの申告上限をUSD建てにしたいという要望があり、確認の結果「PSA USでは申告金額自体もUSD入力に変更する」方針に決定（円のままでは上限との比較が成立しないため）。
+- 決定:
+  - **`Card.declaredValue`と`CustomServicePrice.maxDeclaredValue`（旧`ServicePrice.maxDeclaredValue`含む）を「リージョン通貨・常に整数（小数点以下は扱わない）」に統一**。PSA_JP=円整数、PSA_US=USD整数（セント非対応）。鑑定料・原価（`pricePerCard`/`cost`）はこれまで通りPSA_USのみ小数点2桁のまま変更なし。
+  - **新関数`formatMoneyInt(amount, region)`を`currency.ts`に追加**（リージョン通貨記号＋常に整数表示）。`formatMoneyIn(x, "JPY")`（代理入力料金・事務手数料・送料保険料など常に円の値専用）はそのまま維持し、申告金額・申告上限の表示は全て`formatMoneyInt`に置き換え。
+  - 影響箇所: `ApplyForm.tsx`（申告金額入力欄ラベル・カード情報上限表示・カード一覧の申告額表示）、`CustomServicePriceForm.tsx`（管理画面の申告上限入力欄・一覧表示）、`StoreInputForm.tsx`（申告価格入力・上限表示）、`application.ts`/`admin.ts`（申告上限超過時のエラーメッセージ）、`admin/applications/[id]/page.tsx`・`mypage/submission-booking/[applicationId]/page.tsx`（申告額表示）。
+  - バリデーションロジック自体（`declaredValue > maxDeclaredValue`の比較）は変更なし。両方が同一リージョンの同一通貨単位で保存されるようになったため、為替換算なしで従来通り成立する。
+- 影響: 既存データは変更していないが、PSA_USの`CustomServicePrice(category=TRADING_CARD).maxDeclaredValue`はADR-0026の移行処理で旧`ServicePrice`（円換算の暫定値）からそのまま複製された数値が入っており、**USD金額として見ると桁が大きすぎる状態になっている**。管理画面から実際のUSD上限値に手動で修正する必要がある（運用上のフォローアップ、コード上の対応は不要）。
+- 未対応: 為替レート・合計金額の通貨統一ロジックは引き続き未対応（ADR-0025/0026から継続）。
+
