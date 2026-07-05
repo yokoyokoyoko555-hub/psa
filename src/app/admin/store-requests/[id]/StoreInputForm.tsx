@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { completeStoreApplication, saveStoreInputDraft } from "@/actions/admin";
 import { CardLanguage, ServiceLevel } from "@prisma/client";
 import type { ServicePrice } from "@prisma/client";
+import { formatMoney } from "@/lib/currency";
 
 const SERVICE_LABELS: Record<string, string> = {
   VALUE_BULK: "バリューバルク",
@@ -70,11 +71,13 @@ function toCardRow(raw: unknown): CardRow {
 
 export default function StoreInputForm({
   applicationId,
+  region,
   servicePrices,
   masterNames = [],
   initialDraft = null,
 }: {
   applicationId: string;
+  region: string;
   servicePrices: ServicePrice[];
   masterNames?: string[];
   initialDraft?: { serviceLevel?: string; cards?: unknown[] } | null;
@@ -171,8 +174,8 @@ export default function StoreInputForm({
         >
           {servicePrices.map((p) => (
             <option key={p.id} value={p.serviceLevel}>
-              {SERVICE_LABELS[p.serviceLevel] ?? p.serviceLevel}（¥{p.pricePerCard.toLocaleString()}/枚）
-              {p.maxDeclaredValue !== null ? ` 上限¥${p.maxDeclaredValue.toLocaleString()}` : ""}
+              {SERVICE_LABELS[p.serviceLevel] ?? p.serviceLevel}（{formatMoney(p.pricePerCard, region)}/枚）
+              {p.maxDeclaredValue !== null ? ` 上限${formatMoney(p.maxDeclaredValue, region)}` : ""}
             </option>
           ))}
         </select>

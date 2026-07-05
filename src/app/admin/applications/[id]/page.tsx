@@ -9,6 +9,7 @@ import CardStatusForm from "@/components/CardStatusForm";
 import UpchargeForm from "@/components/UpchargeForm";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+import { formatMoney } from "@/lib/currency";
 
 const CARD_STATUS_LABELS: Record<string, string> = {
   DRAFT: "下書き",
@@ -146,7 +147,7 @@ export default async function AdminApplicationDetailPage({
               <div>
                 <p className="text-gray-500">合計金額</p>
                 <p className="font-bold text-gray-900">
-                  ¥{application.totalAmount.toLocaleString()}
+                  {formatMoney(application.totalAmount, application.region)}
                 </p>
               </div>
             </div>
@@ -154,24 +155,24 @@ export default async function AdminApplicationDetailPage({
             <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
                 <p className="text-gray-500">PSA料金</p>
-                <p className="font-medium">¥{application.psaFeeTotal.toLocaleString()}</p>
+                <p className="font-medium">{formatMoney(application.psaFeeTotal, application.region)}</p>
               </div>
               <div>
                 <p className="text-gray-500">代理入力料金</p>
-                <p className="font-medium">¥{application.agencyFeeTotal.toLocaleString()}</p>
+                <p className="font-medium">{formatMoney(application.agencyFeeTotal, application.region)}</p>
               </div>
               <div>
                 <p className="text-gray-500">送料・保険料</p>
-                <p className="font-medium">¥{(application.shippingFee + application.insuranceFee).toLocaleString()}</p>
+                <p className="font-medium">{formatMoney(application.shippingFee + application.insuranceFee, application.region)}</p>
               </div>
               <div>
                 <p className="text-gray-500">事務手数料</p>
-                <p className="font-medium">¥{application.handlingFee.toLocaleString()}</p>
+                <p className="font-medium">{formatMoney(application.handlingFee, application.region)}</p>
               </div>
               {application.discountAmount > 0 && (
                 <div>
                   <p className="text-gray-500">キャンペーン割引</p>
-                  <p className="font-medium text-brand-700">-¥{application.discountAmount.toLocaleString()}{application.campaignName ? `（${application.campaignName}）` : ""}</p>
+                  <p className="font-medium text-brand-700">-{formatMoney(application.discountAmount, application.region)}{application.campaignName ? `（${application.campaignName}）` : ""}</p>
                 </div>
               )}
             </div>
@@ -211,7 +212,7 @@ export default async function AdminApplicationDetailPage({
                       </p>
                       <p className="mt-1 flex gap-3 text-xs text-gray-500">
                         <span className="font-mono text-gray-400">{card.cardNo}</span>
-                        <span>申告額: ¥{card.declaredValue.toLocaleString()}</span>
+                        <span>申告額: {formatMoney(card.declaredValue, application.region)}</span>
                         <span>言語: {card.language}</span>
                         <span>{card.quantity}枚</span>
                       </p>
@@ -230,7 +231,7 @@ export default async function AdminApplicationDetailPage({
                     <div className="mt-3 space-y-1">
                       {card.upcharges.map((u) => (
                         <div key={u.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
-                          <span className="text-gray-600">Upcharge ¥{u.upchargeAmount.toLocaleString()}（{u.reason}）</span>
+                          <span className="text-gray-600">Upcharge {formatMoney(u.upchargeAmount, application.region)}（{u.reason}）</span>
                           <span className={`px-2 py-0.5 rounded-full font-medium ${
                             u.status === "PAID" ? "bg-green-100 text-green-700" :
                             u.status === "FAILED" ? "bg-red-100 text-red-700" :
@@ -283,7 +284,7 @@ export default async function AdminApplicationDetailPage({
                       <span className="text-gray-500 font-mono text-xs">{p.stripePaymentIntentId}</span>
                     </div>
                     <span className="font-medium text-gray-900">
-                      ¥{p.amount.toLocaleString()}
+                      {formatMoney(p.amount, application.region)}
                     </span>
                   </div>
                 ))}

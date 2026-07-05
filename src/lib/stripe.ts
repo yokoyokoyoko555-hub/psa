@@ -29,13 +29,14 @@ export async function createCustomer(params: {
 
 export async function createPaymentIntent(params: {
   amount: number;
+  currency: string;
   customerId: string;
   applicationId: string;
   description: string;
 }) {
   return getStripe().paymentIntents.create({
     amount: params.amount,
-    currency: "jpy",
+    currency: params.currency,
     customer: params.customerId,
     setup_future_usage: "off_session",
     description: params.description,
@@ -48,6 +49,7 @@ export async function createPaymentIntent(params: {
 
 export async function chargeOffSession(params: {
   amount: number;
+  currency: string;
   customerId: string;
   paymentMethodId: string;
   description: string;
@@ -55,7 +57,7 @@ export async function chargeOffSession(params: {
 }) {
   return getStripe().paymentIntents.create({
     amount: params.amount,
-    currency: "jpy",
+    currency: params.currency,
     customer: params.customerId,
     payment_method: params.paymentMethodId,
     off_session: true,

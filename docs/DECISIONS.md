@@ -207,3 +207,16 @@
 - 未対応: 代理申込一覧(`getStoreRequests`)は STORE/DRAFT 全件表示のまま（未払い先払い前の申込も含む）。必要なら支払い済みフィルタを別途。
 
 
+## ADR-0022: PSA US 鑑定料の小数点(セント)対応 + Stripe通貨バグ修正
+- 日付: 2026-07-05 / 状態: Accepted（実装済）
+- 背景: `AGENTS.md`は「金額は円・整数（最小単位）で扱う」と定めていたがJP専用時代の記述で、USD導入後の実態と合っていなかった。`ServicePrice`関連の金額列が全て`Int`のため、管理画面でPSA US鑑定料に`63.99`(USD)を入力できなかった。加えて`lib/stripe.ts`の`createPaymentIntent`/`chargeOffSession`が`currency: "jpy"`固定で、PSA US申込でも実際はJPYで決済されていた（実額が意図の1/150程度になる重大バグ）。
+- 決定:
+  - **スコープはPSA US鑑定料設定のみ**（`ServicePrice.pricePerCard`/`cost`/`maxDeclaredValue`）。`PricingSetting`（事務手数料・代理入力料金）・送料保険マトリクス・`Campaign`固定額割引は据え置き（JP/US共通で整数のまま）。
+  - 金額はStripeの慣例に倣い**JPY=無位取り整数（既存通り）／USD=セント精度で小数点2桁を保持**する方式。DB型はスキーマ上そのまま実額（例: USDなら`63.99`）で保持し、Stripe API呼び出し時のみ`toStripeAmount()`で最小通貨単位へ変換する（`lib/currency.ts`に集約）。
+  - 関連する`ServicePrice`/`Application`(`totalAmount`/`psaFeeTotal`/`taxAmount`/`prepaidAmount`)/`Card`(`psaFee`/`psaCost`)/`Payment.amount`列を`Int`→`Float`に変更。既存データは整数のままFloatとして有効なため非破壊。
+  - `fee-calculator.ts`の丸め処理（原価フォールバック・消費税）を`roundMoney(amount, region)`に統一（JP=既存通り`Math.floor`維持／US=セント単位で四捨五入）。既存JPの計算結果は変化しない。
+  - `lib/stripe.ts`の`createPaymentIntent`/`chargeOffSession`に`currency`引数を追加し、呼び出し側で`stripeCurrency(region)`（PSA_US→`"usd"`／それ以外→`"jpy"`）を明示指定するよう変更。`Payment.currency`列（既存・未使用だった）にも実値を保存。
+  - 各画面の金額表示で`¥`ハードコード（`admin/applications`一覧・詳細、`admin/customers/[id]`、`admin/store-requests/[id]`、代理申込バリデーションエラー文言 等）を`formatMoney(amount, region)`に置換（US申込で誤って¥表示される既存バグの修正を含む）。
+- 影響: `ServicePrice`/`Application`/`Card`/`Payment`のスキーマ変更（db push、非破壊）。`lib/currency.ts`に`roundMoney`/`toStripeAmount`/`stripeCurrency`を追加。`ServicePriceForm`（管理画面）はUS地域のみ`step="0.01"`で小数入力可。
+- 未対応: `PricingSetting`（事務手数料・代理入力料金）、送料保険マトリクス、`Campaign`固定額割引、`Upcharge.upchargeAmount`、顧客の申告価格入力（`ApplyForm`declaredValue）は引き続き整数のみ。US側で端数請求が必要になった場合は別途スコープ拡張。
+

@@ -44,6 +44,8 @@ export default function ServicePriceForm({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const isUsd = region === "PSA_US";
+  const numStep = isUsd ? "0.01" : "1";
 
   const [cells, setCells] = useState<Cell[]>(() =>
     servicePrices
@@ -69,11 +71,15 @@ export default function ServicePriceForm({
     setLoading(true);
     setSaved(false);
 
+    const parseAmount = isUsd
+      ? (v: string) => Math.round((parseFloat(v) || 0) * 100) / 100
+      : (v: string) => parseInt(v) || 0;
+
     const updates = cells.map((c) => ({
       id: c.id,
-      pricePerCard: parseInt(c.pricePerCard) || 0,
-      cost: parseInt(c.cost) || 0,
-      maxDeclaredValue: c.maxDeclaredValue === "" ? null : parseInt(c.maxDeclaredValue),
+      pricePerCard: parseAmount(c.pricePerCard),
+      cost: parseAmount(c.cost),
+      maxDeclaredValue: c.maxDeclaredValue === "" ? null : parseAmount(c.maxDeclaredValue),
       isActive: c.isActive,
     }));
 
@@ -113,13 +119,13 @@ export default function ServicePriceForm({
                   {SERVICE_LABELS[c.serviceLevel] ?? c.serviceLevel}
                 </td>
                 <td className="px-3 py-2">
-                  <input type="number" min={0} value={c.pricePerCard} onChange={(e) => update(c.id, { pricePerCard: e.target.value })} className={inputCls} />
+                  <input type="number" min={0} step={numStep} value={c.pricePerCard} onChange={(e) => update(c.id, { pricePerCard: e.target.value })} className={inputCls} />
                 </td>
                 <td className="px-3 py-2">
-                  <input type="number" min={0} value={c.cost} onChange={(e) => update(c.id, { cost: e.target.value })} className={inputCls} />
+                  <input type="number" min={0} step={numStep} value={c.cost} onChange={(e) => update(c.id, { cost: e.target.value })} className={inputCls} />
                 </td>
                 <td className="px-3 py-2">
-                  <input type="number" min={0} placeholder="なし" value={c.maxDeclaredValue} onChange={(e) => update(c.id, { maxDeclaredValue: e.target.value })} className={inputCls} />
+                  <input type="number" min={0} step={numStep} placeholder="なし" value={c.maxDeclaredValue} onChange={(e) => update(c.id, { maxDeclaredValue: e.target.value })} className={inputCls} />
                 </td>
                 <td className="px-3 py-2 text-center">
                   <input type="checkbox" checked={c.isActive} onChange={(e) => update(c.id, { isActive: e.target.checked })} />

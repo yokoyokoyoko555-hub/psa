@@ -79,6 +79,7 @@ export default async function StoreRequestDetailPage({
       ) : (
         <StoreInputForm
           applicationId={app.id}
+          region={app.region}
           servicePrices={servicePrices}
           masterNames={masterNames}
           initialDraft={draft}

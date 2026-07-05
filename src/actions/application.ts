@@ -7,7 +7,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
 import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe } from "@/lib/stripe";
 import { sendTemplate } from "@/lib/mailer";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -129,7 +129,7 @@ export async function createApplication(
     if (over) {
       return {
         success: false,
-        error: `このサービスレベルの申告価格上限（¥${servicePrice.maxDeclaredValue.toLocaleString()}）を超えるカードがあります（${over.cardName || "無題"}: ¥${over.declaredValue.toLocaleString()}）。上位のサービスレベルを選択してください。`,
+        error: `このサービスレベルの申告価格上限（${formatMoney(servicePrice.maxDeclaredValue, parsed.data.region)}）を超えるカードがあります（${over.cardName || "無題"}: ${formatMoney(over.declaredValue, parsed.data.region)}）。上位のサービスレベルを選択してください。`,
       };
     }
   }
@@ -212,7 +212,7 @@ export async function createApplication(
     for (const cardInput of parsed.data.cards) {
       const cardNo = await generateCardNo();
       const psaFee = (servicePriceData?.pricePerCard ?? 0) * cardInput.quantity;
-      const psaCost = Math.floor(psaFee * 0.8);
+      const psaCost = roundMoney(psaFee * 0.8, parsed.data.region);
       const agencyFee = 0; // 顧客入力は手数料なし
 
       await tx.card.create({
@@ -265,7 +265,8 @@ export async function createApplication(
   let paymentIntent;
   try {
     paymentIntent = await createPaymentIntent({
-      amount: fees.totalAmount,
+      amount: toStripeAmount(fees.totalAmount, application.region),
+      currency: stripeCurrency(application.region),
       customerId: stripeCustomerId,
       applicationId: application.id,
       description: `PSA申込 ${application.applicationNo}`,
@@ -282,6 +283,7 @@ export async function createApplication(
       applicationId: application.id,
       stripePaymentIntentId: paymentIntent.id,
       amount: fees.totalAmount,
+      currency: stripeCurrency(application.region),
       status: "PENDING",
       description: `PSA申込 ${application.applicationNo}`,
     },
@@ -454,8 +456,8 @@ export async function createStoreRequest(
 
   // 先払い概算: 枚数 × 鑑定料 ＋ 消費税(10%)。代理入力料金・送料・保険・事務手数料は含めない（差額側＝段階4）。
   const psaFeeTotal = servicePrice.pricePerCard * parsed.data.cardCount;
-  const taxAmount = Math.floor(psaFeeTotal * 0.1);
-  const prepaidAmount = psaFeeTotal + taxAmount;
+  const taxAmount = roundMoney(psaFeeTotal * 0.1, parsed.data.region);
+  const prepaidAmount = roundMoney(psaFeeTotal + taxAmount, parsed.data.region);
 
   let stripeCustomerId: string;
   try {
@@ -503,7 +505,8 @@ export async function createStoreRequest(
   let paymentIntent;
   try {
     paymentIntent = await createPaymentIntent({
-      amount: prepaidAmount,
+      amount: toStripeAmount(prepaidAmount, parsed.data.region),
+      currency: stripeCurrency(parsed.data.region),
       customerId: stripeCustomerId,
       applicationId: application.id,
       description: `PSA代理申込 先払い ${application.applicationNo}`,
@@ -519,6 +522,7 @@ export async function createStoreRequest(
       applicationId: application.id,
       stripePaymentIntentId: paymentIntent.id,
       amount: prepaidAmount,
+      currency: stripeCurrency(parsed.data.region),
       status: "PENDING",
       description: `PSA代理申込 先払い ${application.applicationNo}`,
     },

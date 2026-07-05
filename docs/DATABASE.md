@@ -19,9 +19,9 @@
 | `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金 |
 | `CardStatusHistory` / card_status_histories | ステータス履歴 | `status`, `changedBy`(userId or customerId), Cardへ Cascade |
 | `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `psaSubmissionId`/`psaOrderId`, `status` |
-| `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(円), `status`(PaymentStatus) |
+| `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(Float, JP=円/US=USD小数2桁), `currency`(jpy/usd), `status`(PaymentStatus) |
 | `Upcharge` / upcharges | 追加請求 | `psaDeclaredValue`/`psaFinalValue`/`upchargeAmount`, `status`(UpchargeStatus) |
-| `ServicePrice` / service_prices | サービス料金 | `@@unique([serviceLevel, region])`, `region`(PSA_JP/PSA_US), `pricePerCard`(=顧客請求額), `agencyFee`(当社入力時のみ加算), `maxDeclaredValue`(上限/null=無制限), `isActive` |
+| `ServicePrice` / service_prices | サービス料金 | `@@unique([serviceLevel, region])`, `region`(PSA_JP/PSA_US), `pricePerCard`(Float, =顧客請求額。US=USD小数2桁対応。[ADR-0022](DECISIONS.md)), `agencyFee`(当社入力時のみ加算), `maxDeclaredValue`(Float?, 上限/null=無制限), `isActive` |
 | `ShippingRule` / shipping_rules | 送料 | `returnMethod`, `fee`, `minAmount`/`maxAmount`(帯), `sortOrder` |
 | `InsuranceRule` / insurance_rules | 保険料 | `minValue`/`maxValue`(帯), `fee` または `feeRate`(%) |
 | `Agreement` / agreements | 電子同意書 | `applicationId`(uniq), `agreedAt`, `ipAddress`/`userAgent`, `agreementText`, `version` |

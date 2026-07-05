@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { ServiceLevel, ReturnMethod, ServiceRegion } from "@prisma/client";
+import { roundMoney } from "./currency";
 
 const TAX_RATE = 0.1;
 const PSA_COST_RATE = 0.8; // 代理店価格: 定価の80%
@@ -127,7 +128,8 @@ export async function calculateFees(params: {
   const setting = await prisma.pricingSetting.findUnique({ where: { id: params.region } });
   const psaFeeTotal = servicePrice.pricePerCard * params.cardCount;
   // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替
-  const perCardCost = servicePrice.cost > 0 ? servicePrice.cost : Math.floor(servicePrice.pricePerCard * PSA_COST_RATE);
+  const perCardCost =
+    servicePrice.cost > 0 ? servicePrice.cost : roundMoney(servicePrice.pricePerCard * PSA_COST_RATE, params.region);
   const psaCostTotal = perCardCost * params.cardCount;
 
   // 代理入力料金: リージョン別の一律額 × 種類数（同一カードは何枚でも1種）。
@@ -158,8 +160,8 @@ export async function calculateFees(params: {
   }
 
   const subtotal = psaFeeTotal + discountBase - discountAmount;
-  const taxAmount = Math.floor(subtotal * TAX_RATE);
-  const totalAmount = subtotal + taxAmount;
+  const taxAmount = roundMoney(subtotal * TAX_RATE, params.region);
+  const totalAmount = roundMoney(subtotal + taxAmount, params.region);
 
   return {
     psaFeeTotal,

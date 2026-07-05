@@ -315,18 +315,18 @@ model Application {
   draftData      Json?
   status         ApplicationStatus @default(DRAFT)
   // 代理入力(STORE)の先払い: 概算(枚数×鑑定料+税)を先に決済した額。段階4の差額計算用。ADR-0020
-  prepaidAmount      Int     @default(0)
+  prepaidAmount      Float   @default(0)
   // 代理入力(STORE)の先払い時に顧客が申告したカード枚数（概算根拠）
   estimatedCardCount Int?
-  totalAmount    Int               @default(0) // 円
-  psaFeeTotal    Int               @default(0)
+  totalAmount    Float             @default(0) // JP=円 / US=USD（小数点以下2桁）。ADR-0022
+  psaFeeTotal    Float             @default(0)
   agencyFeeTotal Int               @default(0)
   handlingFee    Int               @default(0) // 事務手数料（合計）。ADR-0015
   shippingFee    Int               @default(0)
   insuranceFee   Int               @default(0)
   discountAmount Int               @default(0) // キャンペーン割引（合計）。ADR-0016
   campaignName   String? // 適用キャンペーン名（記録用）
-  taxAmount      Int               @default(0)
+  taxAmount      Float             @default(0)
   notes          String?
   // PSA提出グループ（申込単位）。1サブミッションIDに複数申込を紐づける。ADR-0021
   psaSubmissionGroupId String?
@@ -370,9 +370,9 @@ model Card {
   quantity      Int          @default(1)
 
   // 料金
-  psaFee    Int @default(0) // PSA鑑定料（売価）
-  psaCost   Int @default(0) // PSA原価（80%）
-  agencyFee Int @default(0) // 代行手数料
+  psaFee    Float @default(0) // PSA鑑定料（売価）。JP=円 / US=USD（小数点以下2桁）。ADR-0022
+  psaCost   Float @default(0) // PSA原価（80%）
+  agencyFee Int   @default(0) // 代行手数料
 
   // ステータス
   status        CardStatus          @default(DRAFT)
@@ -448,12 +448,12 @@ model Payment {
   applicationId         String?
   stripePaymentIntentId String?       @unique
   stripePaymentMethodId String?
-  amount                Int // 円
+  amount                Float // JP=円 / US=USD（小数点以下2桁）。ADR-0022
   currency              String        @default("jpy")
   status                PaymentStatus @default(PENDING)
   description           String?
   receiptUrl            String?
-  refundedAmount        Int           @default(0)
+  refundedAmount        Float         @default(0)
   failureReason         String?
   paidAt                DateTime?
   createdAt             DateTime      @default(now())
@@ -497,9 +497,9 @@ model ServicePrice {
   id               String        @id @default(cuid())
   serviceLevel     ServiceLevel
   region           ServiceRegion @default(PSA_JP)
-  pricePerCard     Int // 1枚あたり鑑定料 = 顧客請求額（JP=円 / US=USD）
-  cost             Int           @default(0) // 1枚あたり原価（JP=円 / US=USD）。0なら鑑定料×80%で代替
-  maxDeclaredValue Int? // 申告価格の上限。nullは上限なし
+  pricePerCard     Float // 1枚あたり鑑定料 = 顧客請求額（JP=円・整数 / US=USD・小数点以下2桁）。ADR-0022
+  cost             Float         @default(0) // 1枚あたり原価（JP=円 / US=USD）。0なら鑑定料×80%で代替
+  maxDeclaredValue Float? // 申告価格の上限。nullは上限なし
   isActive         Boolean       @default(true)
   updatedAt        DateTime      @updatedAt
   updatedBy        String?

@@ -8,7 +8,7 @@ import { logOperation } from "@/lib/operation-log";
 import { chargeOffSession } from "@/lib/stripe";
 import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { CardStatus, CardLanguage, ServiceLevel } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -166,7 +166,7 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
 
   const card = await prisma.card.findUniqueOrThrow({
     where: { id: parsed.cardId },
-    include: { customer: true },
+    include: { customer: true, application: { select: { region: true } } },
   });
 
   const customerName = decrypt(card.customer.nameEncrypted);
@@ -215,7 +215,8 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
   if (savedMethod) {
     try {
       const pi = await chargeOffSession({
-        amount: parsed.upchargeAmount,
+        amount: toStripeAmount(parsed.upchargeAmount, card.application.region),
+        currency: stripeCurrency(card.application.region),
         customerId: card.customer.stripeCustomerId!,
         paymentMethodId: savedMethod.stripePaymentMethodId,
         description: `Upcharge: ${card.cardName}`,
@@ -410,7 +411,7 @@ export async function completeStoreApplication(
     if (over) {
       return {
         success: false,
-        error: `申告価格上限（¥${servicePrice.maxDeclaredValue.toLocaleString()}）を超えるカードがあります（${over.cardName}: ¥${over.declaredValue.toLocaleString()}）。`,
+        error: `申告価格上限（${formatMoney(servicePrice.maxDeclaredValue, app.region)}）を超えるカードがあります（${over.cardName}: ${formatMoney(over.declaredValue, app.region)}）。`,
       };
     }
   }
@@ -454,7 +455,7 @@ export async function completeStoreApplication(
     for (const c of parsed.data.cards) {
       const cardNo = await generateCardNo();
       const psaFee = servicePrice.pricePerCard * c.quantity;
-      const perCardCost = servicePrice.cost > 0 ? servicePrice.cost : Math.floor(servicePrice.pricePerCard * 0.8);
+      const perCardCost = servicePrice.cost > 0 ? servicePrice.cost : roundMoney(servicePrice.pricePerCard * 0.8, app.region);
       const psaCost = perCardCost * c.quantity;
       const agencyFee = proxyFeePerCard * c.quantity;
       await tx.card.create({

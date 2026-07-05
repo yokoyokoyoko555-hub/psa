@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+import { formatMoney } from "@/lib/currency";
 
 export default async function AdminCustomerDetailPage({
   params,
@@ -145,7 +146,7 @@ export default async function AdminCustomerDetailPage({
                         {app.status}
                       </span>
                       <p className="text-sm font-bold text-gray-900 mt-1">
-                        ¥{app.totalAmount.toLocaleString()}
+                        {formatMoney(app.totalAmount, app.region)}
                       </p>
                     </div>
                   </div>
