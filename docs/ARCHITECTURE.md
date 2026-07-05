@@ -118,8 +118,8 @@ psa-system/
 | `PsaSubmissionGroup` | PSA提出グループ | `groupNo`(PSG-…), `psaSubmissionId`/`psaOrderId` |
 | `Payment` | 決済 | `stripePaymentIntentId`, `status` |
 | `Upcharge` | 追加請求 | `psaDeclaredValue`/`psaFinalValue`/`upchargeAmount`, `status` |
-| `ServicePrice` | サービス料金（トレーディングカードのみ） | `[serviceLevel, region, itemType]`(unique), `pricePerCard`, `agencyFee` |
-| `CustomServicePrice` | 動的サービスタイア（未開封パック/コミック・マガジン/オートグラフ） | `category`(UNOPENED_PACK/COMIC_MAGAZINE/AUTOGRAPH), `name`(自由入力), `pricePerCard`/`cost`/`maxDeclaredValue`。管理画面でCRUD可能。[ADR-0025](DECISIONS.md) |
+| `ServicePrice` | 旧トレーディングカード料金（**レガシー**、ADR-0026で移行済み） | `[serviceLevel, region, itemType]`(unique)。アプリロジックからは未参照 |
+| `CustomServicePrice` | 動的サービスタイア（トレカ/未開封パック/コミック・マガジン/オートグラフ） | `category`(TRADING_CARD/UNOPENED_PACK/COMIC_MAGAZINE/AUTOGRAPH), `name`(自由入力), `pricePerCard`/`cost`/`maxDeclaredValue`。管理画面でCRUD可能。[ADR-0025](DECISIONS.md)/[ADR-0026](DECISIONS.md) |
 | `ShippingRule` | 送料 | 金額帯（`minAmount`/`maxAmount`）ごと |
 | `InsuranceRule` | 保険料 | 申告額帯ごと（`fee` または `feeRate`） |
 | `Agreement` | 電子同意書 | 申込時スナップショット, IP/UA |

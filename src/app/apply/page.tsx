@@ -5,6 +5,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { getCustomerProfile } from "@/actions/customer";
 import { getMyAddresses } from "@/actions/address";
 import { getDraft } from "@/actions/application";
+import { ensureTradingCardCustomPrices } from "@/actions/pricing";
 import ApplyEntry from "./ApplyEntry";
 import { prisma } from "@/lib/prisma";
 
@@ -19,11 +20,13 @@ export default async function ApplyPage({
   const { draft: draftId } = await searchParams;
   const initialDraft = draftId ? await getDraft(draftId) : null;
 
-  const [servicePrices, shippingRules, insuranceRules, customServicePrices, profile, addresses] = await Promise.all([
-    prisma.servicePrice.findMany({ where: { isActive: true }, orderBy: { pricePerCard: "asc" } }),
+  await ensureTradingCardCustomPrices(); // 旧ServicePrice→CustomServicePrice(category=TRADING_CARD)の初回移行。ADR-0026
+
+  const [shippingRules, insuranceRules, customServicePrices, pricingSettings, profile, addresses] = await Promise.all([
     prisma.shippingRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     prisma.insuranceRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     prisma.customServicePrice.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.pricingSetting.findMany(),
     getCustomerProfile(),
     getMyAddresses(),
   ]);
@@ -32,10 +35,10 @@ export default async function ApplyPage({
     <ApplyEntry
       customerId={customer.id}
       stripePublishableKey={process.env.STRIPE_PUBLISHABLE_KEY!}
-      servicePrices={servicePrices}
       shippingRules={shippingRules}
       insuranceRules={insuranceRules}
       customServicePrices={customServicePrices}
+      pricingSettings={pricingSettings}
       profile={profile}
       addresses={addresses}
       initialDraft={initialDraft}

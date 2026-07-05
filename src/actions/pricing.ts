@@ -95,8 +95,58 @@ export async function saveUniformFees(input: {
   return { success: true };
 }
 
-// 動的サービスタイア（未開封パック/コミック・マガジン/オートグラフ）の管理画面CRUD。ADR-0025
-const customServiceCategoryEnum = z.enum(["UNOPENED_PACK", "COMIC_MAGAZINE", "AUTOGRAPH"]);
+// 動的サービスタイア（トレーディングカード/未開封パック/コミック・マガジン/オートグラフ）の管理画面CRUD。ADR-0025/0026
+const customServiceCategoryEnum = z.enum(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE", "AUTOGRAPH"]);
+
+// 旧ServicePrice(固定enum)の日本語名称マップ。移行(ensureTradingCardCustomPrices)専用。ADR-0026
+const TRADING_CARD_LEVEL_LABELS: Record<string, string> = {
+  VALUE: "バリュー",
+  VALUE_BULK: "バリューバルク",
+  VALUE_PLUS: "バリュープラス",
+  VALUE_MAX: "バリューマックス",
+  REGULAR: "レギュラー",
+  EXPRESS: "エクスプレス",
+  SUPER_EXPRESS: "スーパー・エクスプレス",
+  WALK_THROUGH: "ウォーク・スルー",
+  PREMIUM_1: "プレミアム 1",
+  PREMIUM_2: "プレミアム 2",
+  PREMIUM_3: "プレミアム 3",
+  PREMIUM_5: "プレミアム 5",
+  PREMIUM_10: "プレミアム 10",
+};
+
+/**
+ * トレーディングカードの料金を固定enum(ServicePrice)からCustomServicePriceへ移行する（ADR-0026）。
+ * リージョンごとにCustomServicePrice(category=TRADING_CARD)が1件も無ければServicePriceの現在値から複製する。
+ * 冪等（既に移行済みのリージョンはスキップ）。ServicePriceの既存データは一切変更しない。
+ */
+export async function ensureTradingCardCustomPrices(): Promise<void> {
+  for (const region of ["PSA_JP", "PSA_US"] as const) {
+    const existingCount = await prisma.customServicePrice.count({
+      where: { category: "TRADING_CARD", region },
+    });
+    if (existingCount > 0) continue;
+
+    const servicePrices = await prisma.servicePrice.findMany({
+      where: { itemType: "TRADING_CARD", region },
+      orderBy: { pricePerCard: "asc" },
+    });
+    if (servicePrices.length === 0) continue;
+
+    await prisma.customServicePrice.createMany({
+      data: servicePrices.map((p, i) => ({
+        category: "TRADING_CARD" as const,
+        region: p.region,
+        name: TRADING_CARD_LEVEL_LABELS[p.serviceLevel] ?? p.serviceLevel,
+        pricePerCard: p.pricePerCard,
+        cost: p.cost,
+        maxDeclaredValue: p.maxDeclaredValue !== null ? Math.round(p.maxDeclaredValue) : null,
+        isActive: p.isActive,
+        sortOrder: i,
+      })),
+    });
+  }
+}
 
 const customServicePriceSchema = z.object({
   id: z.string().optional(),

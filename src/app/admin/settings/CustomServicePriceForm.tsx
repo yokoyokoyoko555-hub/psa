@@ -28,7 +28,7 @@ export default function CustomServicePriceForm({
   region,
 }: {
   items: CustomServicePrice[];
-  category: "UNOPENED_PACK" | "COMIC_MAGAZINE" | "AUTOGRAPH";
+  category: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE" | "AUTOGRAPH";
   region: "PSA_JP" | "PSA_US";
 }) {
   const router = useRouter();
@@ -39,6 +39,11 @@ export default function CustomServicePriceForm({
   const rows = items
     .filter((i) => i.category === category && i.region === region)
     .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  // 価格・原価: PSA_USのみドル建て・小数点2桁。PSA_JP（トレカ）は円建て・整数。ADR-0026
+  const priceStep = region === "PSA_US" ? "0.01" : "1";
+  const currencySymbol = region === "PSA_US" ? "$" : "円";
+  const parsePrice = (v: string) => (region === "PSA_US" ? parseFloat(v) || 0 : parseInt(v) || 0);
 
   function edit(i: CustomServicePrice) {
     setDraft({
@@ -66,8 +71,8 @@ export default function CustomServicePriceForm({
         category,
         region,
         name: draft.name.trim(),
-        pricePerCard: parseFloat(draft.pricePerCard) || 0,
-        cost: parseFloat(draft.cost) || 0,
+        pricePerCard: parsePrice(draft.pricePerCard),
+        cost: parsePrice(draft.cost),
         maxDeclaredValue: draft.maxDeclaredValue === "" ? null : parseInt(draft.maxDeclaredValue) || 0,
         isActive: draft.isActive,
         sortOrder: parseInt(draft.sortOrder) || 0,
@@ -92,7 +97,7 @@ export default function CustomServicePriceForm({
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        価格・原価はUSD・小数点以下2桁、申告上限は円・整数（空欄=上限なし）です。
+        価格・原価は{region === "PSA_US" ? "USD・小数点以下2桁" : "円・整数"}、申告上限は円・整数（空欄=上限なし）です。
       </p>
 
       <div className="space-y-2">
@@ -125,12 +130,12 @@ export default function CustomServicePriceForm({
               <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={inputCls} placeholder="例: スタンダード" />
             </label>
             <label className="text-sm space-y-1">
-              <span className="text-gray-700">価格（$/枚）</span>
-              <input type="number" min={0} step="0.01" value={draft.pricePerCard} onChange={(e) => setDraft({ ...draft, pricePerCard: e.target.value })} className={inputCls} />
+              <span className="text-gray-700">価格（{currencySymbol}/枚）</span>
+              <input type="number" min={0} step={priceStep} value={draft.pricePerCard} onChange={(e) => setDraft({ ...draft, pricePerCard: e.target.value })} className={inputCls} />
             </label>
             <label className="text-sm space-y-1">
-              <span className="text-gray-700">原価（$/枚）</span>
-              <input type="number" min={0} step="0.01" value={draft.cost} onChange={(e) => setDraft({ ...draft, cost: e.target.value })} className={inputCls} />
+              <span className="text-gray-700">原価（{currencySymbol}/枚）</span>
+              <input type="number" min={0} step={priceStep} value={draft.cost} onChange={(e) => setDraft({ ...draft, cost: e.target.value })} className={inputCls} />
             </label>
             <label className="text-sm space-y-1">
               <span className="text-gray-700">申告上限（円・空欄=上限なし）</span>

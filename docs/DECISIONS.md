@@ -266,4 +266,17 @@
 - 影響: `prisma/schema.prisma`（`AutographPricing`削除、`CustomServicePrice`追加、ID参照列追加）。`prisma/seed.ts`から旧`PACK_*`/`COMIC_*`プレースホルダーseedと`AutographPricing`seedを削除し、既存の`UNOPENED_PACK`/`COMIC_MAGAZINE`の`ServicePrice`行を`deleteMany`でクリーンアップ（`CustomServicePrice`は管理画面から追加する運用のためseed不要）。
 - 未対応: 為替レート・合計金額の通貨統一ロジック（上記の通り保留）。
 
+## ADR-0026: トレーディングカードも動的CRUD化（`CustomServicePrice`に統一） + 代理入力フローの簡素化
+
+- 日付: 2026-07-05 / 状態: Accepted（実装済）
+- 背景: ADR-0025では「トレカ＝既存`ServicePrice`固定enum方式のまま／それ以外＝`CustomServicePrice`」というダブルパス方式を採った。しかしトレカについても名称・価格・原価・申告上限を管理画面から自由にCRUD編集したいという要望があり、既存データ（`ServicePrice`の実売価格）を失わずに移行する必要があった。あわせて、代理申込（代理入力）の顧客向けフローが「サービスレベルを選び枚数×鑑定料を先払い」という設計だったが、実運用は「代理入力のみを先に依頼し、実際の鑑定料はカードお預け後にスタッフが確定して別途メールで請求する」という流れに変更したい、という要望があった。
+- 決定:
+  - **`CustomServiceCategory`に`TRADING_CARD`を追加**。ダブルパス方式を廃止し、`fee-calculator.ts`/`application.ts`/`admin.ts`/`ApplyForm.tsx`/`StoreInputForm.tsx`の全ロジックを「全itemType（トレカ含む）が`CustomServicePrice`をID参照する」単一パスに統一。
+  - **既存データの非破壊移行**: `ensureTradingCardCustomPrices()`（`src/actions/pricing.ts`）を新設。リージョンごとに`CustomServicePrice(category=TRADING_CARD)`が1件も無ければ、既存`ServicePrice(itemType=TRADING_CARD)`の現在値（価格・原価・申告上限・有効フラグ）から複製する冪等処理。**`ServicePrice`テーブル自体は削除・変更せず残置**（過去データ保持・移行元データとして）。この移行は管理画面設定ページ・顧客申込ページ・代理申込明細入力ページの読み込み時に自動実行される（安価なCOUNTクエリで既に移行済みなら即スキップ）。
+  - **`ServicePriceForm.tsx`と`/api/admin/service-prices`ルートを削除**（`CustomServicePriceForm.tsx`に統合。両リージョン・全itemTypeで同一コンポーネントを使用）。`CustomServicePriceForm`はリージョンに応じて価格入力欄の単位・step（PSA_US=ドル小数点2桁 / PSA_JP=円整数）を切り替えるよう修正（従来はPSA_US専用カテゴリのみだったため常にドル小数点前提だったが、トレカ×PSA_JPが追加されたため）。
+  - **`Application.serviceLevel`は全itemTypeで常に`"CUSTOM"`**（トレカも含め、実体は`customServiceLevelId`/`customServiceLevelName`参照に統一）。既存の`ServiceLevel`固定enum値・過去データはそのまま保持（読み取り専用の履歴表示でのみ使用）。
+  - **代理入力（`createStoreRequest`/`StoreRequestForm.tsx`）を全面簡素化**: サービスレベル選択・複数レベル数量入力（ADR-0024）を廃止し、「代理入力数（同一カードは1としてカウント）」の単一数値入力のみに変更。先払い金額は `代理入力数×代理入力料（PricingSetting.proxyFee） + 事務手数料（PricingSetting.handlingFee×代理入力数)` とし、**消費税は別途加算しない（内税として扱う）**。実際のサービスレベル・鑑定料は、カードお預け後にスタッフが`completeStoreApplication`で明細確定する際に選択・計算し、別途メールで請求する（この部分の請求フロー自体は元々`TODO(Stripe統合後)`のプレースホルダーのままで変更なし）。
+  - **顧客向け文言の変更**: 「代理入力ではお客様に入力いただくのは代理入力する枚数・返送先・電話番号・クレジットカード情報のみ」「代理入力する枚数×代理入力費用のみ先にお支払い」「代理入力完了後、ご提出いただいたカードに応じた鑑定料を別途メールにてご請求」という説明文に統一（`StoreRequestForm.tsx`本文・利用規約テキスト）。
+- 影響: `prisma/schema.prisma`（`CustomServiceCategory`に`TRADING_CARD`追加のみ、破壊的変更なし）。`Application.estimatedServiceLevels`は代理入力の新規申込では使われなくなる（過去データの表示コードはそのまま残置・後方互換）。`createStoreRequest`のAPIシグネチャ変更（`serviceLevels`/`customServiceLevels` → `agencyQuantity`。呼び出し元は`StoreRequestForm.tsx`のみのため影響範囲は限定的）。
+- 未対応: 為替レート・合計金額の通貨統一ロジックは引き続き未対応（ADR-0025から継続）。代理入力完了後の鑑定料請求（Stripe off-session課金）は引き続き`TODO`のまま（本ADRのスコープ外）。
 

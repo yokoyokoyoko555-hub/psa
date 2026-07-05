@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createStoreRequest, confirmStorePrepayPayment } from "@/actions/application";
-import { ServiceRegion, ReturnMethod, ServiceLevel, ItemType } from "@prisma/client";
-import type { ServicePrice, CustomServicePrice } from "@prisma/client";
+import { ServiceRegion, ReturnMethod, ItemType } from "@prisma/client";
+import type { PricingSetting } from "@prisma/client";
 import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
-import { formatMoney, formatMoneyIn } from "@/lib/currency";
+import { formatMoneyIn } from "@/lib/currency";
 import StripeCardPayment from "@/components/StripeCardPayment";
 
 const REGION_LABELS: Record<ServiceRegion, string> = {
@@ -22,52 +22,22 @@ const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
-const SERVICE_LABELS: Record<ServiceLevel, string> = {
-  VALUE: "バリュー",
-  VALUE_BULK: "バリューバルク",
-  VALUE_PLUS: "バリュープラス",
-  VALUE_MAX: "バリューマックス",
-  REGULAR: "レギュラー",
-  EXPRESS: "エクスプレス",
-  SUPER_EXPRESS: "スーパー・エクスプレス",
-  WALK_THROUGH: "ウォーク・スルー",
-  PREMIUM_1: "プレミアム 1",
-  PREMIUM_2: "プレミアム 2",
-  PREMIUM_3: "プレミアム 3",
-  PREMIUM_5: "プレミアム 5",
-  PREMIUM_10: "プレミアム 10",
-  PACK_VALUE: "バリュー",
-  PACK_ECONOMY: "エコノミー",
-  PACK_EXPRESS: "エクスプレス",
-  COMIC_MODERN: "モダン",
-  COMIC_MODERN_PLUS: "モダンプラス",
-  COMIC_VINTAGE: "ビンテージ",
-  COMIC_VINTAGE_PLUS: "ビンテージプラス",
-  COMIC_HIGH_VALUE: "ハイバリュー",
-  COMIC_EXPRESS: "エクスプレス",
-  COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
-  COMIC_WALK_THROUGH: "ウォークスルー",
-  CUSTOM: "", // 非TRADING_CARD申込のプレースホルダー値（実際には表示されない）。ADR-0025
-};
+const AGREEMENT_TEXT = `PSA鑑定受付代行サービス（代理入力・先払い）利用規約
 
-const AGREEMENT_TEXT = `PSA鑑定受付代行サービス（代理申込・先払い）利用規約
-
-1. 本サービスはカードのPSA鑑定を代行するサービスです。
-2. 代理申込では、お申込み時に概算（カード枚数 × 鑑定料 ＋ 消費税）を先にお支払いいただきます。
+1. 代理入力では、お客様に入力いただくのは代理入力する枚数・返送先・電話番号・クレジットカード情報のみです。
+2. お申込み時には、代理入力する枚数×代理入力費用（事務手数料込み・消費税込み）を先にお支払いいただきます。
 3. お支払い後、カードのお預け（店頭持込・郵送）をご予約ください。
-4. お預かり後、当社スタッフがカード明細を確定し、最終料金を算出します。
-5. 代理入力料金・送料・保険料・事務手数料、および鑑定料の差額は、明細確定後に別途精算（追加請求）いたします。
-6. お申込み後のキャンセルはお受けできません。
-7. PSAからUpchargeが発生した場合、追加請求をご案内します。
-8. 鑑定中の紛失・破損は保険適用範囲内で対応します。
-9. PSAグレードの結果に関して当社は責任を負いません。`;
-const AGREEMENT_VERSION = "store-v2.0";
+4. 当社で代理入力が完了次第、ご提出いただいたカードの内容に応じた鑑定料を別途メールにてご請求いたします。
+5. お申込み後のキャンセルはお受けできません。
+6. PSAからUpchargeが発生した場合、追加請求をご案内します。
+7. 鑑定中の紛失・破損は保険適用範囲内で対応します。
+8. PSAグレードの結果に関して当社は責任を負いません。`;
+const AGREEMENT_VERSION = "store-v3.0";
 
 type Props = {
   profile: CustomerProfile | null;
   addresses: Address[];
-  servicePrices: ServicePrice[];
-  customServicePrices: CustomServicePrice[];
+  pricingSettings: PricingSetting[];
   stripePublishableKey: string;
 };
 
@@ -89,12 +59,12 @@ function getProfileAddress(profile: CustomerProfile | null) {
   };
 }
 
-export default function StoreRequestForm({ profile, addresses, servicePrices, customServicePrices, stripePublishableKey }: Props) {
+export default function StoreRequestForm({ profile, addresses, pricingSettings, stripePublishableKey }: Props) {
   const router = useRouter();
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
-  // サービスレベル（トレカ）またはCustomServicePrice.id（非トレカ）ごとの枚数（0または未入力は対象外）。複数レベル同時申込に対応。ADR-0024/0025
-  const [quantities, setQuantities] = useState<Partial<Record<string, number>>>({});
+  // 代理入力数（同一カードは1としてカウント）。実際のサービスレベル・鑑定料はカードお預け後にスタッフが確定する。ADR-0026
+  const [agencyQuantity, setAgencyQuantity] = useState<number>(0);
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
   const addressOptions = [
     ...(getProfileAddress(profile) ? [getProfileAddress(profile)!] : []),
@@ -123,42 +93,17 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
   const [clientSecret, setClientSecret] = useState("");
   const [createdId, setCreatedId] = useState<string | null>(null);
 
-  const regionPrices = servicePrices
-    .filter((p) => p.region === region && p.itemType === itemType && p.isActive)
-    .sort((a, b) => a.pricePerCard - b.pricePerCard);
-  const customTierOptions = customServicePrices
-    .filter((p) => p.region === region && p.category === itemType && p.isActive)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-  // トレカ＝ServiceLevel固定enum方式、非トレカ＝CustomServicePrice.id方式の統一行データ。ADR-0025
-  const tierRows =
-    itemType === "TRADING_CARD"
-      ? regionPrices.map((p) => ({
-          id: p.serviceLevel as string,
-          label: SERVICE_LABELS[p.serviceLevel],
-          pricePerCard: p.pricePerCard,
-          maxDeclaredValue: p.maxDeclaredValue,
-        }))
-      : customTierOptions.map((p) => ({
-          id: p.id,
-          label: p.name,
-          pricePerCard: p.pricePerCard,
-          maxDeclaredValue: p.maxDeclaredValue,
-        }));
-  const lines = tierRows
-    .map((row) => ({ row, qty: quantities[row.id] ?? 0 }))
-    .filter((l) => l.qty > 0);
-  const cardCount = lines.reduce((s, l) => s + l.qty, 0);
-  const psaFeeTotal = lines.reduce((s, l) => s + l.row.pricePerCard * l.qty, 0);
-  const taxAmount = Math.floor(psaFeeTotal * 0.1);
-  const prepaidAmount = psaFeeTotal + taxAmount;
-
-  function setQty(id: string, qty: number) {
-    setQuantities((prev) => ({ ...prev, [id]: Math.max(0, Math.floor(qty) || 0) }));
-  }
+  const setting = pricingSettings.find((p) => p.region === region && p.itemType === itemType);
+  const proxyFee = setting?.proxyFee ?? 0;
+  const handlingFeePerUnit = setting?.handlingFee ?? 0;
+  const agencyFeeTotal = proxyFee * agencyQuantity;
+  const handlingFeeTotal = handlingFeePerUnit * agencyQuantity;
+  // 代理入力費用は内税（消費税を別途加算しない）。
+  const prepaidAmount = agencyFeeTotal + handlingFeeTotal;
 
   async function handleSubmit() {
-    if (lines.length === 0) {
-      setError("少なくとも1つのサービスレベルに枚数を入力してください");
+    if (agencyQuantity < 1) {
+      setError("代理入力数を入力してください");
       return;
     }
     if (!agreed) {
@@ -179,14 +124,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
       const result = await createStoreRequest({
         region,
         itemType,
-        serviceLevels:
-          itemType === "TRADING_CARD"
-            ? lines.map((l) => ({ serviceLevel: l.row.id as ServiceLevel, quantity: l.qty }))
-            : [],
-        customServiceLevels:
-          itemType !== "TRADING_CARD"
-            ? lines.map((l) => ({ customServiceLevelId: l.row.id, quantity: l.qty }))
-            : [],
+        agencyQuantity,
         returnMethod,
         returnAddress: {
           name: selectedAddress.name,
@@ -243,7 +181,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
         <h2 className="text-lg font-bold text-gray-900">先払いを受け付けました</h2>
         <p className="text-sm text-gray-600">
           次に、カードのお預け方法（店頭持込・郵送）と日時をご予約ください。
-          お預かり後、スタッフがカード明細を確定し、差額（代理入力料金・送料・保険等）を別途ご案内します。
+          お預かり後、当社で代理入力を行い、内容に応じた鑑定料を別途メールにてご請求します。
         </p>
         <div className="flex flex-col gap-3 pt-1">
           {createdId && (
@@ -272,24 +210,23 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
   if (step === "payment") {
     return (
       <div className="space-y-6">
-        <h2 className="text-lg font-bold text-gray-900">概算のお支払い</h2>
+        <h2 className="text-lg font-bold text-gray-900">代理入力費用のお支払い</h2>
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-          {lines.map((l) => (
-            <div key={l.row.id} className="flex justify-between text-sm text-gray-700">
-              <span>{l.row.label} × {l.qty}枚（鑑定料）</span>
-              <span>{formatMoney(l.row.pricePerCard * l.qty, region)}</span>
-            </div>
-          ))}
           <div className="flex justify-between text-sm text-gray-700">
-            <span>消費税</span>
-            <span>{formatMoney(taxAmount, region)}</span>
+            <span>代理入力数 {agencyQuantity} 点 × 代理入力料</span>
+            <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
           </div>
+          <div className="flex justify-between text-sm text-gray-700">
+            <span>事務手数料</span>
+            <span>{formatMoneyIn(handlingFeeTotal, "JPY")}</span>
+          </div>
+          <p className="text-xs text-gray-500">※ 消費税は全て内税です。</p>
           <div className="border-t border-gray-200 pt-3 flex justify-between font-bold text-gray-900">
-            <span>先払い概算</span>
-            <span>{formatMoney(prepaidAmount, region)}</span>
+            <span>合計金額</span>
+            <span>{formatMoneyIn(prepaidAmount, "JPY")}</span>
           </div>
           <p className="text-xs text-gray-500">
-            代理入力料金・送料・保険料・事務手数料、および鑑定料の差額は、明細確定後に別途精算します。
+            鑑定料は、当社で代理入力が完了次第、内容に応じて別途メールにてご請求します。
           </p>
         </div>
 
@@ -301,7 +238,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
           <StripeCardPayment
             clientSecret={clientSecret}
             publishableKey={stripePublishableKey}
-            buttonLabel={`${formatMoney(prepaidAmount, region)} を支払う`}
+            buttonLabel={`${formatMoneyIn(prepaidAmount, "JPY")} を支払う`}
             billingName={profile?.name ?? "Customer"}
             onPaid={handlePaid}
             onError={setError}
@@ -313,9 +250,11 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-bold text-gray-900">代理申込の依頼（当社がカードを入力します）</h2>
+      <h2 className="text-lg font-bold text-gray-900">代理入力の依頼（当社がカードを入力します）</h2>
       <p className="text-sm text-gray-600">
-        サービスレベルと枚数を選び、概算（枚数×鑑定料＋税）を先払いします。お支払い後にカードのお預けをご予約ください。
+        代理入力では、お客様に入力いただくのは代理入力する枚数・返送先・電話番号・クレジットカード情報のみです。
+        代理入力する枚数×代理入力費用のみ、先にお支払いいただきます。
+        当社で代理入力完了後、ご提出いただいたカードに応じた鑑定料を別途メールにてご請求させていただきます。
       </p>
 
       {error && (
@@ -331,7 +270,6 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
               onClick={() => {
                 setRegion(r);
                 if (r === "PSA_JP") setItemType("TRADING_CARD");
-                setQuantities({});
               }}
               className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                 region === r
@@ -352,10 +290,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
             {(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).map((it) => (
               <button
                 key={it}
-                onClick={() => {
-                  setItemType(it);
-                  setQuantities({});
-                }}
+                onClick={() => setItemType(it)}
                 className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                   itemType === it
                     ? "border-brand-500 bg-brand-50 text-brand-700"
@@ -370,57 +305,35 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, cu
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h3 className="font-bold text-gray-800">サービスレベル・枚数</h3>
-        <p className="text-xs text-gray-500">
-          複数のサービスレベルにまたがって枚数を入力できます（例: レギュラー3枚＋エクスプレス2枚）。
-        </p>
-        {tierRows.length > 0 ? (
-          <div className="divide-y divide-gray-100">
-            {tierRows.map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-gray-900">{row.label}</p>
-                  <p className="text-xs text-gray-500">
-                    {formatMoney(row.pricePerCard, region)} / 枚・申告上限{" "}
-                    {row.maxDeclaredValue === null ? "なし" : formatMoneyIn(row.maxDeclaredValue, "JPY")}
-                  </p>
-                </div>
-                <input
-                  type="number"
-                  min={0}
-                  max={500}
-                  placeholder="0"
-                  value={quantities[row.id] || ""}
-                  onChange={(e) => setQty(row.id, Number(e.target.value))}
-                  className="w-24 shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500">このリージョンの料金が未設定です。</p>
-        )}
+        <h3 className="font-bold text-gray-800">代理入力数</h3>
+        <p className="text-xs text-gray-500">同一カードは1としてカウントしてください。</p>
+        <input
+          type="number"
+          min={1}
+          max={500}
+          placeholder="例: 5"
+          value={agencyQuantity || ""}
+          onChange={(e) => setAgencyQuantity(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
+          className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
+        />
 
-        {lines.length > 0 && (
+        {agencyQuantity > 0 && (
           <div className="rounded-lg bg-gray-50 p-4 space-y-1 text-sm">
             <div className="flex justify-between text-gray-700">
-              <span>合計枚数</span>
-              <span>{cardCount}枚</span>
+              <span>代理入力数 {agencyQuantity} 点 × 代理入力料</span>
+              <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
             </div>
             <div className="flex justify-between text-gray-700">
-              <span>鑑定料</span>
-              <span>{formatMoney(psaFeeTotal, region)}</span>
+              <span>事務手数料</span>
+              <span>{formatMoneyIn(handlingFeeTotal, "JPY")}</span>
             </div>
-            <div className="flex justify-between text-gray-700">
-              <span>消費税</span>
-              <span>{formatMoney(taxAmount, region)}</span>
-            </div>
+            <p className="text-xs text-gray-500">※ 消費税は全て内税です。</p>
             <div className="flex justify-between font-bold text-gray-900 pt-1 border-t border-gray-200">
-              <span>先払い概算</span>
-              <span>{formatMoney(prepaidAmount, region)}</span>
+              <span>合計金額</span>
+              <span>{formatMoneyIn(prepaidAmount, "JPY")}</span>
             </div>
             <p className="text-xs text-gray-500 pt-1">
-              代理入力料金・送料・保険料・事務手数料はカード明細の確定後に別途精算します。
+              鑑定料は、代理入力完了後にカード内容に応じて別途メールにてご請求します。
             </p>
           </div>
         )}

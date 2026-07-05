@@ -94,7 +94,9 @@ enum ItemType {
 }
 
 // 動的サービスタイア（管理画面でCRUD可能）のカテゴリ。ADR-0025
+// TRADING_CARDはADR-0026で追加（既存ServicePriceの固定enum方式から移行。ServicePrice自体は既存データ保持のため残置）
 enum CustomServiceCategory {
+  TRADING_CARD
   UNOPENED_PACK
   COMIC_MAGAZINE
   AUTOGRAPH
@@ -526,6 +528,8 @@ model Upcharge {
 
 // ===== SERVICE PRICES (サービス料金設定) =====
 
+// 旧トレーディングカード料金（固定enum方式）。ADR-0026でCustomServicePrice(category=TRADING_CARD)へ移行済み。
+// 新規のアプリロジックからは参照されない。過去データ保持・移行元データとして残置（削除しない）。
 model ServicePrice {
   id               String        @id @default(cuid())
   serviceLevel     ServiceLevel
@@ -542,8 +546,8 @@ model ServicePrice {
   @@map("service_prices")
 }
 
-// 動的サービスタイア（管理画面で自由に追加・編集・削除可能）。未開封パック/コミック・マガジン/オートグラフの
-// 名称・価格・原価・申告上限を管理する。トレーディングカードは既存ServicePrice(固定enum)のまま。ADR-0025
+// 動的サービスタイア（管理画面で自由に追加・編集・削除可能）。トレーディングカード/未開封パック/コミック・マガジン/
+// オートグラフの名称・価格・原価・申告上限を一元管理する。ADR-0025 / ADR-0026（TRADING_CARD追加）
 model CustomServicePrice {
   id               String                @id @default(cuid())
   category         CustomServiceCategory

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import { ensureTradingCardCustomPrices } from "@/actions/pricing";
 import StoreInputForm from "./StoreInputForm";
 
 const REGION_LABELS: Record<string, string> = {
@@ -58,18 +59,13 @@ export default async function StoreRequestDetailPage({
 
   if (!app || app.source !== "STORE") notFound();
 
-  const servicePrices = await prisma.servicePrice.findMany({
-    where: { region: app.region, itemType: app.itemType, isActive: true },
-    orderBy: { pricePerCard: "asc" },
+  await ensureTradingCardCustomPrices(); // 旧ServicePrice→CustomServicePrice(category=TRADING_CARD)の初回移行。ADR-0026
+
+  // 動的サービスタイア（トレカ含む全itemType共通）。ADR-0025/0026
+  const customServicePrices = await prisma.customServicePrice.findMany({
+    where: { region: app.region, category: app.itemType, isActive: true },
+    orderBy: { sortOrder: "asc" },
   });
-  // 非トレカ（未開封パック/コミック・マガジン）の動的サービスタイア。ADR-0025
-  const customServicePrices =
-    app.itemType !== "TRADING_CARD"
-      ? await prisma.customServicePrice.findMany({
-          where: { region: app.region, category: app.itemType, isActive: true },
-          orderBy: { sortOrder: "asc" },
-        })
-      : [];
   const autographPricing =
     app.region === "PSA_US" && app.itemType === "TRADING_CARD"
       ? await prisma.customServicePrice.findMany({
@@ -166,7 +162,6 @@ export default async function StoreRequestDetailPage({
           applicationId={app.id}
           region={app.region}
           itemType={app.itemType}
-          servicePrices={servicePrices}
           customServicePrices={customServicePrices}
           autographPricing={autographPricing}
           masterNames={masterNames}

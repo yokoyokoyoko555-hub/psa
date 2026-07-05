@@ -9,7 +9,7 @@ import { chargeOffSession } from "@/lib/stripe";
 import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
 import { formatMoney, formatMoneyIn, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
-import { CardStatus, ServiceLevel } from "@prisma/client";
+import { CardStatus } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
@@ -351,15 +351,14 @@ const storeDraftCardSchema = z.object({
 
 const saveStoreDraftSchema = z.object({
   applicationId: z.string(),
-  serviceLevel: z.nativeEnum(ServiceLevel).optional(), // TRADING_CARDの場合
-  customServiceLevelId: z.string().optional(), // 非TRADING_CARDの場合。ADR-0025
+  customServiceLevelId: z.string().optional(), // 選択したCustomServicePrice.id（category=itemType）。ADR-0025/0026
   cards: z.array(storeDraftCardSchema).max(200).default([]),
 });
 
 export type StoreInputDraft = z.infer<typeof saveStoreDraftSchema>;
 
 /**
- * 代理入力（当社入力）の途中内容を一時保存する。Application.draftData に { serviceLevel, cards } を格納。
+ * 代理入力（当社入力）の途中内容を一時保存する。Application.draftData に { customServiceLevelId, cards } を格納。
  * 確定は completeStoreApplication。DRAFT の STORE 申込のみ。
  */
 export async function saveStoreInputDraft(
@@ -379,7 +378,6 @@ export async function saveStoreInputDraft(
     where: { id: app.id },
     data: {
       draftData: {
-        serviceLevel: parsed.data.serviceLevel,
         customServiceLevelId: parsed.data.customServiceLevelId,
         cards: parsed.data.cards,
       },
@@ -390,8 +388,7 @@ export async function saveStoreInputDraft(
 
 const completeStoreSchema = z.object({
   applicationId: z.string(),
-  serviceLevel: z.nativeEnum(ServiceLevel).optional(), // TRADING_CARDの場合
-  customServiceLevelId: z.string().optional(), // 非TRADING_CARDの場合。ADR-0025
+  customServiceLevelId: z.string().min(1), // 選択したCustomServicePrice.id（category=itemType）。全itemTypeで必須。ADR-0025/0026
   cards: z.array(storeCardSchema).min(1).max(200),
 });
 
@@ -415,31 +412,15 @@ export async function completeStoreApplication(
     return { success: false, error: "対応可能な代理申込ではありません" };
   }
 
-  // トレカ=既存ServicePrice / それ以外=CustomServicePrice。ADR-0025
-  let maxDeclaredValue: number | null = null;
-  let unitPricePerCard = 0;
-  let unitCost = 0;
-  let customServiceLevelName: string | null = null;
-  if (app.itemType === "TRADING_CARD") {
-    if (!parsed.data.serviceLevel) return { success: false, error: "サービスレベルを選択してください" };
-    const servicePrice = await prisma.servicePrice.findUnique({
-      where: { serviceLevel_region_itemType: { serviceLevel: parsed.data.serviceLevel, region: app.region, itemType: app.itemType } },
-    });
-    if (!servicePrice) return { success: false, error: "サービスレベルが見つかりません" };
-    maxDeclaredValue = servicePrice.maxDeclaredValue;
-    unitPricePerCard = servicePrice.pricePerCard;
-    unitCost = servicePrice.cost;
-  } else {
-    if (!parsed.data.customServiceLevelId) return { success: false, error: "サービスを選択してください" };
-    const customPrice = await prisma.customServicePrice.findFirst({
-      where: { id: parsed.data.customServiceLevelId, category: app.itemType, region: app.region, isActive: true },
-    });
-    if (!customPrice) return { success: false, error: "サービスが見つかりません" };
-    maxDeclaredValue = customPrice.maxDeclaredValue;
-    unitPricePerCard = customPrice.pricePerCard;
-    unitCost = customPrice.cost;
-    customServiceLevelName = customPrice.name;
-  }
+  // 全itemType（トレカ含む）がCustomServicePriceを参照する。ADR-0025/0026
+  const customPrice = await prisma.customServicePrice.findFirst({
+    where: { id: parsed.data.customServiceLevelId, category: app.itemType, region: app.region, isActive: true },
+  });
+  if (!customPrice) return { success: false, error: "サービスが見つかりません" };
+  const maxDeclaredValue = customPrice.maxDeclaredValue;
+  const unitPricePerCard = customPrice.pricePerCard;
+  const unitCost = customPrice.cost;
+  const customServiceLevelName = customPrice.name;
 
   if (maxDeclaredValue !== null) {
     const over = parsed.data.cards.find((c) => c.declaredValue > maxDeclaredValue!);
@@ -483,10 +464,9 @@ export async function completeStoreApplication(
   // 当社入力は手数料あり。代理入力料金は「種類数 × 手数料」（同一カードは何枚でも1種）。
   // 種類数 = 入力されたカード行数（行ごとに別カードを想定）。[ADR-0020 / PROXY_PREPAY 段階1]
   const fees = await calculateFees({
-    serviceLevel: app.itemType === "TRADING_CARD" ? parsed.data.serviceLevel! : "CUSTOM",
     region: app.region,
     itemType: app.itemType,
-    customServiceLevelId: app.itemType !== "TRADING_CARD" ? parsed.data.customServiceLevelId : undefined,
+    customServiceLevelId: parsed.data.customServiceLevelId,
     returnMethod: app.returnMethod,
     cardCount,
     totalDeclaredValue,
@@ -500,9 +480,9 @@ export async function completeStoreApplication(
     await tx.application.update({
       where: { id: app.id },
       data: {
-        serviceLevel: app.itemType === "TRADING_CARD" ? parsed.data.serviceLevel! : "CUSTOM",
-        customServiceLevelId: app.itemType !== "TRADING_CARD" ? parsed.data.customServiceLevelId : null,
-        customServiceLevelName: app.itemType !== "TRADING_CARD" ? customServiceLevelName : null,
+        serviceLevel: "CUSTOM",
+        customServiceLevelId: parsed.data.customServiceLevelId,
+        customServiceLevelName,
         status: "SUBMITTED",
         submittedAt: new Date(),
         totalAmount: fees.totalAmount,
@@ -578,7 +558,6 @@ export async function completeStoreApplication(
     targetType: "applications",
     targetId: app.id,
     after: {
-      serviceLevel: parsed.data.serviceLevel,
       customServiceLevelId: parsed.data.customServiceLevelId,
       totalAmount: fees.totalAmount,
     },

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
-import ServicePriceForm from "./ServicePriceForm";
+import { ensureTradingCardCustomPrices } from "@/actions/pricing";
 import ShippingInsuranceForm from "./ShippingInsuranceForm";
 import HandlingFeeForm from "./HandlingFeeForm";
 import CampaignForm from "./CampaignForm";
@@ -17,8 +17,9 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 };
 
 export default async function SettingsPage() {
-  const [servicePrices, siRates, settings, campaigns, customServicePrices] = await Promise.all([
-    prisma.servicePrice.findMany({ orderBy: { pricePerCard: "asc" } }),
+  await ensureTradingCardCustomPrices(); // 旧ServicePrice→CustomServicePrice(category=TRADING_CARD)の初回移行。ADR-0026
+
+  const [siRates, settings, campaigns, customServicePrices] = await Promise.all([
     prisma.shippingInsuranceRate.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.pricingSetting.findMany(),
     prisma.campaign.findMany({ orderBy: { startAt: "desc" } }),
@@ -30,11 +31,10 @@ export default async function SettingsPage() {
 
   // PSA日本はトレーディングカードのみ（アイテム種別のネストなし＝従来通り）。PSA USのみ複数アイテム種別。
   const regions = [
-    { region: "PSA_JP" as const, title: "PSA 日本（円）", unit: "円", itemTypes: ["TRADING_CARD"] as const },
+    { region: "PSA_JP" as const, title: "PSA 日本（円）", itemTypes: ["TRADING_CARD"] as const },
     {
       region: "PSA_US" as const,
       title: "PSA US（USD）",
-      unit: "$",
       itemTypes: ["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as const,
     },
   ];
@@ -43,7 +43,7 @@ export default async function SettingsPage() {
     <div className="p-8 max-w-6xl space-y-4">
       <h1 className="text-2xl font-bold text-gray-900">料金設定</h1>
 
-      {regions.map(({ region, title, unit, itemTypes }) => (
+      {regions.map(({ region, title, itemTypes }) => (
         <details key={region} className={groupCls}>
           <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">{title}</summary>
           <div className="mt-4 space-y-4">
@@ -53,11 +53,7 @@ export default async function SettingsPage() {
                 <div className="space-y-4">
                   <div className={subCls}>
                     <h3 className="font-bold text-gray-800 mb-3">サービス料金（鑑定料・原価・申告上限）</h3>
-                    {itemType === "TRADING_CARD" ? (
-                      <ServicePriceForm servicePrices={servicePrices} region={region} itemType={itemType} unit={unit} />
-                    ) : (
-                      <CustomServicePriceForm items={customServicePrices} category={itemType} region={region} />
-                    )}
+                    <CustomServicePriceForm items={customServicePrices} category={itemType} region={region} />
                   </div>
                   <div className={subCls}>
                     <h3 className="font-bold text-gray-800 mb-3">代理入力料金・事務手数料（一律）</h3>

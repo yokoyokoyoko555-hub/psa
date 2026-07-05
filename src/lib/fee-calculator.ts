@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { ServiceLevel, ReturnMethod, ServiceRegion, ItemType } from "@prisma/client";
+import { ReturnMethod, ServiceRegion, ItemType } from "@prisma/client";
 import { roundMoney } from "./currency";
 
 const TAX_RATE = 0.1;
@@ -109,12 +109,11 @@ async function calcShippingInsuranceLegacy(params: {
 }
 
 export async function calculateFees(params: {
-  serviceLevel: ServiceLevel;
   region: ServiceRegion;
   /** 鑑定対象アイテム種別（PSA_USのみ複数）。ADR-0023 */
   itemType: ItemType;
-  /** itemType!=="TRADING_CARD" のとき必須。選択したCustomServicePrice.id。ADR-0025 */
-  customServiceLevelId?: string;
+  /** 選択したCustomServicePrice.id（category=itemType）。全itemTypeで必須。ADR-0025/0026 */
+  customServiceLevelId: string;
   returnMethod: ReturnMethod;
   cardCount: number;
   totalDeclaredValue: number;
@@ -133,33 +132,20 @@ export async function calculateFees(params: {
   /** 新規(初回)限定キャンペーンの判定に使用（任意） */
   customerId?: string;
 }): Promise<FeeBreakdown> {
-  let pricePerCard: number;
-  let perCardCost: number;
-
-  if (params.itemType === "TRADING_CARD") {
-    const servicePrice = await prisma.servicePrice.findUnique({
-      where: { serviceLevel_region_itemType: { serviceLevel: params.serviceLevel, region: params.region, itemType: params.itemType } },
-    });
-    if (!servicePrice) throw new Error("Service price not found");
-    pricePerCard = servicePrice.pricePerCard;
-    // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替
-    perCardCost =
-      servicePrice.cost > 0 ? servicePrice.cost : roundMoney(servicePrice.pricePerCard * PSA_COST_RATE, params.region);
-  } else {
-    if (!params.customServiceLevelId) throw new Error("customServiceLevelId is required for non-TRADING_CARD itemType");
-    const customPrice = await prisma.customServicePrice.findFirst({
-      where: {
-        id: params.customServiceLevelId,
-        category: params.itemType as "UNOPENED_PACK" | "COMIC_MAGAZINE",
-        region: params.region,
-        isActive: true,
-      },
-    });
-    if (!customPrice) throw new Error("Custom service price not found");
-    pricePerCard = customPrice.pricePerCard;
-    perCardCost =
-      customPrice.cost > 0 ? customPrice.cost : roundMoney(customPrice.pricePerCard * PSA_COST_RATE, params.region);
-  }
+  // トレーディングカードを含む全itemTypeがCustomServicePriceを参照する（ADR-0026）。
+  const customPrice = await prisma.customServicePrice.findFirst({
+    where: {
+      id: params.customServiceLevelId,
+      category: params.itemType as "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE",
+      region: params.region,
+      isActive: true,
+    },
+  });
+  if (!customPrice) throw new Error("Custom service price not found");
+  const pricePerCard = customPrice.pricePerCard;
+  // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替
+  const perCardCost =
+    customPrice.cost > 0 ? customPrice.cost : roundMoney(customPrice.pricePerCard * PSA_COST_RATE, params.region);
   const psaFeeTotal = pricePerCard * params.cardCount;
   const psaCostTotal = perCardCost * params.cardCount;
 
