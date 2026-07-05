@@ -23,8 +23,6 @@ interface CardRow {
   declaredValue: number;
   quantity: number;
   notes: string;
-  autographRequested: boolean;
-  autographCustomServiceLevelId: string | null;
 }
 
 function newRow(): CardRow {
@@ -37,8 +35,6 @@ function newRow(): CardRow {
     declaredValue: 0,
     quantity: 1,
     notes: "",
-    autographRequested: false,
-    autographCustomServiceLevelId: null,
   };
 }
 
@@ -54,9 +50,6 @@ function toCardRow(raw: unknown): CardRow {
     declaredValue: typeof r.declaredValue === "number" ? r.declaredValue : 0,
     quantity: typeof r.quantity === "number" && r.quantity >= 1 ? r.quantity : 1,
     notes: typeof r.notes === "string" ? r.notes : "",
-    autographRequested: typeof r.autographRequested === "boolean" ? r.autographRequested : false,
-    autographCustomServiceLevelId:
-      typeof r.autographCustomServiceLevelId === "string" ? r.autographCustomServiceLevelId : null,
   };
 }
 
@@ -89,11 +82,12 @@ export default function StoreInputForm({
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  const selectedCustomTier = customServicePrices.find((p) => p.id === customServiceLevelId);
-  const hasSelectedService = !!customServiceLevelId;
   const isAutographEligible = region === "PSA_US" && itemType === "TRADING_CARD";
   const activeAutographTiers = isAutographEligible ? autographPricing.filter((a) => a.isActive) : [];
   const autographActive = activeAutographTiers.length > 0;
+  // 選択中タイアは通常サービス・デュアルサービスどちらもありうるため、両リストから検索する。
+  const selectedCustomTier = [...customServicePrices, ...activeAutographTiers].find((p) => p.id === customServiceLevelId);
+  const hasSelectedService = !!customServiceLevelId;
 
   async function handleSaveDraft() {
     setError("");
@@ -110,8 +104,6 @@ export default function StoreInputForm({
         declaredValue: c.declaredValue,
         quantity: c.quantity,
         notes: c.notes,
-        autographRequested: c.autographRequested,
-        autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? undefined,
       })),
     });
     setSavingDraft(false);
@@ -149,8 +141,6 @@ export default function StoreInputForm({
         declaredValue: c.declaredValue,
         quantity: c.quantity,
         notes: c.notes || undefined,
-        autographRequested: c.autographRequested,
-        autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? undefined,
       })),
     });
     setLoading(false);
@@ -190,7 +180,22 @@ export default function StoreInputForm({
               {p.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(p.maxDeclaredValue, region)}` : ""}
             </option>
           ))}
+          {autographActive && (
+            <optgroup label="デュアルサービス（カードとサインの鑑定）">
+              {activeAutographTiers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
+                  {t.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(t.maxDeclaredValue, region)}` : ""}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
+        {autographActive && (
+          <p className="text-xs text-gray-500 mt-2">
+            デュアルサービスは通常サービスの代わりに選択します（追加料金ではありません）。
+          </p>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
@@ -268,44 +273,6 @@ export default function StoreInputForm({
                 onChange={(e) => update(i, "quantity", parseInt(e.target.value) || 1)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
               />
-              {autographActive && activeAutographTiers.length === 1 && (
-                <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={c.autographRequested}
-                    onChange={(e) => {
-                      update(i, "autographRequested", e.target.checked);
-                      update(
-                        i,
-                        "autographCustomServiceLevelId",
-                        e.target.checked ? activeAutographTiers[0].id : null
-                      );
-                    }}
-                  />
-                  オートグラフ（デュアルサービス）認証希望（{formatMoney(activeAutographTiers[0].pricePerCard, region)}/枚）
-                </label>
-              )}
-              {autographActive && activeAutographTiers.length > 1 && (
-                <div className="sm:col-span-2">
-                  <label className="block text-xs text-gray-500 mb-1">オートグラフ（デュアルサービス）認証</label>
-                  <select
-                    className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 w-full"
-                    value={c.autographRequested ? c.autographCustomServiceLevelId ?? "" : ""}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      update(i, "autographRequested", !!id);
-                      update(i, "autographCustomServiceLevelId", id || null);
-                    }}
-                  >
-                    <option value="">希望しない</option>
-                    {activeAutographTiers.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
           </div>
         ))}

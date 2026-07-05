@@ -9,8 +9,10 @@ const PSA_COST_RATE = 0.8; // 代理店価格: 定価の80%
 export interface FeeBreakdown {
   psaFeeTotal: number;
   psaCostTotal: number;
-  autographFeeTotal: number; // オートグラフ（デュアルサービス）追加料金合計。割引対象外。ADR-0023
-  autographCostTotal: number; // オートグラフ原価合計（返り値のみ・永続化なし）。ADR-0025
+  /** 常に0固定（互換のため残置）。デュアルサービスは通常サービスレベルの代わりに選ぶ形式に変更し、
+   * 追加料金としては加算しない（psaFeeTotal自体がデュアルサービスタイアの価格になる）。ADR-0029 */
+  autographFeeTotal: number;
+  autographCostTotal: number;
   agencyFeeTotal: number; // 代理入力料金（STORE時のみ）
   shippingFee: number; // 「送料・保険」合算額をここに入れる
   insuranceFee: number; // 0（合算のため）
@@ -125,19 +127,20 @@ export async function calculateFees(params: {
    * 未指定なら従来どおり cardCount（枚数）ベース。後方互換のため任意。[ADR-0020 / PROXY_PREPAY]
    */
   agencyCardTypeCount?: number;
-  /**
-   * オートグラフ（デュアルサービス）の選択内訳（タイアごとの枚数）。PSA_US×TRADING_CARDのみ意味を持つ。
-   * 複数タイアに対応。ADR-0025
-   */
-  autographSelections?: { customServiceLevelId: string; quantity: number }[];
   /** 新規(初回)限定キャンペーンの判定に使用（任意） */
   customerId?: string;
 }): Promise<FeeBreakdown> {
   // トレーディングカードを含む全itemTypeがCustomServicePriceを参照する（ADR-0026）。
+  // PSA_US×TRADING_CARDのみ、通常タイア(category=itemType)に加えてデュアルサービスタイア
+  // (category=AUTOGRAPH)も選択可能（通常サービスの代わりに選ぶ形式・加算はしない）。ADR-0029
+  const categoryCandidates: ("TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE" | "AUTOGRAPH")[] =
+    params.itemType === "TRADING_CARD" && params.region === "PSA_US"
+      ? ["TRADING_CARD", "AUTOGRAPH"]
+      : [params.itemType];
   const customPrice = await prisma.customServicePrice.findFirst({
     where: {
       id: params.customServiceLevelId,
-      category: params.itemType as "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE",
+      category: { in: categoryCandidates },
       region: params.region,
       isActive: true,
     },
@@ -154,22 +157,9 @@ export async function calculateFees(params: {
     where: { id: pricingSettingId(params.region, params.itemType) },
   });
 
-  // オートグラフ（デュアルサービス）追加料金: PSA_US×TRADING_CARDのみ、選択タイアごとの単価 × 枚数を合算
-  let autographFeeTotal = 0;
-  let autographCostTotal = 0;
-  if (params.itemType === "TRADING_CARD" && params.region === "PSA_US" && params.autographSelections?.length) {
-    const ids = params.autographSelections.map((s) => s.customServiceLevelId);
-    const rows = await prisma.customServicePrice.findMany({
-      where: { id: { in: ids }, category: "AUTOGRAPH", region: params.region, isActive: true },
-    });
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    for (const sel of params.autographSelections) {
-      const row = byId.get(sel.customServiceLevelId);
-      if (!row) continue; // 無効化・削除済みタイアは防御的に無視
-      autographFeeTotal += row.pricePerCard * sel.quantity;
-      autographCostTotal += row.cost * sel.quantity;
-    }
-  }
+  // デュアルサービスは通常サービスの代わりに選ぶ形式のため、追加料金は発生しない（常に0）。ADR-0029
+  const autographFeeTotal = 0;
+  const autographCostTotal = 0;
 
   // 代理入力料金: リージョン別の一律額 × 種類数（同一カードは何枚でも1種）。
   // 種類数(agencyCardTypeCount)未指定なら従来どおり枚数(cardCount)で算出（後方互換）。代理入力(STORE)時のみ。

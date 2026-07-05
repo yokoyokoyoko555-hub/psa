@@ -303,3 +303,15 @@
 - 影響: コード変更のみ（スキーマ変更なし）。既存の`PricingSetting`データは壊れたままだが、`id`ベースの参照に統一したことで実害はなくなった。ただし`region`/`itemType`カラムの値自体は、admin/settingsから該当リージョンの代理入力料金・事務手数料を一度保存するまで不正確なまま（表示上は影響しない）。
 - 教訓: 「idベースのlookupで十分な場合は、非主キー列（`region`/`itemType`など、db push時にデフォルト値で衝突しうる列）でfindFirstしない」。ADR-0023のインシデントは`db push`時の一過性の問題として片付けていたが、実際には**恒久的にデータが壊れたまま**残り得ることを見落としていた。
 
+## ADR-0029: デュアルサービス（オートグラフ）を「通常サービスの代わりに選ぶ」方式に変更（加算しない）
+
+- 日付: 2026-07-06 / 状態: Accepted（実装済）
+- 背景: ADR-0023〜0026では、デュアルサービス（カードとサインをまとめて鑑定するオプション）を通常のサービスレベルに**追加**する料金（`autographFeeTotal`を`psaFeeTotal`に加算）として実装していた。今回、デュアルサービスは通常サービスに追加するのではなく、**通常サービスの代わりに選ぶ**（完全に切り替える）方式に変更する要望があった。
+- 決定:
+  - **`fee-calculator.ts`**: `CustomServicePrice`のlookupを、PSA_US×TRADING_CARDに限り`category`を`[itemType, "AUTOGRAPH"]`のいずれかに拡張。顧客が選んだ`customServiceLevelId`が指すタイアが通常タイア(`category=TRADING_CARD`)かデュアルサービスタイア(`category=AUTOGRAPH`)かのどちらであっても、そのタイア1件の`pricePerCard`がそのまま`psaFeeTotal`になる（=デュアルサービスを選んだ場合、通常サービスの鑑定料は発生しない）。従来の`autographSelections`（タイアごとの枚数集計・加算計算）は削除し、`autographFeeTotal`/`autographCostTotal`は常に0固定（互換のため`FeeBreakdown`のフィールド自体は残置）。
+  - **`application.ts`/`admin.ts`**: 選択された`customPrice.category`から`isDualService`を判定し、`Card.autographRequested`/`autographCustomServiceLevelId`/`autographCustomServiceLevelName`は記録用に引き続き設定するが、`autographFee`/`autographCost`は常に0（実際の料金は`psaFee`/`psaCost`に含まれているため、二重計上を避ける）。カードごとの個別オートグラフ選択（`cardSchema`/`storeCardSchema`の`autographRequested`/`autographCustomServiceLevelId`フィールド）は不要になったため削除。
+  - **`ApplyForm.tsx`**: 顧客の「サービス選択」ステップに「鑑定の種類」として『通常サービス』『デュアルサービス（カードとサインの鑑定）』のモード切替を追加（PSA_US×TRADING_CARDかつデュアルサービスタイアが設定されている場合のみ表示）。どちらのモードで選んだタイアも同じ`customServiceLevelId`に書き込まれる。カード情報入力フォームからは（ADR-0026に続き）オートグラフ選択欄は存在しない。
+  - **`StoreInputForm.tsx`**: スタッフのサービスレベル`<select>`に、通常タイアの選択肢に加えて「デュアルサービス」の`<optgroup>`を追加し、1つの`<select>`から通常/デュアルサービスいずれかを選ぶ形に統一。カードごとの個別オートグラフ選択欄は削除。
+- 影響: `Card.autographFee`/`autographCost`は今後常に0で記録される（過去データはそのまま）。`Application.autographFeeTotal`も同様に常に0。`calculateFees`のシグネチャから`autographSelections`パラメータを削除（呼び出し元は`application.ts`/`admin.ts`のみのため影響範囲は限定的）。
+- 未対応: 為替レート・合計金額の通貨統一ロジックは引き続き未対応（ADR-0025〜0027から継続）。
+

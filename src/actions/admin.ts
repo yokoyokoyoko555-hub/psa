@@ -330,10 +330,6 @@ const storeCardSchema = z.object({
   declaredValue: z.number().int().min(1),
   quantity: z.number().int().min(1).max(100),
   notes: z.string().max(1000).optional(),
-  // オートグラフ（デュアルサービス）希望。スタッフが実物確認して選択。PSA_US×TRADING_CARD以外は保存時にfalseへ補正。ADR-0023
-  autographRequested: z.boolean().default(false),
-  // 希望するオートグラフタイア（CustomServicePrice参照）。有効タイアが1件のみの場合は省略可。ADR-0025
-  autographCustomServiceLevelId: z.string().optional(),
 });
 
 // 代理入力の一時保存（下書き）。確定前の緩いバリデーション（空欄可）。
@@ -346,8 +342,6 @@ const storeDraftCardSchema = z.object({
   declaredValue: z.number().int().min(0).default(0),
   quantity: z.number().int().min(1).max(100).default(1),
   notes: z.string().max(1000).default(""),
-  autographRequested: z.boolean().default(false),
-  autographCustomServiceLevelId: z.string().optional(),
 });
 
 const saveStoreDraftSchema = z.object({
@@ -414,10 +408,22 @@ export async function completeStoreApplication(
   }
 
   // 全itemType（トレカ含む）がCustomServicePriceを参照する。ADR-0025/0026
+  // PSA_US×TRADING_CARDのみ、通常タイアに加えデュアルサービス(category=AUTOGRAPH)タイアも選択可能
+  // （通常サービスの代わりに選ぶ形式・追加料金にはしない）。ADR-0029
+  const isAutographEligible = app.region === "PSA_US" && app.itemType === "TRADING_CARD";
+  const categoryCandidates: ("TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE" | "AUTOGRAPH")[] = isAutographEligible
+    ? [app.itemType, "AUTOGRAPH"]
+    : [app.itemType];
   const customPrice = await prisma.customServicePrice.findFirst({
-    where: { id: parsed.data.customServiceLevelId, category: app.itemType, region: app.region, isActive: true },
+    where: {
+      id: parsed.data.customServiceLevelId,
+      category: { in: categoryCandidates },
+      region: app.region,
+      isActive: true,
+    },
   });
   if (!customPrice) return { success: false, error: "サービスが見つかりません" };
+  const isDualService = customPrice.category === "AUTOGRAPH";
   const maxDeclaredValue = customPrice.maxDeclaredValue;
   const unitPricePerCard = customPrice.pricePerCard;
   const unitCost = customPrice.cost;
@@ -433,34 +439,9 @@ export async function completeStoreApplication(
     }
   }
 
-  // オートグラフ対象外（PSA_US×TRADING_CARD以外）は保存時にfalseへ補正
-  const isAutographEligible = app.region === "PSA_US" && app.itemType === "TRADING_CARD";
-  const activeAutographTiers = isAutographEligible
-    ? await prisma.customServicePrice.findMany({ where: { category: "AUTOGRAPH", region: app.region, isActive: true } })
-    : [];
-  const autographById = new Map(activeAutographTiers.map((t) => [t.id, t]));
-  const soleAutographTier = activeAutographTiers.length === 1 ? activeAutographTiers[0] : null;
-
-  const cardsInput = parsed.data.cards.map((c) => {
-    if (!isAutographEligible || !c.autographRequested) {
-      return { ...c, autographRequested: false, resolvedAutographId: null as string | null };
-    }
-    const resolvedId = c.autographCustomServiceLevelId ?? soleAutographTier?.id ?? null;
-    if (!resolvedId || !autographById.has(resolvedId)) {
-      return { ...c, autographRequested: false, resolvedAutographId: null as string | null };
-    }
-    return { ...c, resolvedAutographId: resolvedId };
-  });
-
+  const cardsInput = parsed.data.cards;
   const totalDeclaredValue = cardsInput.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
   const cardCount = cardsInput.reduce((s, c) => s + c.quantity, 0);
-
-  const autographSelectionMap = new Map<string, number>();
-  for (const c of cardsInput) {
-    if (!c.resolvedAutographId) continue;
-    autographSelectionMap.set(c.resolvedAutographId, (autographSelectionMap.get(c.resolvedAutographId) ?? 0) + c.quantity);
-  }
-  const autographSelections = Array.from(autographSelectionMap, ([customServiceLevelId, quantity]) => ({ customServiceLevelId, quantity }));
 
   // 当社入力は手数料あり。代理入力料金は「種類数 × 手数料」（同一カードは何枚でも1種）。
   // 種類数 = 入力されたカード行数（行ごとに別カードを想定）。[ADR-0020 / PROXY_PREPAY 段階1]
@@ -473,7 +454,6 @@ export async function completeStoreApplication(
     totalDeclaredValue,
     applyAgencyFee: true,
     agencyCardTypeCount: parsed.data.cards.length,
-    autographSelections,
     customerId: app.customerId,
   });
 
@@ -509,9 +489,6 @@ export async function completeStoreApplication(
       const perCardCost = unitCost > 0 ? unitCost : roundMoney(unitPricePerCard * 0.8, app.region);
       const psaCost = perCardCost * c.quantity;
       const agencyFee = proxyFeePerCard * c.quantity;
-      const autographTier = c.resolvedAutographId ? autographById.get(c.resolvedAutographId) : null;
-      const autographFee = autographTier ? autographTier.pricePerCard * c.quantity : 0;
-      const autographCost = autographTier ? autographTier.cost * c.quantity : 0;
       await tx.card.create({
         data: {
           customerId: app.customerId,
@@ -527,11 +504,12 @@ export async function completeStoreApplication(
           psaFee,
           psaCost,
           agencyFee,
-          autographRequested: !!autographTier,
-          autographFee,
-          autographCost,
-          autographCustomServiceLevelId: autographTier?.id ?? null,
-          autographCustomServiceLevelName: autographTier?.name ?? null,
+          // デュアルサービスは通常サービスの代わりに選ぶ形式のため追加料金は発生しない（0固定）。ADR-0029
+          autographRequested: isDualService,
+          autographFee: 0,
+          autographCost: 0,
+          autographCustomServiceLevelId: isDualService ? customPrice.id : null,
+          autographCustomServiceLevelName: isDualService ? customPrice.name : null,
           status: "SUBMITTED_BY_CUSTOMER",
           statusHistory: { create: { status: "SUBMITTED_BY_CUSTOMER", changedBy: user.id } },
         },

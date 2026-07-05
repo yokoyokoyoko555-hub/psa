@@ -28,11 +28,8 @@ export type InitialDraft = {
     language?: string;
     quantity: number;
     declaredValue: number;
-    autographRequested?: boolean;
-    autographCustomServiceLevelId?: string | null;
   }[];
   returnSel: string;
-  // デュアルサービス（オートグラフ）は下書き復元時、先頭カードの値から復元する（全カード共通の選択のため）。
 };
 
 const DRAFT_KEY = "psa-apply-draft";
@@ -153,19 +150,20 @@ export default function ApplyForm({
 
   const [region, setRegion] = useState<ServiceRegion>(initialDraft?.region ?? "PSA_JP");
   const [itemType, setItemType] = useState<ItemType>(initialDraft?.itemType ?? "TRADING_CARD");
-  // 選択したCustomServicePrice.id（category=itemType）。全itemTypeで共通。ADR-0025/0026
+  // 選択したCustomServicePrice.id。通常サービス(category=itemType)またはデュアルサービス
+  // (category=AUTOGRAPH)のいずれかを指す。デュアルサービスは通常サービスの代わりに選ぶもので、
+  // 加算はしない（完全に切り替え）。ADR-0025/0026/0029
   const [customServiceLevelId, setCustomServiceLevelId] = useState<string | null>(
     initialDraft?.customServiceLevelId ?? null
   );
+  // どちらのタイア一覧を表示するか（通常 / デュアルサービス）。
+  const [serviceMode, setServiceMode] = useState<"REGULAR" | "DUAL">(() => {
+    if (!initialDraft?.customServiceLevelId) return "REGULAR";
+    const tier = customServicePrices.find((p) => p.id === initialDraft.customServiceLevelId);
+    return tier?.category === "AUTOGRAPH" ? "DUAL" : "REGULAR";
+  });
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>(
     initialDraft?.returnMethod ?? "SHIPPING"
-  );
-  // デュアルサービス（オートグラフ）: サービス選択ステップで一度だけ選び、申込内の全カードに一律適用する。
-  const [autographRequested, setAutographRequested] = useState<boolean>(
-    initialDraft?.cards?.[0]?.autographRequested ?? false
-  );
-  const [autographCustomServiceLevelId, setAutographCustomServiceLevelId] = useState<string | null>(
-    initialDraft?.cards?.[0]?.autographCustomServiceLevelId ?? null
   );
 
   const [cards, setCards] = useState<CardItem[]>(
@@ -208,16 +206,19 @@ export default function ApplyForm({
   const customTierOptions = customServicePrices
     .filter((p) => p.region === region && p.category === itemType && p.isActive)
     .sort((a, b) => a.sortOrder - b.sortOrder);
-  const selectedCustomTier = customTierOptions.find((p) => p.id === customServiceLevelId);
-  const cap = selectedCustomTier?.maxDeclaredValue ?? null;
-  const hasSelectedService = !!customServiceLevelId;
-
-  // オートグラフ（デュアルサービス）: PSA_US×TRADING_CARDのみ提示。有効タイアが複数ならプルダウン、1件のみならチェックボックス。
+  // デュアルサービス（カードとサインの鑑定）: PSA_US×TRADING_CARDのみ提示。通常サービスの代わりに
+  // 選ぶ形式（加算しない・完全に切り替え）。ADR-0029
   const isAutographEligible = region === "PSA_US" && itemType === "TRADING_CARD";
   const activeAutographTiers = isAutographEligible
     ? customServicePrices.filter((p) => p.region === region && p.category === "AUTOGRAPH" && p.isActive)
     : [];
   const autographActive = activeAutographTiers.length > 0;
+  // 選択中タイアはカテゴリを問わずidで検索する（通常/デュアルサービスどちらもありうるため）。
+  const selectedCustomTier = customServicePrices.find((p) => p.id === customServiceLevelId);
+  const cap = selectedCustomTier?.maxDeclaredValue ?? null;
+  const hasSelectedService = !!customServiceLevelId;
+  const isDualServiceSelected = selectedCustomTier?.category === "AUTOGRAPH";
+  const tierOptionsToShow = serviceMode === "DUAL" ? activeAutographTiers : customTierOptions;
 
   function setDraftField<K extends keyof CardItem>(field: K, value: CardItem[K]) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -272,11 +273,6 @@ export default function ApplyForm({
 
   const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
   const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
-  // デュアルサービスは申込全体で一律選択（サービス選択ステップ）のため、選択中なら全カード枚数分を計上する。
-  const autographSelections =
-    autographRequested && autographCustomServiceLevelId
-      ? [{ customServiceLevelId: autographCustomServiceLevelId, quantity: cardCount }]
-      : [];
 
   // 料金はサーバー(calculateFees)と同じ計算で取得し、請求額とプレビューを一致させる
   const [fees, setFees] = useState<FeeBreakdown | null>(null);
@@ -289,18 +285,15 @@ export default function ApplyForm({
       returnMethod,
       cardCount,
       totalDeclaredValue,
-      autographSelections,
     }).then((f) => {
       if (!cancelled) setFees(f);
     });
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [region, itemType, customServiceLevelId, returnMethod, cardCount, totalDeclaredValue, JSON.stringify(autographSelections)]);
+  }, [region, itemType, customServiceLevelId, returnMethod, cardCount, totalDeclaredValue]);
 
   const psaFeeTotal = fees?.psaFeeTotal ?? 0;
-  const autographFeeTotal = fees?.autographFeeTotal ?? 0;
   const shippingInsuranceFee = (fees?.shippingFee ?? 0) + (fees?.insuranceFee ?? 0);
   const handlingFee = fees?.handlingFee ?? 0;
   const discountAmount = fees?.discountAmount ?? 0;
@@ -319,9 +312,8 @@ export default function ApplyForm({
       if (d.region) setRegion(d.region);
       if (d.itemType) setItemType(d.itemType);
       if (d.customServiceLevelId) setCustomServiceLevelId(d.customServiceLevelId);
+      if (d.serviceMode === "DUAL" || d.serviceMode === "REGULAR") setServiceMode(d.serviceMode);
       if (d.returnMethod) setReturnMethod(d.returnMethod);
-      if (typeof d.autographRequested === "boolean") setAutographRequested(d.autographRequested);
-      if (d.autographCustomServiceLevelId) setAutographCustomServiceLevelId(d.autographCustomServiceLevelId);
       if (Array.isArray(d.cards))
         setCards(
           d.cards.map((c: CardItem) => ({
@@ -411,8 +403,7 @@ export default function ApplyForm({
           region,
           itemType,
           customServiceLevelId,
-          autographRequested,
-          autographCustomServiceLevelId,
+          serviceMode,
           returnMethod,
           cards,
           step,
@@ -444,9 +435,6 @@ export default function ApplyForm({
           language: c.language,
           quantity: c.quantity,
           declaredValue: c.declaredValue,
-          // デュアルサービスは申込全体で一律選択。全カードに同じ選択を適用する。
-          autographRequested,
-          autographCustomServiceLevelId: autographCustomServiceLevelId ?? undefined,
         })),
       });
       if (res.success && res.draftId) setDraftId(res.draftId);
@@ -494,9 +482,6 @@ export default function ApplyForm({
           declaredValue: c.declaredValue,
           quantity: c.quantity,
           damageImageKeys: [],
-          // デュアルサービスは申込全体で一律選択。全カードに同じ選択を適用する。
-          autographRequested,
-          autographCustomServiceLevelId: autographCustomServiceLevelId ?? undefined,
         })),
         returnAddress:
           returnSel !== "registered" && selectedAddr
@@ -685,8 +670,7 @@ export default function ApplyForm({
                       setRegion(r);
                       if (r === "PSA_JP") setItemType("TRADING_CARD");
                       setCustomServiceLevelId(null);
-                      setAutographRequested(false);
-                      setAutographCustomServiceLevelId(null);
+                      setServiceMode("REGULAR");
                     }}
                     className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                       region === r
@@ -710,8 +694,7 @@ export default function ApplyForm({
                       onClick={() => {
                         setItemType(it);
                         setCustomServiceLevelId(null);
-                        setAutographRequested(false);
-                        setAutographCustomServiceLevelId(null);
+                        setServiceMode("REGULAR");
                       }}
                       className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                         itemType === it
@@ -728,65 +711,38 @@ export default function ApplyForm({
 
             {itemType === "TRADING_CARD" && autographActive && (
               <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-                <h2 className="font-bold text-gray-800">デュアルサービス（カードとサインの鑑定）</h2>
+                <h2 className="font-bold text-gray-800">鑑定の種類</h2>
                 <p className="text-xs text-gray-500">
-                  カードとサインをまとめて鑑定するオプションです。希望する場合は選択してください。
+                  デュアルサービスは通常サービスの代わりに、カードとサインをまとめて鑑定するオプションです（追加料金ではありません）。
                 </p>
-                {activeAutographTiers.length === 1 ? (
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={autographRequested}
-                      onChange={(e) => {
-                        setAutographRequested(e.target.checked);
-                        setAutographCustomServiceLevelId(e.target.checked ? activeAutographTiers[0].id : null);
-                      }}
-                    />
-                    <span className="text-sm text-gray-700">
-                      デュアルサービスを希望する（{formatMoney(activeAutographTiers[0].pricePerCard, region)}/枚・申告上限{" "}
-                      {activeAutographTiers[0].maxDeclaredValue === null
-                        ? "なし"
-                        : formatMoneyInt(activeAutographTiers[0].maxDeclaredValue, region)}
-                      ）
-                    </span>
-                  </label>
-                ) : (
-                  <>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={autographRequested}
-                        onChange={(e) => {
-                          setAutographRequested(e.target.checked);
-                          if (!e.target.checked) setAutographCustomServiceLevelId(null);
-                        }}
-                      />
-                      <span className="text-sm text-gray-700">デュアルサービスを希望する</span>
-                    </label>
-                    {autographRequested && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {activeAutographTiers.map((t) => (
-                          <button
-                            key={t.id}
-                            onClick={() => setAutographCustomServiceLevelId(t.id)}
-                            className={`border-2 rounded-xl p-4 text-left transition ${
-                              autographCustomServiceLevelId === t.id
-                                ? "border-brand-500 bg-brand-50"
-                                : "border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <p className="font-bold text-gray-900">{t.name}</p>
-                            <p className="text-brand-600 font-medium">{formatMoney(t.pricePerCard, region)}/枚</p>
-                            <p className="text-xs text-gray-500">
-                              申告価格上限{" "}
-                              {t.maxDeclaredValue === null ? "なし" : formatMoneyInt(t.maxDeclaredValue, region)}
-                            </p>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => {
+                      setServiceMode("REGULAR");
+                      setCustomServiceLevelId(null);
+                    }}
+                    className={`border-2 rounded-xl p-4 text-center font-bold transition ${
+                      serviceMode === "REGULAR"
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-gray-200 text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    通常サービス
+                  </button>
+                  <button
+                    onClick={() => {
+                      setServiceMode("DUAL");
+                      setCustomServiceLevelId(null);
+                    }}
+                    className={`border-2 rounded-xl p-4 text-center font-bold transition ${
+                      serviceMode === "DUAL"
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-gray-200 text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    デュアルサービス（カードとサインの鑑定）
+                  </button>
+                </div>
               </div>
             )}
 
@@ -796,7 +752,7 @@ export default function ApplyForm({
                 申告金額の上限に応じてサービスを選んでください。選択後にカードを入力します。
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {customTierOptions.map((tier) => (
+                {tierOptionsToShow.map((tier) => (
                   <button
                     key={tier.id}
                     onClick={() => setCustomServiceLevelId(tier.id)}
@@ -815,7 +771,7 @@ export default function ApplyForm({
                   </button>
                 ))}
               </div>
-              {customTierOptions.length === 0 && (
+              {tierOptionsToShow.length === 0 && (
                 <p className="text-sm text-gray-500">このアイテム種別のサービスは現在準備中です。</p>
               )}
             </div>
@@ -973,7 +929,7 @@ export default function ApplyForm({
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-bold text-gray-800">
                   アイテム（{cards.length}）
-                  {autographRequested && (
+                  {isDualServiceSelected && (
                     <span className="ml-2 text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 align-middle">
                       🖊 デュアルサービス選択中
                     </span>
@@ -1159,10 +1115,10 @@ export default function ApplyForm({
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-gray-500">鑑定料</span><span>{formatMoney(psaFeeTotal, region)}</span></div>
-              {autographFeeTotal > 0 && (
-                <div className="flex justify-between"><span className="text-gray-500">オートグラフ料金</span><span>{formatMoney(autographFeeTotal, region)}</span></div>
-              )}
+              <div className="flex justify-between">
+                <span className="text-gray-500">{isDualServiceSelected ? "鑑定料（デュアルサービス）" : "鑑定料"}</span>
+                <span>{formatMoney(psaFeeTotal, region)}</span>
+              </div>
               <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoneyIn(shippingInsuranceFee, "JPY")}</span></div>
               {handlingFee > 0 && (
                 <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>{formatMoneyIn(handlingFee, "JPY")}</span></div>
