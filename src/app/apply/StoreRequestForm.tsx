@@ -300,8 +300,8 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h3 className="font-bold text-gray-800">代理入力数</h3>
-        <p className="text-xs text-gray-500">同一カードは1としてカウントしてください。</p>
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-500">同一カードは1としてカウントしてください。</p>
           <input
             type="number"
             min={1}
@@ -309,7 +309,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
             placeholder="例: 5"
             value={agencyQuantity || ""}
             onChange={(e) => setAgencyQuantity(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
-            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
+            className="w-32 shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
           />
         </div>
 
