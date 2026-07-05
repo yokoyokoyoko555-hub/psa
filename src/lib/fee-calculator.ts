@@ -132,8 +132,8 @@ export async function calculateFees(params: {
   });
   if (!servicePrice) throw new Error("Service price not found");
 
-  const setting = await prisma.pricingSetting.findUnique({
-    where: { region_itemType: { region: params.region, itemType: params.itemType } },
+  const setting = await prisma.pricingSetting.findFirst({
+    where: { region: params.region, itemType: params.itemType },
   });
   const psaFeeTotal = servicePrice.pricePerCard * params.cardCount;
   // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替

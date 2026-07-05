@@ -72,18 +72,25 @@ export async function saveUniformFees(input: {
   const proxyFee = Math.max(0, Math.floor(Number(input.proxyFee) || 0));
   const handlingFee = Math.max(0, Math.floor(Number(input.handlingFee) || 0));
   const freeShipInsQty = Math.max(0, Math.floor(Number(input.freeShipInsQty) || 0));
-  await prisma.pricingSetting.upsert({
-    where: { region_itemType: { region: region.data, itemType: itemType.data } },
-    update: { proxyFee, handlingFee, freeShipInsQty },
-    create: {
-      id: pricingSettingId(region.data, itemType.data),
-      region: region.data,
-      itemType: itemType.data,
-      proxyFee,
-      handlingFee,
-      freeShipInsQty,
-    },
-  });
+  // region_itemType はDBレベルのユニーク制約ではないため、findFirst→create/updateで一意性を担保する
+  const existing = await prisma.pricingSetting.findFirst({ where: { region: region.data, itemType: itemType.data } });
+  if (existing) {
+    await prisma.pricingSetting.update({
+      where: { id: existing.id },
+      data: { proxyFee, handlingFee, freeShipInsQty },
+    });
+  } else {
+    await prisma.pricingSetting.create({
+      data: {
+        id: pricingSettingId(region.data, itemType.data),
+        region: region.data,
+        itemType: itemType.data,
+        proxyFee,
+        handlingFee,
+        freeShipInsQty,
+      },
+    });
+  }
   revalidatePath("/admin/settings");
   return { success: true };
 }

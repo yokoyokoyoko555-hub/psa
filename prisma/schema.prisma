@@ -551,7 +551,10 @@ model PricingSetting {
   updatedAt      DateTime      @updatedAt
   updatedBy      String?
 
-  @@unique([region, itemType])
+  // @@unique は付けない: 既存2行(id="PSA_JP"/"PSA_US")はdb push時にregion/itemTypeが
+  // 一旦同一デフォルト値になり、ユニーク制約作成がP2002で失敗するため（ADR-0023 追記）。
+  // 一意性はアプリ側（findFirst + create/update）で担保する。
+  @@index([region, itemType])
   @@map("pricing_settings")
 }
 

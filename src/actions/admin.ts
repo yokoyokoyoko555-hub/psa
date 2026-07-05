@@ -466,7 +466,7 @@ export async function completeStoreApplication(
     });
 
     const proxyFeePerCard =
-      (await prisma.pricingSetting.findUnique({ where: { region_itemType: { region: app.region, itemType: app.itemType } } }))
+      (await prisma.pricingSetting.findFirst({ where: { region: app.region, itemType: app.itemType } }))
         ?.proxyFee ?? 0;
     const autographPricing = isAutographEligible
       ? await tx.autographPricing.findUnique({
