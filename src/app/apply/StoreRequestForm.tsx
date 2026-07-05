@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createStoreRequest, confirmStorePrepayPayment } from "@/actions/application";
-import { ServiceRegion, ReturnMethod, ServiceLevel } from "@prisma/client";
+import { ServiceRegion, ReturnMethod, ServiceLevel, ItemType } from "@prisma/client";
 import type { ServicePrice } from "@prisma/client";
 import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
@@ -14,6 +14,12 @@ import StripeCardPayment from "@/components/StripeCardPayment";
 const REGION_LABELS: Record<ServiceRegion, string> = {
   PSA_JP: "PSA 日本",
   PSA_US: "PSA US",
+};
+
+const ITEM_TYPE_LABELS: Record<ItemType, string> = {
+  TRADING_CARD: "トレーディングカード",
+  UNOPENED_PACK: "未開封パック",
+  COMIC_MAGAZINE: "コミック・マガジン",
 };
 
 const SERVICE_LABELS: Record<ServiceLevel, string> = {
@@ -30,6 +36,17 @@ const SERVICE_LABELS: Record<ServiceLevel, string> = {
   PREMIUM_3: "プレミアム 3",
   PREMIUM_5: "プレミアム 5",
   PREMIUM_10: "プレミアム 10",
+  PACK_VALUE: "バリュー",
+  PACK_ECONOMY: "エコノミー",
+  PACK_EXPRESS: "エクスプレス",
+  COMIC_MODERN: "モダン",
+  COMIC_MODERN_PLUS: "モダンプラス",
+  COMIC_VINTAGE: "ビンテージ",
+  COMIC_VINTAGE_PLUS: "ビンテージプラス",
+  COMIC_HIGH_VALUE: "ハイバリュー",
+  COMIC_EXPRESS: "エクスプレス",
+  COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
+  COMIC_WALK_THROUGH: "ウォークスルー",
 };
 
 const AGREEMENT_TEXT = `PSA鑑定受付代行サービス（代理申込・先払い）利用規約
@@ -73,6 +90,7 @@ function getProfileAddress(profile: CustomerProfile | null) {
 export default function StoreRequestForm({ profile, addresses, servicePrices, stripePublishableKey }: Props) {
   const router = useRouter();
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
+  const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
   const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(null);
   const [cardCount, setCardCount] = useState(1);
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
@@ -104,7 +122,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
   const [createdId, setCreatedId] = useState<string | null>(null);
 
   const regionPrices = servicePrices
-    .filter((p) => p.region === region && p.isActive)
+    .filter((p) => p.region === region && p.itemType === itemType && p.isActive)
     .sort((a, b) => a.pricePerCard - b.pricePerCard);
   const selectedPrice = regionPrices.find((p) => p.serviceLevel === serviceLevel) ?? null;
   const psaFeeTotal = selectedPrice ? selectedPrice.pricePerCard * cardCount : 0;
@@ -137,6 +155,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
     try {
       const result = await createStoreRequest({
         region,
+        itemType,
         serviceLevel,
         cardCount,
         returnMethod,
@@ -280,6 +299,7 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
               key={r}
               onClick={() => {
                 setRegion(r);
+                if (r === "PSA_JP") setItemType("TRADING_CARD");
                 setServiceLevel(null);
               }}
               className={`border-2 rounded-xl p-4 text-center font-bold transition ${
@@ -293,6 +313,30 @@ export default function StoreRequestForm({ profile, addresses, servicePrices, st
           ))}
         </div>
       </div>
+
+      {region === "PSA_US" && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          <h3 className="font-bold text-gray-800">アイテム種別</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).map((it) => (
+              <button
+                key={it}
+                onClick={() => {
+                  setItemType(it);
+                  setServiceLevel(null);
+                }}
+                className={`border-2 rounded-xl p-4 text-center font-bold transition ${
+                  itemType === it
+                    ? "border-brand-500 bg-brand-50 text-brand-700"
+                    : "border-gray-200 text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                {ITEM_TYPE_LABELS[it]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h3 className="font-bold text-gray-800">サービスレベル</h3>

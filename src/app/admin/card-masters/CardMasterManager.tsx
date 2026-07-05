@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { CardNameMaster } from "@prisma/client";
 import { saveCardNameMaster, deleteCardNameMaster } from "@/actions/card-master";
 
-const LANG_LABELS: Record<string, string> = { JAPANESE: "日本語", ENGLISH: "英語" };
+const LANGUAGE_SUGGESTIONS = ["日本語", "英語", "韓国語", "中国語", "その他"];
 const inputCls = "border border-gray-300 rounded px-2 py-1 text-sm text-gray-900";
 
 type Draft = {
@@ -14,11 +14,11 @@ type Draft = {
   cardName: string;
   cardNumber: string;
   rarity: string;
-  language: "JAPANESE" | "ENGLISH";
+  language: string;
 };
 
 function empty(): Draft {
-  return { tcgTitle: "", cardName: "", cardNumber: "", rarity: "", language: "JAPANESE" };
+  return { tcgTitle: "", cardName: "", cardNumber: "", rarity: "", language: "日本語" };
 }
 
 export default function CardMasterManager({ masters }: { masters: CardNameMaster[] }) {
@@ -71,7 +71,7 @@ export default function CardMasterManager({ masters }: { masters: CardNameMaster
       cardName: m.cardName,
       cardNumber: m.cardNumber ?? "",
       rarity: m.rarity ?? "",
-      language: (m.language as Draft["language"]) ?? "JAPANESE",
+      language: m.language ?? "日本語",
     });
   }
 
@@ -93,11 +93,19 @@ export default function CardMasterManager({ masters }: { masters: CardNameMaster
           <input className={inputCls} placeholder="タイトル/セット名" value={draft.tcgTitle} onChange={(e) => setDraft({ ...draft, tcgTitle: e.target.value })} />
           <input className={inputCls} placeholder="カード番号" value={draft.cardNumber} onChange={(e) => setDraft({ ...draft, cardNumber: e.target.value })} />
           <input className={inputCls} placeholder="レアリティ" value={draft.rarity} onChange={(e) => setDraft({ ...draft, rarity: e.target.value })} />
-          <select className={inputCls} value={draft.language} onChange={(e) => setDraft({ ...draft, language: e.target.value as Draft["language"] })}>
-            <option value="JAPANESE">日本語</option>
-            <option value="ENGLISH">英語</option>
-          </select>
+          <input
+            className={inputCls}
+            list="card-master-language-suggestions"
+            placeholder="言語（例: 日本語）"
+            value={draft.language}
+            onChange={(e) => setDraft({ ...draft, language: e.target.value })}
+          />
         </div>
+        <datalist id="card-master-language-suggestions">
+          {LANGUAGE_SUGGESTIONS.map((v) => (
+            <option key={v} value={v} />
+          ))}
+        </datalist>
         {message && <p className="text-sm text-red-600">{message}</p>}
         <div className="flex items-center justify-end gap-3">
           {editId && (
@@ -134,7 +142,7 @@ export default function CardMasterManager({ masters }: { masters: CardNameMaster
                   <td className="px-2 py-2 text-gray-600">{m.tcgTitle}</td>
                   <td className="px-2 py-2 text-gray-600">{m.cardNumber}</td>
                   <td className="px-2 py-2 text-gray-600">{m.rarity}</td>
-                  <td className="px-2 py-2 text-gray-600">{LANG_LABELS[m.language] ?? m.language}</td>
+                  <td className="px-2 py-2 text-gray-600">{m.language}</td>
                   <td className="px-2 py-2 text-right whitespace-nowrap">
                     <button onClick={() => edit(m)} className="text-brand-600 hover:underline mr-2">編集</button>
                     <button onClick={() => remove(m.id)} className="text-red-500 hover:underline">削除</button>

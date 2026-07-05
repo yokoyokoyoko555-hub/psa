@@ -21,10 +21,16 @@ const bandSchema = z.object({
   surcharge: z.number().int().min(0), // 26枚以上の加算単価（円/枚）
 });
 const regionEnum = z.enum(["PSA_JP", "PSA_US"]);
-const saveSchema = z.object({ region: regionEnum, bands: z.array(bandSchema) });
+const itemTypeEnum = z.enum(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"]);
+const saveSchema = z.object({ region: regionEnum, itemType: itemTypeEnum.default("TRADING_CARD"), bands: z.array(bandSchema) });
+
+/** リージョン×アイテム種別から PricingSetting.id を採番（既存2行は従来通りregion文字列のまま）。ADR-0023 */
+function pricingSettingId(region: string, itemType: string): string {
+  return itemType === "TRADING_CARD" ? region : `${region}_${itemType}`;
+}
 
 /**
- * 送料・保険 合算マトリクス（リージョン別）を保存。
+ * 送料・保険 合算マトリクス（リージョン×アイテム種別別）を保存。
  * 各申告価格帯を 3行（1-8 / 9-25 / 26+）の ShippingInsuranceRate に展開して全置換する。
  */
 export async function saveShippingInsuranceRates(
@@ -33,16 +39,16 @@ export async function saveShippingInsuranceRates(
   await requireAdmin();
   const parsed = saveSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容を確認してください" };
-  const region = parsed.data.region;
+  const { region, itemType } = parsed.data;
 
   const rows = parsed.data.bands.flatMap((b, i) => [
-    { region, minValue: b.minValue, maxValue: b.maxValue, qtyMin: 1, qtyMax: 8, fee: b.fee8, perCardSurcharge: 0, sortOrder: i * 3 },
-    { region, minValue: b.minValue, maxValue: b.maxValue, qtyMin: 9, qtyMax: 25, fee: b.fee25, perCardSurcharge: 0, sortOrder: i * 3 + 1 },
-    { region, minValue: b.minValue, maxValue: b.maxValue, qtyMin: 26, qtyMax: null, fee: b.fee25, perCardSurcharge: b.surcharge, sortOrder: i * 3 + 2 },
+    { region, itemType, minValue: b.minValue, maxValue: b.maxValue, qtyMin: 1, qtyMax: 8, fee: b.fee8, perCardSurcharge: 0, sortOrder: i * 3 },
+    { region, itemType, minValue: b.minValue, maxValue: b.maxValue, qtyMin: 9, qtyMax: 25, fee: b.fee25, perCardSurcharge: 0, sortOrder: i * 3 + 1 },
+    { region, itemType, minValue: b.minValue, maxValue: b.maxValue, qtyMin: 26, qtyMax: null, fee: b.fee25, perCardSurcharge: b.surcharge, sortOrder: i * 3 + 2 },
   ]);
 
   await prisma.$transaction([
-    prisma.shippingInsuranceRate.deleteMany({ where: { region } }),
+    prisma.shippingInsuranceRate.deleteMany({ where: { region, itemType } }),
     prisma.shippingInsuranceRate.createMany({ data: rows }),
   ]);
 
@@ -50,9 +56,10 @@ export async function saveShippingInsuranceRates(
   return { success: true };
 }
 
-/** 代理入力料金・事務手数料・送料保険無料化枚数（リージョン別の一律）を保存 */
+/** 代理入力料金・事務手数料・送料保険無料化枚数（リージョン×アイテム種別の一律）を保存 */
 export async function saveUniformFees(input: {
   region: "PSA_JP" | "PSA_US";
+  itemType?: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE";
   proxyFee: number;
   handlingFee: number;
   freeShipInsQty: number;
@@ -60,14 +67,40 @@ export async function saveUniformFees(input: {
   await requireAdmin();
   const region = regionEnum.safeParse(input.region);
   if (!region.success) return { success: false, error: "リージョンが不正です" };
+  const itemType = itemTypeEnum.safeParse(input.itemType ?? "TRADING_CARD");
+  if (!itemType.success) return { success: false, error: "アイテム種別が不正です" };
   const proxyFee = Math.max(0, Math.floor(Number(input.proxyFee) || 0));
   const handlingFee = Math.max(0, Math.floor(Number(input.handlingFee) || 0));
   const freeShipInsQty = Math.max(0, Math.floor(Number(input.freeShipInsQty) || 0));
   await prisma.pricingSetting.upsert({
-    where: { id: region.data },
+    where: { region_itemType: { region: region.data, itemType: itemType.data } },
     update: { proxyFee, handlingFee, freeShipInsQty },
-    create: { id: region.data, proxyFee, handlingFee, freeShipInsQty },
+    create: {
+      id: pricingSettingId(region.data, itemType.data),
+      region: region.data,
+      itemType: itemType.data,
+      proxyFee,
+      handlingFee,
+      freeShipInsQty,
+    },
   });
+  revalidatePath("/admin/settings");
+  return { success: true };
+}
+
+const autographRowSchema = z.object({ id: z.string(), fee: z.number().min(0), isActive: z.boolean() });
+const saveAutographSchema = z.object({ rows: z.array(autographRowSchema) });
+
+/** オートグラフ（デュアルサービス）追加料金（サービスレベル別）を保存 */
+export async function saveAutographPricing(
+  input: z.infer<typeof saveAutographSchema>
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin();
+  const parsed = saveAutographSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容を確認してください" };
+  for (const r of parsed.data.rows) {
+    await prisma.autographPricing.update({ where: { id: r.id }, data: { fee: r.fee, isActive: r.isActive } });
+  }
   revalidatePath("/admin/settings");
   return { success: true };
 }

@@ -31,13 +31,26 @@ const CARD_STATUS_LABELS: Record<string, string> = {
   CANCELLED: "キャンセル",
 };
 
-// PSA提出フォームは英語1行のため、言語は英語表記でコピーする
+// PSA提出フォームは英語1行のため、言語は英語表記でコピーする。
+// 自由記述化（ADR-0023）後は代表的な入力のみ変換し、それ以外はそのまま出力する。
+// 旧CardLanguage enum値（既存データ）もあわせてマッピング。
 const LANGUAGE_PSA: Record<string, string> = {
+  日本語: "Japanese",
+  英語: "English",
+  韓国語: "Korean",
+  中国語: "Chinese",
+  その他: "Other",
   JAPANESE: "Japanese",
   ENGLISH: "English",
   KOREAN: "Korean",
   CHINESE: "Chinese",
   OTHER: "Other",
+};
+
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  TRADING_CARD: "トレーディングカード",
+  UNOPENED_PACK: "未開封パック",
+  COMIC_MAGAZINE: "コミック・マガジン",
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -134,6 +147,12 @@ export default async function AdminApplicationDetailPage({
                 <p className="text-gray-500">サービス</p>
                 <p className="font-medium text-gray-900">{application.serviceLevel}</p>
               </div>
+              {application.region === "PSA_US" && (
+                <div>
+                  <p className="text-gray-500">アイテム種別</p>
+                  <p className="font-medium text-gray-900">{ITEM_TYPE_LABELS[application.itemType] ?? application.itemType}</p>
+                </div>
+              )}
               <div>
                 <p className="text-gray-500">返却方法</p>
                 <p className="font-medium text-gray-900">
@@ -157,6 +176,12 @@ export default async function AdminApplicationDetailPage({
                 <p className="text-gray-500">PSA料金</p>
                 <p className="font-medium">{formatMoney(application.psaFeeTotal, application.region)}</p>
               </div>
+              {application.autographFeeTotal > 0 && (
+                <div>
+                  <p className="text-gray-500">オートグラフ料金</p>
+                  <p className="font-medium">{formatMoney(application.autographFeeTotal, application.region)}</p>
+                </div>
+              )}
               <div>
                 <p className="text-gray-500">代理入力料金</p>
                 <p className="font-medium">{formatMoney(application.agencyFeeTotal, application.region)}</p>
@@ -203,6 +228,11 @@ export default async function AdminApplicationDetailPage({
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-gray-900">{card.cardName}</span>
+                        {card.autographRequested && (
+                          <span className="text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5">
+                            🖊 オートグラフ
+                          </span>
+                        )}
                         {/* PSA提出フォーム向け: 半角スペース区切り1行をコピー */}
                         <CopyButton label="行コピー" text={psaLine} />
                       </div>

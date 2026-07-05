@@ -17,6 +17,7 @@ export type InitialDraft = {
   draftId: string;
   serviceLevel: ServiceLevel;
   region: ServiceRegion;
+  itemType: ItemType;
   returnMethod: ReturnMethod;
   cards: {
     tcgTitle: string;
@@ -24,24 +25,19 @@ export type InitialDraft = {
     cardNumber: string;
     cardName: string;
     rarity: string;
-    language?: CardLanguage;
+    language?: string;
     quantity: number;
     declaredValue: number;
+    autographRequested?: boolean;
   }[];
   returnSel: string;
 };
 
 const DRAFT_KEY = "psa-apply-draft";
-import { ServiceLevel, ServiceRegion, ReturnMethod, CardLanguage } from "@prisma/client";
-import type { ServicePrice, ShippingRule, InsuranceRule } from "@prisma/client";
+import { ServiceLevel, ServiceRegion, ItemType, ReturnMethod } from "@prisma/client";
+import type { ServicePrice, ShippingRule, InsuranceRule, AutographPricing } from "@prisma/client";
 
-const LANGUAGE_LABELS: Record<CardLanguage, string> = {
-  JAPANESE: "日本語",
-  ENGLISH: "英語",
-  KOREAN: "韓国語",
-  CHINESE: "中国語",
-  OTHER: "その他",
-};
+const LANGUAGE_SUGGESTIONS = ["日本語", "英語", "韓国語", "中国語", "その他"];
 import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
 import AddressManager from "../mypage/addresses/AddressManager";
@@ -60,11 +56,28 @@ const SERVICE_LABELS: Record<ServiceLevel, string> = {
   PREMIUM_3: "プレミアム 3",
   PREMIUM_5: "プレミアム 5",
   PREMIUM_10: "プレミアム 10",
+  PACK_VALUE: "バリュー",
+  PACK_ECONOMY: "エコノミー",
+  PACK_EXPRESS: "エクスプレス",
+  COMIC_MODERN: "モダン",
+  COMIC_MODERN_PLUS: "モダンプラス",
+  COMIC_VINTAGE: "ビンテージ",
+  COMIC_VINTAGE_PLUS: "ビンテージプラス",
+  COMIC_HIGH_VALUE: "ハイバリュー",
+  COMIC_EXPRESS: "エクスプレス",
+  COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
+  COMIC_WALK_THROUGH: "ウォークスルー",
 };
 
 const REGION_LABELS: Record<ServiceRegion, string> = {
   PSA_JP: "PSA 日本",
   PSA_US: "PSA US",
+};
+
+const ITEM_TYPE_LABELS: Record<ItemType, string> = {
+  TRADING_CARD: "トレーディングカード",
+  UNOPENED_PACK: "未開封パック",
+  COMIC_MAGAZINE: "コミック・マガジン",
 };
 
 const AGREEMENT_VERSION = "v1.0";
@@ -84,9 +97,10 @@ interface CardItem {
   cardNumber: string;
   cardName: string;
   rarity: string;
-  language: CardLanguage;
+  language: string;
   quantity: number;
   declaredValue: number;
+  autographRequested: boolean;
 }
 
 function emptyCard(): CardItem {
@@ -96,9 +110,10 @@ function emptyCard(): CardItem {
     cardNumber: "",
     cardName: "",
     rarity: "",
-    language: "JAPANESE",
+    language: "日本語",
     quantity: 1,
     declaredValue: 0,
+    autographRequested: false,
   };
 }
 
@@ -108,6 +123,7 @@ type Props = {
   servicePrices: ServicePrice[];
   shippingRules: ShippingRule[];
   insuranceRules: InsuranceRule[];
+  autographPricing: AutographPricing[];
   profile: CustomerProfile | null;
   addresses: Address[];
   initialDraft?: InitialDraft | null;
@@ -153,6 +169,7 @@ export default function ApplyForm({
   servicePrices,
   shippingRules,
   insuranceRules,
+  autographPricing,
   stripePublishableKey,
   profile,
   addresses,
@@ -164,6 +181,7 @@ export default function ApplyForm({
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.draftId ?? null);
 
   const [region, setRegion] = useState<ServiceRegion>(initialDraft?.region ?? "PSA_JP");
+  const [itemType, setItemType] = useState<ItemType>(initialDraft?.itemType ?? "TRADING_CARD");
   const [serviceLevel, setServiceLevel] = useState<ServiceLevel | null>(
     initialDraft?.serviceLevel ?? null
   );
@@ -172,7 +190,11 @@ export default function ApplyForm({
   );
 
   const [cards, setCards] = useState<CardItem[]>(
-    (initialDraft?.cards ?? []).map((c) => ({ ...c, language: c.language ?? "JAPANESE" }))
+    (initialDraft?.cards ?? []).map((c) => ({
+      ...c,
+      language: c.language ?? "日本語",
+      autographRequested: c.autographRequested ?? false,
+    }))
   );
   const [draft, setDraft] = useState<CardItem>(emptyCard());
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -198,9 +220,14 @@ export default function ApplyForm({
   const stripeRef = useRef<StripeClient | null>(null);
   const cardElementRef = useRef<StripeCardElement | null>(null);
 
-  const regionPrices = servicePrices.filter((p) => p.region === region);
+  const regionPrices = servicePrices.filter((p) => p.region === region && p.itemType === itemType);
   const servicePrice = regionPrices.find((p) => p.serviceLevel === serviceLevel);
   const cap = servicePrice?.maxDeclaredValue ?? null;
+
+  // オートグラフ（デュアルサービス）: PSA_US×TRADING_CARDかつ選択中サービスレベルの価格が有効な場合のみ提示
+  const isAutographEligible = region === "PSA_US" && itemType === "TRADING_CARD";
+  const autographActive =
+    isAutographEligible && autographPricing.some((a) => a.region === region && a.serviceLevel === serviceLevel && a.isActive);
 
   function setDraftField<K extends keyof CardItem>(field: K, value: CardItem[K]) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -255,20 +282,22 @@ export default function ApplyForm({
 
   const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
   const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
+  const autographCount = cards.filter((c) => c.autographRequested).reduce((s, c) => s + c.quantity, 0);
 
   // 料金はサーバー(calculateFees)と同じ計算で取得し、請求額とプレビューを一致させる
   const [fees, setFees] = useState<FeeBreakdown | null>(null);
   useEffect(() => {
     let cancelled = false;
-    previewFees({ serviceLevel, region, returnMethod, cardCount, totalDeclaredValue }).then((f) => {
+    previewFees({ serviceLevel, region, itemType, returnMethod, cardCount, totalDeclaredValue, autographCount }).then((f) => {
       if (!cancelled) setFees(f);
     });
     return () => {
       cancelled = true;
     };
-  }, [serviceLevel, region, returnMethod, cardCount, totalDeclaredValue]);
+  }, [serviceLevel, region, itemType, returnMethod, cardCount, totalDeclaredValue, autographCount]);
 
   const psaFeeTotal = fees?.psaFeeTotal ?? 0;
+  const autographFeeTotal = fees?.autographFeeTotal ?? 0;
   const shippingInsuranceFee = (fees?.shippingFee ?? 0) + (fees?.insuranceFee ?? 0);
   const handlingFee = fees?.handlingFee ?? 0;
   const discountAmount = fees?.discountAmount ?? 0;
@@ -285,9 +314,17 @@ export default function ApplyForm({
       if (!raw) return;
       const d = JSON.parse(raw);
       if (d.region) setRegion(d.region);
+      if (d.itemType) setItemType(d.itemType);
       if (d.serviceLevel) setServiceLevel(d.serviceLevel);
       if (d.returnMethod) setReturnMethod(d.returnMethod);
-      if (Array.isArray(d.cards)) setCards(d.cards.map((c: CardItem) => ({ ...c, language: c.language ?? "JAPANESE" })));
+      if (Array.isArray(d.cards))
+        setCards(
+          d.cards.map((c: CardItem) => ({
+            ...c,
+            language: c.language ?? "日本語",
+            autographRequested: c.autographRequested ?? false,
+          }))
+        );
       if (typeof d.maxStep === "number") setMaxStep(Math.min(d.maxStep, 3));
       if (d.step && d.step !== "payment") setStep(d.step);
     } catch {
@@ -366,7 +403,7 @@ export default function ApplyForm({
     try {
       localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ region, serviceLevel, returnMethod, cards, step, maxStep })
+        JSON.stringify({ region, itemType, serviceLevel, returnMethod, cards, step, maxStep })
       );
     } catch {
       /* ignore */
@@ -381,6 +418,7 @@ export default function ApplyForm({
         draftId: draftId ?? undefined,
         serviceLevel,
         region,
+        itemType,
         returnMethod,
         returnSel,
         cards: cards.map((c) => ({
@@ -392,6 +430,7 @@ export default function ApplyForm({
           language: c.language,
           quantity: c.quantity,
           declaredValue: c.declaredValue,
+          autographRequested: c.autographRequested,
         })),
       });
       if (res.success && res.draftId) setDraftId(res.draftId);
@@ -427,6 +466,7 @@ export default function ApplyForm({
         draftId: draftId ?? undefined,
         serviceLevel,
         region,
+        itemType,
         returnMethod,
         cards: cards.map((c) => ({
           tcgTitle: c.tcgTitle,
@@ -438,6 +478,7 @@ export default function ApplyForm({
           declaredValue: c.declaredValue,
           quantity: c.quantity,
           damageImageKeys: [],
+          autographRequested: c.autographRequested,
         })),
         returnAddress:
           returnSel !== "registered" && selectedAddr
@@ -622,7 +663,10 @@ export default function ApplyForm({
                 {(["PSA_JP", "PSA_US"] as ServiceRegion[]).map((r) => (
                   <button
                     key={r}
-                    onClick={() => setRegion(r)}
+                    onClick={() => {
+                      setRegion(r);
+                      if (r === "PSA_JP") setItemType("TRADING_CARD");
+                    }}
                     className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                       region === r
                         ? "border-brand-500 bg-brand-50 text-brand-700"
@@ -634,6 +678,30 @@ export default function ApplyForm({
                 ))}
               </div>
             </div>
+
+            {region === "PSA_US" && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+                <h2 className="font-bold text-gray-800">アイテム種別</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).map((it) => (
+                    <button
+                      key={it}
+                      onClick={() => {
+                        setItemType(it);
+                        setServiceLevel(null);
+                      }}
+                      className={`border-2 rounded-xl p-4 text-center font-bold transition ${
+                        itemType === it
+                          ? "border-brand-500 bg-brand-50 text-brand-700"
+                          : "border-gray-200 text-gray-700 hover:border-gray-300"
+                      }`}
+                    >
+                      {ITEM_TYPE_LABELS[it]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h2 className="font-bold text-gray-800">サービスレベル</h2>
@@ -701,7 +769,7 @@ export default function ApplyForm({
         {step === "cards" && (
           <div className="space-y-6">
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
-              選択中: <strong>{REGION_LABELS[region]} / {serviceLevel && SERVICE_LABELS[serviceLevel]}</strong>
+              選択中: <strong>{REGION_LABELS[region]}{region === "PSA_US" ? ` / ${ITEM_TYPE_LABELS[itemType]}` : ""} / {serviceLevel && SERVICE_LABELS[serviceLevel]}</strong>
               {cap !== null && <>（申告金額上限 {formatMoney(cap, region)}/枚）</>}
             </div>
 
@@ -732,15 +800,18 @@ export default function ApplyForm({
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">言語</label>
-                  <select
+                  <input
                     className={inputCls}
+                    list="language-suggestions"
+                    placeholder="例: 日本語"
                     value={draft.language}
-                    onChange={(e) => setDraftField("language", e.target.value as CardLanguage)}
-                  >
-                    {Object.entries(LANGUAGE_LABELS).map(([v, label]) => (
-                      <option key={v} value={v}>{label}</option>
+                    onChange={(e) => setDraftField("language", e.target.value)}
+                  />
+                  <datalist id="language-suggestions">
+                    {LANGUAGE_SUGGESTIONS.map((v) => (
+                      <option key={v} value={v} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">カード番号／型番</label>
@@ -790,6 +861,19 @@ export default function ApplyForm({
                     onChange={(e) => setDraftField("declaredValue", parseInt(e.target.value) || 0)}
                   />
                 </div>
+                {autographActive && (
+                  <div className="sm:col-span-2 flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="autographRequested"
+                      checked={draft.autographRequested}
+                      onChange={(e) => setDraftField("autographRequested", e.target.checked)}
+                    />
+                    <label htmlFor="autographRequested" className="text-sm text-gray-700">
+                      オートグラフ（デュアルサービス）認証を希望する
+                    </label>
+                  </div>
+                )}
               </div>
               <div className="flex gap-3">
                 <button
@@ -828,6 +912,11 @@ export default function ApplyForm({
                           {c.releaseYear ? `${c.releaseYear} ` : ""}
                           {c.tcgTitle} {c.cardNumber} {c.cardName}
                           {c.rarity ? `（${c.rarity}）` : ""}
+                          {c.autographRequested && (
+                            <span className="ml-2 text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 align-middle">
+                              🖊 オートグラフ
+                            </span>
+                          )}
                         </p>
                         <p className="text-xs text-gray-400">
                           {c.quantity}枚 / 申告 {formatMoney(c.declaredValue * c.quantity, region)}
@@ -959,7 +1048,9 @@ export default function ApplyForm({
             <div className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="font-bold text-gray-900 mb-3">申込内容の確認</h2>
               <div className="text-sm text-gray-600 mb-2">
-                <span className="font-medium">提出先:</span> {REGION_LABELS[region]} /{" "}
+                <span className="font-medium">提出先:</span> {REGION_LABELS[region]}
+                {region === "PSA_US" && <> / <span className="font-medium">アイテム種別:</span> {ITEM_TYPE_LABELS[itemType]}</>}
+                {" / "}
                 <span className="font-medium">サービス:</span>{" "}
                 {serviceLevel && SERVICE_LABELS[serviceLevel]} /{" "}
                 <span className="font-medium">返却:</span>{" "}
@@ -990,6 +1081,9 @@ export default function ApplyForm({
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-gray-500">鑑定料</span><span>{formatMoney(psaFeeTotal, region)}</span></div>
+              {autographFeeTotal > 0 && (
+                <div className="flex justify-between"><span className="text-gray-500">オートグラフ料金</span><span>{formatMoney(autographFeeTotal, region)}</span></div>
+              )}
               <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoney(shippingInsuranceFee, region)}</span></div>
               {handlingFee > 0 && (
                 <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>{formatMoney(handlingFee, region)}</span></div>

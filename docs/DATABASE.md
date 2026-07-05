@@ -6,7 +6,7 @@
 
 ---
 
-## モデル一覧（16）
+## モデル一覧（17。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)参照）
 
 | モデル / テーブル | 役割 | 主なカラム・ポイント |
 |------------------|------|---------------------|
@@ -15,15 +15,16 @@
 | `CustomerSession` / customer_sessions | 顧客セッション | `sessionToken`(uniq), `expires`, Customterへ Cascade |
 | `EmailVerification` / email_verifications | 新規登録メール認証 | `token`(uniq), `email`, `expiresAt`(24h), `consumedAt` |
 | `CustomerAddress` / customer_addresses | 住所帳（返送先） | 姓名/ローマ字/住所などPII列=`*Encrypted`, `isDefault`, Customterへ Cascade |
-| `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `source`(CUSTOMER/STORE), 返送先住所/電話（暗号化）, 代理申込の選択保存カードID, 料金内訳, `status` |
-| `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金 |
+| `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `itemType`(TRADING_CARD/UNOPENED_PACK/COMIC_MAGAZINE。JPは常にTRADING_CARD。[ADR-0023](DECISIONS.md)), `source`(CUSTOMER/STORE), 返送先住所/電話（暗号化）, 代理申込の選択保存カードID, 料金内訳(`autographFeeTotal`含む), `status` |
+| `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`(String, 自由記述)/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金, `autographRequested`/`autographFee`(オートグラフ) |
 | `CardStatusHistory` / card_status_histories | ステータス履歴 | `status`, `changedBy`(userId or customerId), Cardへ Cascade |
 | `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `psaSubmissionId`/`psaOrderId`, `status` |
 | `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(Float, JP=円/US=USD小数2桁), `currency`(jpy/usd), `status`(PaymentStatus) |
 | `Upcharge` / upcharges | 追加請求 | `psaDeclaredValue`/`psaFinalValue`/`upchargeAmount`, `status`(UpchargeStatus) |
-| `ServicePrice` / service_prices | サービス料金 | `@@unique([serviceLevel, region])`, `region`(PSA_JP/PSA_US), `pricePerCard`(Float, =顧客請求額。US=USD小数2桁対応。[ADR-0022](DECISIONS.md)), `agencyFee`(当社入力時のみ加算), `maxDeclaredValue`(Float?, 上限/null=無制限), `isActive` |
-| `ShippingRule` / shipping_rules | 送料 | `returnMethod`, `fee`, `minAmount`/`maxAmount`(帯), `sortOrder` |
-| `InsuranceRule` / insurance_rules | 保険料 | `minValue`/`maxValue`(帯), `fee` または `feeRate`(%) |
+| `ServicePrice` / service_prices | サービス料金 | `@@unique([serviceLevel, region, itemType])`, `region`(PSA_JP/PSA_US), `itemType`(既定TRADING_CARD), `pricePerCard`(Float, =顧客請求額。US=USD小数2桁対応。[ADR-0022](DECISIONS.md)), `agencyFee`(当社入力時のみ加算), `maxDeclaredValue`(Float?, 上限/null=無制限), `isActive` |
+| `AutographPricing` / autograph_pricing | オートグラフ追加料金 | `@@unique([region, serviceLevel])`。PSA_US×トレカのみ運用想定。`fee`(Float), `isActive`。[ADR-0023](DECISIONS.md) |
+| `ShippingRule` / shipping_rules | 送料 | `returnMethod`, `itemType`(既定TRADING_CARD), `fee`, `minAmount`/`maxAmount`(帯), `sortOrder` |
+| `InsuranceRule` / insurance_rules | 保険料 | `itemType`(既定TRADING_CARD), `minValue`/`maxValue`(帯), `fee` または `feeRate`(%) |
 | `Agreement` / agreements | 電子同意書 | `applicationId`(uniq), `agreedAt`, `ipAddress`/`userAgent`, `agreementText`, `version` |
 | `Notification` / notifications | お知らせ/通知 | `customerId`(null=全体), `type`, `title`/`body`, `isPublished`, `showOnMypage`, `isRead` |
 | `SubmissionBooking` / submission_bookings | カード提出予約 | `applicationId`(uniq), `method`(STORE_DROP_OFF/SHIPPING), `scheduledAt`, `status`(BOOKED/CANCELLED), `note` |

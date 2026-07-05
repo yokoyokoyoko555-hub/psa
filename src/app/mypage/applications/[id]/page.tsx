@@ -43,6 +43,23 @@ const SERVICE_LABELS: Record<string, string> = {
   PREMIUM_3: "プレミアム 3",
   PREMIUM_5: "プレミアム 5",
   PREMIUM_10: "プレミアム 10",
+  PACK_VALUE: "バリュー",
+  PACK_ECONOMY: "エコノミー",
+  PACK_EXPRESS: "エクスプレス",
+  COMIC_MODERN: "モダン",
+  COMIC_MODERN_PLUS: "モダンプラス",
+  COMIC_VINTAGE: "ビンテージ",
+  COMIC_VINTAGE_PLUS: "ビンテージプラス",
+  COMIC_HIGH_VALUE: "ハイバリュー",
+  COMIC_EXPRESS: "エクスプレス",
+  COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
+  COMIC_WALK_THROUGH: "ウォークスルー",
+};
+
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  TRADING_CARD: "トレーディングカード",
+  UNOPENED_PACK: "未開封パック",
+  COMIC_MAGAZINE: "コミック・マガジン",
 };
 
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -74,6 +91,12 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
               <p className="text-gray-500">サービス</p>
               <p className="font-medium">{SERVICE_LABELS[application.serviceLevel]}</p>
             </div>
+            {application.region === "PSA_US" && (
+              <div>
+                <p className="text-gray-500">アイテム種別</p>
+                <p className="font-medium">{ITEM_TYPE_LABELS[application.itemType] ?? application.itemType}</p>
+              </div>
+            )}
             <div>
               <p className="text-gray-500">返却方法</p>
               <p className="font-medium">{application.returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}</p>

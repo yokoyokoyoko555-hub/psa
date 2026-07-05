@@ -10,7 +10,7 @@
 
 株式会社ツルプルンが運営する **トレカビンクス** 向けの「PSA鑑定受付代行」Webシステム。
 
-- 顧客はトレーディングカードのPSA鑑定をオンラインで申し込み、Stripeで決済する
+- 顧客はトレーディングカード（PSA日本/US）に加え、PSA US向けに未開封パック・コミック/マガジンのPSA鑑定もオンラインで申し込み、Stripeで決済する（アイテム種別`ItemType`。[ADR-0023](DECISIONS.md)）。PSA日本はトレーディングカードのみ
 - 1枚ごとに自社管理番号（CARD-…）とQRコードを発行し、17段階のステータスで進捗を管理
 - 店舗スタッフがカードを検品 → PSA提出グループにまとめて提出 → グレード結果を登録 → 顧客へ返却
 - PSA鑑定で申告価格を超過した場合の追加請求（Upcharge）に対応（保存済みカードへ自動オフセッション課金）
@@ -112,13 +112,14 @@ psa-system/
 | `Customer` | 顧客 | PII列は `*Encrypted`（AES-256-GCM）, `email`/`postalCode`は平文, `stripeCustomerId` |
 | `CustomerAddress` | 返送先情報 | 姓名/ローマ字/住所を暗号化保存 |
 | `CustomerSession` | 顧客セッション | `sessionToken`(cookie), `expires` |
-| `Application` | 申込 | `applicationNo`(APP-…), 返送先住所/電話（暗号化）, 料金内訳, `status` |
-| `Card` | カード（最重要） | `cardNo`(CARD-…), PSA各種ID/grade, 画像S3キー, `status`(17段階), 料金 |
+| `Application` | 申込 | `applicationNo`(APP-…), `itemType`(TRADING_CARD/UNOPENED_PACK/COMIC_MAGAZINE。JPは常にTRADING_CARD), 返送先住所/電話（暗号化）, 料金内訳(`autographFeeTotal`含む), `status` |
+| `Card` | カード（最重要） | `cardNo`(CARD-…), PSA各種ID/grade, 画像S3キー, `status`(17段階), 料金, `language`(自由記述), `autographRequested`/`autographFee`(オートグラフ) |
 | `CardStatusHistory` | ステータス履歴 | `changedBy`(userId or customerId) |
 | `PsaSubmissionGroup` | PSA提出グループ | `groupNo`(PSG-…), `psaSubmissionId`/`psaOrderId` |
 | `Payment` | 決済 | `stripePaymentIntentId`, `status` |
 | `Upcharge` | 追加請求 | `psaDeclaredValue`/`psaFinalValue`/`upchargeAmount`, `status` |
-| `ServicePrice` | サービス料金 | `serviceLevel`(unique), `pricePerCard`, `agencyFee` |
+| `ServicePrice` | サービス料金 | `[serviceLevel, region, itemType]`(unique), `pricePerCard`, `agencyFee` |
+| `AutographPricing` | オートグラフ追加料金 | `[region, serviceLevel]`(unique)。PSA_US×トレカのみ運用想定。[ADR-0023](DECISIONS.md) |
 | `ShippingRule` | 送料 | 金額帯（`minAmount`/`maxAmount`）ごと |
 | `InsuranceRule` | 保険料 | 申告額帯ごと（`fee` または `feeRate`） |
 | `Agreement` | 電子同意書 | 申込時スナップショット, IP/UA |

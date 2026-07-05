@@ -6,12 +6,14 @@ import { saveUniformFees } from "@/actions/pricing";
 
 export default function HandlingFeeForm({
   region,
+  itemType = "TRADING_CARD",
   unit,
   proxyFee,
   handlingFee,
   freeShipInsQty,
 }: {
   region: "PSA_JP" | "PSA_US";
+  itemType?: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE";
   unit: string;
   proxyFee: number;
   handlingFee: number;
@@ -29,6 +31,7 @@ export default function HandlingFeeForm({
     startTransition(async () => {
       const res = await saveUniformFees({
         region,
+        itemType,
         proxyFee: parseInt(proxy) || 0,
         handlingFee: parseInt(handling) || 0,
         freeShipInsQty: parseInt(freeQty) || 0,

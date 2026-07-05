@@ -9,7 +9,7 @@ import { chargeOffSession } from "@/lib/stripe";
 import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
 import { formatMoney, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
-import { CardStatus, CardLanguage, ServiceLevel } from "@prisma/client";
+import { CardStatus, ServiceLevel } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
@@ -325,10 +325,12 @@ const storeCardSchema = z.object({
   cardName: z.string().min(1).max(200),
   cardNumber: z.string().max(100).optional(),
   rarity: z.string().max(100).optional(),
-  language: z.nativeEnum(CardLanguage),
+  language: z.string().min(1).max(50),
   declaredValue: z.number().int().min(1),
   quantity: z.number().int().min(1).max(100),
   notes: z.string().max(1000).optional(),
+  // オートグラフ（デュアルサービス）希望。スタッフが実物確認して選択。PSA_US×TRADING_CARD以外は保存時にfalseへ補正。ADR-0023
+  autographRequested: z.boolean().default(false),
 });
 
 // 代理入力の一時保存（下書き）。確定前の緩いバリデーション（空欄可）。
@@ -337,10 +339,11 @@ const storeDraftCardSchema = z.object({
   cardName: z.string().max(200).default(""),
   cardNumber: z.string().max(100).default(""),
   rarity: z.string().max(100).default(""),
-  language: z.nativeEnum(CardLanguage).default("JAPANESE"),
+  language: z.string().default("日本語"),
   declaredValue: z.number().int().min(0).default(0),
   quantity: z.number().int().min(1).max(100).default(1),
   notes: z.string().max(1000).default(""),
+  autographRequested: z.boolean().default(false),
 });
 
 const saveStoreDraftSchema = z.object({
@@ -402,7 +405,7 @@ export async function completeStoreApplication(
   }
 
   const servicePrice = await prisma.servicePrice.findUnique({
-    where: { serviceLevel_region: { serviceLevel: parsed.data.serviceLevel, region: app.region } },
+    where: { serviceLevel_region_itemType: { serviceLevel: parsed.data.serviceLevel, region: app.region, itemType: app.itemType } },
   });
   if (!servicePrice) return { success: false, error: "サービスレベルが見つかりません" };
 
@@ -416,19 +419,29 @@ export async function completeStoreApplication(
     }
   }
 
-  const totalDeclaredValue = parsed.data.cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
-  const cardCount = parsed.data.cards.reduce((s, c) => s + c.quantity, 0);
+  // オートグラフ対象外（PSA_US×TRADING_CARD以外）は保存時にfalseへ補正
+  const isAutographEligible = app.region === "PSA_US" && app.itemType === "TRADING_CARD";
+  const cardsInput = parsed.data.cards.map((c) => ({
+    ...c,
+    autographRequested: isAutographEligible ? c.autographRequested : false,
+  }));
+
+  const totalDeclaredValue = cardsInput.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
+  const cardCount = cardsInput.reduce((s, c) => s + c.quantity, 0);
+  const autographCount = cardsInput.filter((c) => c.autographRequested).reduce((s, c) => s + c.quantity, 0);
 
   // 当社入力は手数料あり。代理入力料金は「種類数 × 手数料」（同一カードは何枚でも1種）。
   // 種類数 = 入力されたカード行数（行ごとに別カードを想定）。[ADR-0020 / PROXY_PREPAY 段階1]
   const fees = await calculateFees({
     serviceLevel: parsed.data.serviceLevel,
     region: app.region,
+    itemType: app.itemType,
     returnMethod: app.returnMethod,
     cardCount,
     totalDeclaredValue,
     applyAgencyFee: true,
     agencyCardTypeCount: parsed.data.cards.length,
+    autographCount,
     customerId: app.customerId,
   });
 
@@ -441,6 +454,7 @@ export async function completeStoreApplication(
         submittedAt: new Date(),
         totalAmount: fees.totalAmount,
         psaFeeTotal: fees.psaFeeTotal,
+        autographFeeTotal: fees.autographFeeTotal,
         agencyFeeTotal: fees.agencyFeeTotal,
         handlingFee: fees.handlingFee,
         shippingFee: fees.shippingFee,
@@ -451,13 +465,21 @@ export async function completeStoreApplication(
       },
     });
 
-    const proxyFeePerCard = (await prisma.pricingSetting.findUnique({ where: { id: app.region } }))?.proxyFee ?? 0;
-    for (const c of parsed.data.cards) {
+    const proxyFeePerCard =
+      (await prisma.pricingSetting.findUnique({ where: { region_itemType: { region: app.region, itemType: app.itemType } } }))
+        ?.proxyFee ?? 0;
+    const autographPricing = isAutographEligible
+      ? await tx.autographPricing.findUnique({
+          where: { region_serviceLevel: { region: app.region, serviceLevel: parsed.data.serviceLevel } },
+        })
+      : null;
+    for (const c of cardsInput) {
       const cardNo = await generateCardNo();
       const psaFee = servicePrice.pricePerCard * c.quantity;
       const perCardCost = servicePrice.cost > 0 ? servicePrice.cost : roundMoney(servicePrice.pricePerCard * 0.8, app.region);
       const psaCost = perCardCost * c.quantity;
       const agencyFee = proxyFeePerCard * c.quantity;
+      const autographFee = c.autographRequested ? (autographPricing?.fee ?? 0) * c.quantity : 0;
       await tx.card.create({
         data: {
           customerId: app.customerId,
@@ -473,6 +495,8 @@ export async function completeStoreApplication(
           psaFee,
           psaCost,
           agencyFee,
+          autographRequested: c.autographRequested,
+          autographFee,
           status: "SUBMITTED_BY_CUSTOMER",
           statusHistory: { create: { status: "SUBMITTED_BY_CUSTOMER", changedBy: user.id } },
         },
@@ -485,6 +509,7 @@ export async function completeStoreApplication(
         customerId: app.customerId,
         applicationId: app.id,
         amount: fees.totalAmount,
+        currency: stripeCurrency(app.region),
         status: "PENDING",
         description: `代理申込 ${app.applicationNo}`,
       },

@@ -58,6 +58,19 @@ enum ServiceLevel {
   PREMIUM_3
   PREMIUM_5
   PREMIUM_10
+  // ---- UNOPENED_PACK専用（PSA_USのみ）。ADR-0023 ----
+  PACK_VALUE
+  PACK_ECONOMY
+  PACK_EXPRESS
+  // ---- COMIC_MAGAZINE専用（PSA_USのみ）。ADR-0023 ----
+  COMIC_MODERN
+  COMIC_MODERN_PLUS
+  COMIC_VINTAGE
+  COMIC_VINTAGE_PLUS
+  COMIC_HIGH_VALUE
+  COMIC_EXPRESS
+  COMIC_SUPER_EXPRESS
+  COMIC_WALK_THROUGH
 }
 
 enum ReturnMethod {
@@ -71,18 +84,17 @@ enum ServiceRegion {
   PSA_US
 }
 
+// 鑑定対象アイテム種別（PSA_USのみ複数。PSA_JPは常にTRADING_CARD）。ADR-0023
+enum ItemType {
+  TRADING_CARD
+  UNOPENED_PACK
+  COMIC_MAGAZINE // コミックとマガジンは1区分に統合
+}
+
 // 申込の入力経路（手数料の有無を分岐）
 enum ApplicationSource {
   CUSTOMER // 顧客自身が入力（手数料なし）
   STORE // 店舗（当社）が代理入力（手数料あり）
-}
-
-enum CardLanguage {
-  JAPANESE
-  ENGLISH
-  KOREAN
-  CHINESE
-  OTHER
 }
 
 enum PaymentStatus {
@@ -303,6 +315,7 @@ model Application {
   customerId     String
   serviceLevel   ServiceLevel
   region         ServiceRegion     @default(PSA_JP) // 提出先（PSA日本 / PSA US）
+  itemType       ItemType          @default(TRADING_CARD) // 鑑定対象アイテム種別（PSA_USのみ複数）。ADR-0023
   source         ApplicationSource @default(CUSTOMER) // 顧客入力 / 当社(店舗)入力
   returnMethod   ReturnMethod
   // 返送先住所（暗号化JSON）。null の場合は顧客の登録住所を使用
@@ -326,6 +339,7 @@ model Application {
   insuranceFee   Int               @default(0)
   discountAmount Int               @default(0) // キャンペーン割引（合計）。ADR-0016
   campaignName   String? // 適用キャンペーン名（記録用）
+  autographFeeTotal Float          @default(0) // オートグラフ（デュアルサービス）追加料金合計。割引対象外。ADR-0023
   taxAmount      Float             @default(0)
   notes          String?
   // PSA提出グループ（申込単位）。1サブミッションIDに複数申込を紐づける。ADR-0021
@@ -365,7 +379,7 @@ model Card {
   cardName      String // カード名
   cardNumber    String? // カード番号
   rarity        String? // レアリティ
-  language      CardLanguage @default(JAPANESE)
+  language      String  @default("日本語") // 自由記述（旧CardLanguage enumから変更）。ADR-0023
   declaredValue Int // 申告価格（円）
   quantity      Int          @default(1)
 
@@ -373,6 +387,8 @@ model Card {
   psaFee    Float @default(0) // PSA鑑定料（売価）。JP=円 / US=USD（小数点以下2桁）。ADR-0022
   psaCost   Float @default(0) // PSA原価（80%）
   agencyFee Int   @default(0) // 代行手数料
+  autographRequested Boolean @default(false) // オートグラフ（デュアルサービス）希望。PSA_US×TRADING_CARDのみ意味を持つ。ADR-0023
+  autographFee       Float   @default(0) // 確定時点のAutographPricing.feeのスナップショット（1枚あたり）
 
   // ステータス
   status        CardStatus          @default(DRAFT)
@@ -497,6 +513,7 @@ model ServicePrice {
   id               String        @id @default(cuid())
   serviceLevel     ServiceLevel
   region           ServiceRegion @default(PSA_JP)
+  itemType         ItemType      @default(TRADING_CARD) // ADR-0023
   pricePerCard     Float // 1枚あたり鑑定料 = 顧客請求額（JP=円・整数 / US=USD・小数点以下2桁）。ADR-0022
   cost             Float         @default(0) // 1枚あたり原価（JP=円 / US=USD）。0なら鑑定料×80%で代替
   maxDeclaredValue Float? // 申告価格の上限。nullは上限なし
@@ -504,19 +521,37 @@ model ServicePrice {
   updatedAt        DateTime      @updatedAt
   updatedBy        String?
 
-  @@unique([serviceLevel, region])
+  @@unique([serviceLevel, region, itemType])
   @@map("service_prices")
 }
 
-// 料金の一律設定（リージョン別。id=リージョン値 "PSA_JP"/"PSA_US"）。代理入力料金・事務手数料。ADR-0015
+// オートグラフ（デュアルサービス）追加料金。PSA_US×TRADING_CARDの個別カード単位オプション。ADR-0023
+model AutographPricing {
+  id           String        @id @default(cuid())
+  region       ServiceRegion @default(PSA_US)
+  serviceLevel ServiceLevel // トレーディングカードの既存レベルのいずれか（PSA_US分のみ運用想定）
+  fee          Float         @default(0) // 1枚あたり追加料金。JP=円 / US=USD。未設定は0
+  isActive     Boolean       @default(false) // 価格未確定のため既定で非表示
+  updatedAt    DateTime      @updatedAt
+  updatedBy    String?
+
+  @@unique([region, serviceLevel])
+  @@map("autograph_pricing")
+}
+
+// 料金の一律設定（リージョン×アイテム種別別。id は既存分は "PSA_JP"/"PSA_US"、新規分は "{region}_{itemType}"）。
+// 代理入力料金・事務手数料。ADR-0015 / ADR-0023（itemType軸を追加）
 model PricingSetting {
-  id             String   @id // リージョン値（PSA_JP / PSA_US）を格納
-  handlingFee    Int      @default(0) // 事務手数料（JP=円/枚 / US=USD/枚・一律）。枚数で加算
-  proxyFee       Int      @default(0) // 代理入力料金（JP=円/枚 / US=USD/枚・一律）。代理入力(STORE)時のみ
-  freeShipInsQty Int      @default(0) // この枚数以上で送料・保険を無料(0円)化。0=無効。ADR-0017
-  updatedAt      DateTime @updatedAt
+  id             String        @id
+  region         ServiceRegion @default(PSA_JP)
+  itemType       ItemType      @default(TRADING_CARD)
+  handlingFee    Int           @default(0) // 事務手数料（JP=円/枚 / US=USD/枚・一律）。枚数で加算
+  proxyFee       Int           @default(0) // 代理入力料金（JP=円/枚 / US=USD/枚・一律）。代理入力(STORE)時のみ
+  freeShipInsQty Int           @default(0) // この枚数以上で送料・保険を無料(0円)化。0=無効。ADR-0017
+  updatedAt      DateTime      @updatedAt
   updatedBy      String?
 
+  @@unique([region, itemType])
   @@map("pricing_settings")
 }
 
@@ -536,14 +571,14 @@ model MailTemplate {
 
 // カード名称マスタ（管理が手入力で蓄積。サブミッション時に検索・サジェスト）。ADR-0019
 model CardNameMaster {
-  id         String       @id @default(cuid())
+  id         String   @id @default(cuid())
   tcgTitle   String? // タイトル/セット名
   cardName   String
   cardNumber String?
   rarity     String?
-  language   CardLanguage @default(JAPANESE)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  language   String   @default("日本語") // 自由記述（旧CardLanguage enumから変更）。ADR-0023
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([cardName])
   @@map("card_name_masters")
@@ -575,6 +610,7 @@ model Campaign {
 model ShippingInsuranceRate {
   id               String        @id @default(cuid())
   region           ServiceRegion @default(PSA_JP)
+  itemType         ItemType      @default(TRADING_CARD) // ADR-0023
   minValue         Int // 申告価格合計の下限（円）
   maxValue         Int? // 上限（null=上限なし）
   qtyMin           Int // 枚数下限（例 1 / 9 / 26）
@@ -586,7 +622,7 @@ model ShippingInsuranceRate {
   updatedAt        DateTime      @updatedAt
   updatedBy        String?
 
-  @@index([region])
+  @@index([region, itemType])
   @@map("shipping_insurance_rates")
 }
 
@@ -595,6 +631,7 @@ model ShippingInsuranceRate {
 model ShippingRule {
   id           String       @id @default(cuid())
   returnMethod ReturnMethod
+  itemType     ItemType     @default(TRADING_CARD) // ADR-0023
   name         String
   fee          Int // 送料（円）
   minAmount    Int          @default(0) // 最低申込金額
@@ -611,6 +648,7 @@ model ShippingRule {
 
 model InsuranceRule {
   id        String   @id @default(cuid())
+  itemType  ItemType @default(TRADING_CARD) // ADR-0023
   minValue  Int // 最低申告額
   maxValue  Int? // 上限（nullなら無制限）
   fee       Int // 保険料（円）

@@ -9,7 +9,7 @@ import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe 
 import { sendTemplate } from "@/lib/mailer";
 import { formatMoney, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
-import { CardLanguage, ServiceLevel, ServiceRegion, ReturnMethod, Prisma } from "@prisma/client";
+import { ServiceLevel, ServiceRegion, ItemType, ReturnMethod, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -20,13 +20,15 @@ const cardSchema = z.object({
   cardName: z.string().min(1).max(200),
   cardNumber: z.string().max(100).optional(),
   rarity: z.string().max(100).optional(),
-  language: z.nativeEnum(CardLanguage).default("JAPANESE"),
+  language: z.string().min(1).max(50).default("日本語"),
   declaredValue: z.number().int().min(1),
   quantity: z.number().int().min(1).max(100),
   frontImageKey: z.string().optional(),
   backImageKey: z.string().optional(),
   damageImageKeys: z.array(z.string()).default([]),
   notes: z.string().max(1000).optional(),
+  // オートグラフ（デュアルサービス）希望。PSA_US×TRADING_CARD以外は保存時にfalseへ補正。ADR-0023
+  autographRequested: z.boolean().default(false),
 });
 
 const returnAddressSchema = z.object({
@@ -45,6 +47,7 @@ const applicationSchema = z.object({
   draftId: z.string().optional(), // 下書きから確定する場合
   serviceLevel: z.nativeEnum(ServiceLevel),
   region: z.nativeEnum(ServiceRegion),
+  itemType: z.nativeEnum(ItemType).default("TRADING_CARD"), // PSA_JPは常にTRADING_CARDへサーバー側で補正。ADR-0023
   returnMethod: z.nativeEnum(ReturnMethod),
   cards: z.array(cardSchema).min(1).max(200),
   returnAddress: returnAddressSchema.optional(), // 未指定なら登録住所を使用
@@ -110,12 +113,21 @@ export async function createApplication(
   const parsed = applicationSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
 
-  // 申告価格上限のバリデーション（選択サービスレベル×地域の上限を超えるカードは不可）
+  // PSA_JPは常にTRADING_CARD（クライアント値を信用しない）。ADR-0023
+  const itemType: ItemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
+  const isAutographEligible = parsed.data.region === "PSA_US" && itemType === "TRADING_CARD";
+  const cardsInput = parsed.data.cards.map((c) => ({
+    ...c,
+    autographRequested: isAutographEligible ? c.autographRequested : false,
+  }));
+
+  // 申告価格上限のバリデーション（選択サービスレベル×地域×アイテム種別の上限を超えるカードは不可）
   const servicePrice = await prisma.servicePrice.findUnique({
     where: {
-      serviceLevel_region: {
+      serviceLevel_region_itemType: {
         serviceLevel: parsed.data.serviceLevel,
         region: parsed.data.region,
+        itemType,
       },
     },
   });
@@ -123,7 +135,7 @@ export async function createApplication(
     return { success: false, error: "サービスレベルが見つかりません" };
   }
   if (servicePrice.maxDeclaredValue !== null) {
-    const over = parsed.data.cards.find(
+    const over = cardsInput.find(
       (c) => c.declaredValue > servicePrice.maxDeclaredValue!
     );
     if (over) {
@@ -134,20 +146,25 @@ export async function createApplication(
     }
   }
 
-  const totalDeclaredValue = parsed.data.cards.reduce(
+  const totalDeclaredValue = cardsInput.reduce(
     (sum, c) => sum + c.declaredValue * c.quantity,
     0
   );
-  const cardCount = parsed.data.cards.reduce((sum, c) => sum + c.quantity, 0);
+  const cardCount = cardsInput.reduce((sum, c) => sum + c.quantity, 0);
+  const autographCount = cardsInput
+    .filter((c) => c.autographRequested)
+    .reduce((sum, c) => sum + c.quantity, 0);
 
   // 顧客自身の申込は手数料なし（当社入力=STORE は管理画面の代理申込で別途）
   const fees = await calculateFees({
     serviceLevel: parsed.data.serviceLevel,
     region: parsed.data.region,
+    itemType,
     returnMethod: parsed.data.returnMethod,
     cardCount,
     totalDeclaredValue,
     applyAgencyFee: false,
+    autographCount,
     customerId: customer.id,
   });
 
@@ -174,6 +191,7 @@ export async function createApplication(
     const commonData = {
       serviceLevel: parsed.data.serviceLevel,
       region: parsed.data.region,
+      itemType,
       source: "CUSTOMER" as const,
       returnMethod: parsed.data.returnMethod,
       shippingAddressEncrypted: parsed.data.returnAddress
@@ -182,6 +200,7 @@ export async function createApplication(
       shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
       totalAmount: fees.totalAmount,
       psaFeeTotal: fees.psaFeeTotal,
+      autographFeeTotal: fees.autographFeeTotal,
       agencyFeeTotal: fees.agencyFeeTotal,
       handlingFee: fees.handlingFee,
       shippingFee: fees.shippingFee,
@@ -208,12 +227,18 @@ export async function createApplication(
 
     // カード作成（顧客入力のため代行手数料は0）
     const servicePriceData = servicePrice;
+    const autographPricing = isAutographEligible
+      ? await tx.autographPricing.findUnique({
+          where: { region_serviceLevel: { region: parsed.data.region, serviceLevel: parsed.data.serviceLevel } },
+        })
+      : null;
 
-    for (const cardInput of parsed.data.cards) {
+    for (const cardInput of cardsInput) {
       const cardNo = await generateCardNo();
       const psaFee = (servicePriceData?.pricePerCard ?? 0) * cardInput.quantity;
       const psaCost = roundMoney(psaFee * 0.8, parsed.data.region);
       const agencyFee = 0; // 顧客入力は手数料なし
+      const autographFee = cardInput.autographRequested ? (autographPricing?.fee ?? 0) * cardInput.quantity : 0;
 
       await tx.card.create({
         data: {
@@ -235,6 +260,8 @@ export async function createApplication(
           psaFee,
           psaCost,
           agencyFee,
+          autographRequested: cardInput.autographRequested,
+          autographFee,
           status: "DRAFT",
           statusHistory: {
             create: {
@@ -423,6 +450,7 @@ export async function confirmApplicationPayment(
 
 const storeRequestSchema = z.object({
   region: z.nativeEnum(ServiceRegion),
+  itemType: z.nativeEnum(ItemType).default("TRADING_CARD"), // PSA_JPは常にTRADING_CARDへサーバー側で補正。ADR-0023
   serviceLevel: z.nativeEnum(ServiceLevel),
   cardCount: z.number().int().min(1).max(500),
   returnMethod: z.nativeEnum(ReturnMethod),
@@ -449,8 +477,11 @@ export async function createStoreRequest(
   const parsed = storeRequestSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
 
+  // PSA_JPは常にTRADING_CARD（クライアント値を信用しない）。ADR-0023
+  const itemType: ItemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
+
   const servicePrice = await prisma.servicePrice.findUnique({
-    where: { serviceLevel_region: { serviceLevel: parsed.data.serviceLevel, region: parsed.data.region } },
+    where: { serviceLevel_region_itemType: { serviceLevel: parsed.data.serviceLevel, region: parsed.data.region, itemType } },
   });
   if (!servicePrice) return { success: false, error: "サービスレベルが見つかりません" };
 
@@ -476,6 +507,7 @@ export async function createStoreRequest(
         customerId: customer.id,
         serviceLevel: parsed.data.serviceLevel, // 顧客選択（店舗が明細確定時に再確定しうる）
         region: parsed.data.region,
+        itemType,
         source: "STORE",
         returnMethod: parsed.data.returnMethod,
         shippingAddressEncrypted: encrypt(JSON.stringify(parsed.data.returnAddress)),
@@ -649,15 +681,17 @@ const draftCardSchema = z.object({
   cardNumber: z.string().default(""),
   cardName: z.string().default(""),
   rarity: z.string().default(""),
-  language: z.nativeEnum(CardLanguage).default("JAPANESE"),
+  language: z.string().default("日本語"),
   quantity: z.number().int().default(1),
   declaredValue: z.number().int().default(0),
+  autographRequested: z.boolean().default(false),
 });
 
 const saveDraftSchema = z.object({
   draftId: z.string().optional(),
   serviceLevel: z.nativeEnum(ServiceLevel),
   region: z.nativeEnum(ServiceRegion),
+  itemType: z.nativeEnum(ItemType).default("TRADING_CARD"),
   returnMethod: z.nativeEnum(ReturnMethod),
   returnSel: z.string().default("registered"),
   cards: z.array(draftCardSchema).default([]),
@@ -690,6 +724,7 @@ export async function saveDraft(
       data: {
         serviceLevel: parsed.data.serviceLevel,
         region: parsed.data.region,
+        itemType: parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType,
         returnMethod: parsed.data.returnMethod,
         draftData,
       },
@@ -706,6 +741,7 @@ export async function saveDraft(
       customerId: customer.id,
       serviceLevel: parsed.data.serviceLevel,
       region: parsed.data.region,
+      itemType: parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType,
       source: "CUSTOMER",
       returnMethod: parsed.data.returnMethod,
       status: "DRAFT",
@@ -722,6 +758,7 @@ export async function getDraft(id: string): Promise<{
   draftId: string;
   serviceLevel: ServiceLevel;
   region: ServiceRegion;
+  itemType: ItemType;
   returnMethod: ReturnMethod;
   cards: z.infer<typeof draftCardSchema>[];
   returnSel: string;
@@ -737,6 +774,7 @@ export async function getDraft(id: string): Promise<{
     draftId: app.id,
     serviceLevel: app.serviceLevel,
     region: app.region,
+    itemType: app.itemType,
     returnMethod: app.returnMethod,
     cards: data.cards ?? [],
     returnSel: data.returnSel ?? "registered",
@@ -769,9 +807,11 @@ export async function deleteApplication(
 export async function previewFees(input: {
   serviceLevel: ServiceLevel | null;
   region: ServiceRegion;
+  itemType: ItemType;
   returnMethod: ReturnMethod;
   cardCount: number;
   totalDeclaredValue: number;
+  autographCount?: number;
 }) {
   if (!input.serviceLevel) return null;
   const customer = await getCustomerSession();
@@ -779,10 +819,12 @@ export async function previewFees(input: {
     return await calculateFees({
       serviceLevel: input.serviceLevel,
       region: input.region,
+      itemType: input.region === "PSA_JP" ? "TRADING_CARD" : input.itemType,
       returnMethod: input.returnMethod,
       cardCount: input.cardCount,
       totalDeclaredValue: input.totalDeclaredValue,
       applyAgencyFee: false,
+      autographCount: input.autographCount,
       customerId: customer?.id,
     });
   } catch {

@@ -18,6 +18,17 @@ const SERVICE_LABELS: Record<string, string> = {
   PREMIUM_3: "プレミアム 3",
   PREMIUM_5: "プレミアム 5",
   PREMIUM_10: "プレミアム 10",
+  PACK_VALUE: "バリュー",
+  PACK_ECONOMY: "エコノミー",
+  PACK_EXPRESS: "エクスプレス",
+  COMIC_MODERN: "モダン",
+  COMIC_MODERN_PLUS: "モダンプラス",
+  COMIC_VINTAGE: "ビンテージ",
+  COMIC_VINTAGE_PLUS: "ビンテージプラス",
+  COMIC_HIGH_VALUE: "ハイバリュー",
+  COMIC_EXPRESS: "エクスプレス",
+  COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
+  COMIC_WALK_THROUGH: "ウォークスルー",
 };
 
 type Cell = {
@@ -35,10 +46,12 @@ const inputCls = "w-28 border border-gray-300 rounded px-2 py-1 text-sm text-gra
 export default function ServicePriceForm({
   servicePrices,
   region,
+  itemType = "TRADING_CARD",
   unit,
 }: {
   servicePrices: ServicePrice[];
   region: string;
+  itemType?: string;
   unit: string;
 }) {
   const router = useRouter();
@@ -49,7 +62,7 @@ export default function ServicePriceForm({
 
   const [cells, setCells] = useState<Cell[]>(() =>
     servicePrices
-      .filter((sp) => sp.region === region)
+      .filter((sp) => sp.region === region && sp.itemType === itemType)
       .map((sp) => ({
         id: sp.id,
         serviceLevel: sp.serviceLevel,

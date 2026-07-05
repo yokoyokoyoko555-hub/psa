@@ -11,6 +11,12 @@ const REGION_LABELS: Record<string, string> = {
   PSA_US: "PSA US",
 };
 
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  TRADING_CARD: "トレーディングカード",
+  UNOPENED_PACK: "未開封パック",
+  COMIC_MAGAZINE: "コミック・マガジン",
+};
+
 export default async function StoreRequestDetailPage({
   params,
 }: {
@@ -26,9 +32,13 @@ export default async function StoreRequestDetailPage({
   if (!app || app.source !== "STORE") notFound();
 
   const servicePrices = await prisma.servicePrice.findMany({
-    where: { region: app.region, isActive: true },
+    where: { region: app.region, itemType: app.itemType, isActive: true },
     orderBy: { pricePerCard: "asc" },
   });
+  const autographPricing =
+    app.region === "PSA_US" && app.itemType === "TRADING_CARD"
+      ? await prisma.autographPricing.findMany({ where: { region: app.region, isActive: true } })
+      : [];
   const masters = await prisma.cardNameMaster.findMany({
     select: { cardName: true },
     orderBy: { cardName: "asc" },
@@ -65,6 +75,12 @@ export default async function StoreRequestDetailPage({
             <dt className="text-gray-500 text-xs">提出先</dt>
             <dd>{REGION_LABELS[app.region] ?? app.region}</dd>
           </div>
+          {app.region === "PSA_US" && (
+            <div>
+              <dt className="text-gray-500 text-xs">アイテム種別</dt>
+              <dd>{ITEM_TYPE_LABELS[app.itemType] ?? app.itemType}</dd>
+            </div>
+          )}
           <div>
             <dt className="text-gray-500 text-xs">返却方法</dt>
             <dd>{app.returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}</dd>
@@ -80,7 +96,9 @@ export default async function StoreRequestDetailPage({
         <StoreInputForm
           applicationId={app.id}
           region={app.region}
+          itemType={app.itemType}
           servicePrices={servicePrices}
+          autographPricing={autographPricing}
           masterNames={masterNames}
           initialDraft={draft}
         />

@@ -2,6 +2,9 @@
 
 > Codex / Claude Code 共有用の自己完結ドキュメント。関連: [ADR-0015](DECISIONS.md) / 既存料金は [ADR-0010](DECISIONS.md)/[ADR-0011](DECISIONS.md)。
 > 状態: **設計確定（実装前・要確認2点あり §9）** / 最終更新: 2026-06-23 / 対象: **PSA日本(PSA_JP)のみ**（US は据え置き）
+> ※ 本書はPSA日本の料金体系リニューアル時点のもの。その後 PSA US の小数対応（[ADR-0022](DECISIONS.md)）、
+> PSA US アイテム種別拡張（未開封パック/コミック・マガジン）+ Autographオプション（[ADR-0023](DECISIONS.md)）が追加されている。
+> `calculateFees()`は現在`itemType`引数を持ち、`ServicePrice`/`PricingSetting`/`ShippingInsuranceRate`/`ShippingRule`/`InsuranceRule`は全て`itemType`でも絞り込まれる（既定`TRADING_CARD`）。詳細はADR-0023参照。
 
 ---
 

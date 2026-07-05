@@ -41,17 +41,19 @@ function toBands(rates: ShippingInsuranceRate[]): Band[] {
 export default function ShippingInsuranceForm({
   rates,
   region,
+  itemType = "TRADING_CARD",
   unit,
 }: {
   rates: ShippingInsuranceRate[];
   region: "PSA_JP" | "PSA_US";
+  itemType?: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE";
   unit: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const [bands, setBands] = useState<Band[]>(() => {
-    const b = toBands(rates.filter((r) => r.region === region));
+    const b = toBands(rates.filter((r) => r.region === region && r.itemType === itemType));
     return b.length > 0 ? b : [{ minValue: "0", maxValue: "", fee8: "0", fee25: "0", surcharge: "0" }];
   });
 
@@ -77,7 +79,7 @@ export default function ShippingInsuranceForm({
           surcharge: parseInt(b.surcharge) || 0,
         })),
       };
-      const res = await saveShippingInsuranceRates({ region, ...payload });
+      const res = await saveShippingInsuranceRates({ region, itemType, ...payload });
       setMessage(res.success ? "保存しました" : res.error ?? "保存に失敗しました");
       if (res.success) router.refresh();
     });

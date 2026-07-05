@@ -220,3 +220,23 @@
 - 影響: `ServicePrice`/`Application`/`Card`/`Payment`のスキーマ変更（db push、非破壊）。`lib/currency.ts`に`roundMoney`/`toStripeAmount`/`stripeCurrency`を追加。`ServicePriceForm`（管理画面）はUS地域のみ`step="0.01"`で小数入力可。
 - 未対応: `PricingSetting`（事務手数料・代理入力料金）、送料保険マトリクス、`Campaign`固定額割引、`Upcharge.upchargeAmount`、顧客の申告価格入力（`ApplyForm`declaredValue）は引き続き整数のみ。US側で端数請求が必要になった場合は別途スコープ拡張。
 
+
+## ADR-0023: PSA US アイテム種別拡張（未開封パック／コミック・マガジン）+ Autographオプション + 言語自由記述化
+- 日付: 2026-07-05 / 状態: Accepted（実装済・新規アイテム種別とAutographは価格未確定のプレースホルダー）
+- 背景: 現行システムはトレーディングカードのPSA鑑定申込のみを扱っていたが、PSA USで未開封パック・コミック・マガジンの鑑定受付を追加したい（コミックとマガジンは運用上1区分に統合）。あわせてPSA USトレーディングカードにAutograph（デュアルサービス）の任意オプションを追加。PSA日本は対象外（トレカのみ・変更なし）。同時に、カードの「言語」入力を固定選択（旧`CardLanguage`enum）から自由記述に変更（例:「日本語」と直接入力）。
+- 決定:
+  - **新enum`ItemType`（`TRADING_CARD`/`UNOPENED_PACK`/`COMIC_MAGAZINE`）を導入**。`Application.itemType`に保持（申込単位。既存の`serviceLevel`/`region`と同じ粒度）。**`Card`には複製しない**（最小差分。1申込＝1アイテム種別の前提。トレカと他アイテムを混在させたい場合は申込を分ける運用）。
+  - **アイテム種別ごとに専用の`ServiceLevel`enum値を追加**（トレカの既存13段階とは別体系。名称衝突を避けるため接頭辞で区別）:
+    - 未開封パック: `PACK_VALUE`/`PACK_ECONOMY`/`PACK_EXPRESS`
+    - コミック・マガジン: `COMIC_MODERN`/`COMIC_MODERN_PLUS`/`COMIC_VINTAGE`/`COMIC_VINTAGE_PLUS`/`COMIC_HIGH_VALUE`/`COMIC_EXPRESS`/`COMIC_SUPER_EXPRESS`/`COMIC_WALK_THROUGH`
+    - 実価格は未確定のため`ServicePrice`に`pricePerCard:0, isActive:false`のプレースホルダーで投入（seed.ts）。管理画面で価格入力＋有効化するまで顧客画面には表示されない。
+  - **`ServicePrice`のユニークキーに`itemType`を追加**（`[serviceLevel, region, itemType]`、既存行は`@default(TRADING_CARD)`で非破壊）。
+  - **`PricingSetting`は`id`のPK構造を変えず、`region`/`itemType`列を追加**し`@@unique([region, itemType])`を新設（非破壊）。既存2行(id="PSA_JP"/"PSA_US")はseedの`upsert`で`region`/`itemType`をバックフィル。新規2行(US×UNOPENED_PACK/COMIC_MAGAZINE)は`id`を`"{region}_{itemType}"`で採番。
+  - **`ShippingInsuranceRate`/`ShippingRule`/`InsuranceRule`にも`itemType`列を追加**（全て`@default(TRADING_CARD)`、非破壊）。新アイテム種別はデータ未投入のため送料・保険は当面$0（管理画面でレート追加すれば有効化）。
+  - **新規`AutographPricing`モデル**（`region`+`serviceLevel`でユニーク、トレカの既存レベルのみ運用想定・`itemType`列は持たない＝呼び出し側でTRADING_CARD限定を保証）。Autographは**カード単位のオプトイン**（`Card.autographRequested`/`autographFee`）。価格はサービスレベルごとに異なる想定だが実価格は未確定のためプレースホルダー（`fee:0, isActive:false`）。
+  - **料金計算（`fee-calculator.ts`）**: `calculateFees()`に`itemType`/`autographCount`を追加。全lookup（ServicePrice/PricingSetting/ShippingInsuranceRate/ShippingRule/InsuranceRule）に`itemType`フィルタを適用。Autograph料金はキャンペーン割引の対象外（鑑定料と同じ扱いで`subtotal`に直接加算）。
+  - **顧客フロー**: 「①自己/代理入力選択→②地域選択→③アイテム種別選択(PSA_USのみ表示)→④サービスレベル選択→⑤カード情報入力」に拡張。JPでは③が非表示で常に`TRADING_CARD`（サーバー側でも強制補正）。代理入力の先払い見積り画面ではAutographを一切扱わない（スタッフが実物確認後の明細入力時に選択）。
+  - **`Card.language`を`CardLanguage`enumから自由記述`String`へ変更**（`CardNameMaster.language`も同様）。UIは`<datalist>`で日本語/英語/韓国語/中国語/その他を候補表示しつつ自由入力可。PSA提出用1行コピー（`admin/applications/[id]`）の英語変換マップは新旧両方の値（自由記述の代表値＋旧enum値）に対応、それ以外はそのまま出力。
+- 影響: `prisma/schema.prisma`に新enum・新モデル・複数列追加（db push、既存データは全て`@default`で非破壊）。`prisma/seed.ts`に新規プレースホルダー行を追加。`ApplyForm.tsx`/`StoreRequestForm.tsx`/`StoreInputForm.tsx`/管理画面設定（新規`AutographPricingForm.tsx`含む）を変更。
+- 未対応: 未開封パック・コミック/マガジン・Autographの実価格は未確定（管理画面から入力が必要）。`Campaign`固定額割引・`Upcharge`は引き続きTRADING_CARD/itemType非対応のまま。
+

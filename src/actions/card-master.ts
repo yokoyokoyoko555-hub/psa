@@ -3,7 +3,6 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { CardLanguage } from "@prisma/client";
 import { z } from "zod";
 
 async function requireStaff() {
@@ -19,7 +18,7 @@ const masterSchema = z.object({
   cardName: z.string().min(1).max(200),
   cardNumber: z.string().max(60).optional(),
   rarity: z.string().max(60).optional(),
-  language: z.nativeEnum(CardLanguage),
+  language: z.string().min(1).max(50),
 });
 
 export async function saveCardNameMaster(

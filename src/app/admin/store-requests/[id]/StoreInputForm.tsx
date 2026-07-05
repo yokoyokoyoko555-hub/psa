@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeStoreApplication, saveStoreInputDraft } from "@/actions/admin";
-import { CardLanguage, ServiceLevel } from "@prisma/client";
-import type { ServicePrice } from "@prisma/client";
+import { ServiceLevel } from "@prisma/client";
+import type { ServicePrice, AutographPricing } from "@prisma/client";
 import { formatMoney } from "@/lib/currency";
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -20,25 +20,37 @@ const SERVICE_LABELS: Record<string, string> = {
   PREMIUM_3: "プレミアム 3",
   PREMIUM_5: "プレミアム 5",
   PREMIUM_10: "プレミアム 10",
+  PACK_VALUE: "バリュー",
+  PACK_ECONOMY: "エコノミー",
+  PACK_EXPRESS: "エクスプレス",
+  COMIC_MODERN: "モダン",
+  COMIC_MODERN_PLUS: "モダンプラス",
+  COMIC_VINTAGE: "ビンテージ",
+  COMIC_VINTAGE_PLUS: "ビンテージプラス",
+  COMIC_HIGH_VALUE: "ハイバリュー",
+  COMIC_EXPRESS: "エクスプレス",
+  COMIC_SUPER_EXPRESS: "スーパーエクスプレス",
+  COMIC_WALK_THROUGH: "ウォークスルー",
 };
 
-const LANGUAGE_LABELS: Record<string, string> = {
-  JAPANESE: "日本語",
-  ENGLISH: "英語",
-  KOREAN: "韓国語",
-  CHINESE: "中国語",
-  OTHER: "その他",
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  TRADING_CARD: "トレーディングカード",
+  UNOPENED_PACK: "未開封パック",
+  COMIC_MAGAZINE: "コミック・マガジン",
 };
+
+const LANGUAGE_SUGGESTIONS = ["日本語", "英語", "韓国語", "中国語", "その他"];
 
 interface CardRow {
   tcgTitle: string;
   cardName: string;
   cardNumber: string;
   rarity: string;
-  language: CardLanguage;
+  language: string;
   declaredValue: number;
   quantity: number;
   notes: string;
+  autographRequested: boolean;
 }
 
 function newRow(): CardRow {
@@ -47,10 +59,11 @@ function newRow(): CardRow {
     cardName: "",
     cardNumber: "",
     rarity: "",
-    language: "JAPANESE",
+    language: "日本語",
     declaredValue: 0,
     quantity: 1,
     notes: "",
+    autographRequested: false,
   };
 }
 
@@ -62,23 +75,28 @@ function toCardRow(raw: unknown): CardRow {
     cardName: typeof r.cardName === "string" ? r.cardName : "",
     cardNumber: typeof r.cardNumber === "string" ? r.cardNumber : "",
     rarity: typeof r.rarity === "string" ? r.rarity : "",
-    language: (typeof r.language === "string" ? r.language : "JAPANESE") as CardLanguage,
+    language: typeof r.language === "string" ? r.language : "日本語",
     declaredValue: typeof r.declaredValue === "number" ? r.declaredValue : 0,
     quantity: typeof r.quantity === "number" && r.quantity >= 1 ? r.quantity : 1,
     notes: typeof r.notes === "string" ? r.notes : "",
+    autographRequested: typeof r.autographRequested === "boolean" ? r.autographRequested : false,
   };
 }
 
 export default function StoreInputForm({
   applicationId,
   region,
+  itemType,
   servicePrices,
+  autographPricing = [],
   masterNames = [],
   initialDraft = null,
 }: {
   applicationId: string;
   region: string;
+  itemType: string;
   servicePrices: ServicePrice[];
+  autographPricing?: AutographPricing[];
   masterNames?: string[];
   initialDraft?: { serviceLevel?: string; cards?: unknown[] } | null;
 }) {
@@ -94,6 +112,9 @@ export default function StoreInputForm({
   const [error, setError] = useState("");
 
   const selected = servicePrices.find((p) => p.serviceLevel === serviceLevel);
+  const isAutographEligible = region === "PSA_US" && itemType === "TRADING_CARD";
+  const autographActive =
+    isAutographEligible && autographPricing.some((a) => a.serviceLevel === serviceLevel && a.isActive);
 
   async function handleSaveDraft() {
     setError("");
@@ -110,6 +131,7 @@ export default function StoreInputForm({
         declaredValue: c.declaredValue,
         quantity: c.quantity,
         notes: c.notes,
+        autographRequested: c.autographRequested,
       })),
     });
     setSavingDraft(false);
@@ -143,6 +165,7 @@ export default function StoreInputForm({
         declaredValue: c.declaredValue,
         quantity: c.quantity,
         notes: c.notes || undefined,
+        autographRequested: c.autographRequested,
       })),
     });
     setLoading(false);
@@ -167,6 +190,9 @@ export default function StoreInputForm({
 
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="font-bold text-gray-900 mb-3">サービスレベル</h2>
+        {region === "PSA_US" && (
+          <p className="text-xs text-gray-500 mb-2">アイテム種別: {ITEM_TYPE_LABELS[itemType] ?? itemType}</p>
+        )}
         <select
           value={serviceLevel}
           onChange={(e) => setServiceLevel(e.target.value as ServiceLevel)}
@@ -233,15 +259,13 @@ export default function StoreInputForm({
                 onChange={(e) => update(i, "rarity", e.target.value)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
               />
-              <select
+              <input
+                placeholder="言語（例: 日本語）"
+                list="language-suggestions"
                 value={c.language}
-                onChange={(e) => update(i, "language", e.target.value as CardLanguage)}
+                onChange={(e) => update(i, "language", e.target.value)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              >
-                {Object.entries(LANGUAGE_LABELS).map(([v, label]) => (
-                  <option key={v} value={v}>{label}</option>
-                ))}
-              </select>
+              />
               <input
                 type="number"
                 placeholder="申告価格（円）"
@@ -258,10 +282,25 @@ export default function StoreInputForm({
                 onChange={(e) => update(i, "quantity", parseInt(e.target.value) || 1)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
               />
+              {autographActive && (
+                <label className="flex items-center gap-2 text-sm text-gray-700 sm:col-span-2">
+                  <input
+                    type="checkbox"
+                    checked={c.autographRequested}
+                    onChange={(e) => update(i, "autographRequested", e.target.checked)}
+                  />
+                  オートグラフ（デュアルサービス）認証希望
+                </label>
+              )}
             </div>
           </div>
         ))}
       </div>
+      <datalist id="language-suggestions">
+        {LANGUAGE_SUGGESTIONS.map((v) => (
+          <option key={v} value={v} />
+        ))}
+      </datalist>
 
       {selected && (
         <p className="text-sm text-gray-500">

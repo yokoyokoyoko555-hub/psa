@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, ServiceLevel, ItemType } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { createCipheriv, randomBytes } from "crypto";
@@ -66,37 +66,79 @@ async function main() {
   ];
   const regions = ["PSA_JP", "PSA_US"] as const;
 
-  // 既存の料金は維持し、無い (レベル×地域) のみ追加（管理画面の編集値を消さない）
+  // 既存の料金は維持し、無い (レベル×地域×アイテム種別) のみ追加（管理画面の編集値を消さない）
   for (const region of regions) {
     for (const l of baseLevels) {
       await prisma.servicePrice.upsert({
-        where: { serviceLevel_region: { serviceLevel: l.serviceLevel, region } },
+        where: { serviceLevel_region_itemType: { serviceLevel: l.serviceLevel, region, itemType: "TRADING_CARD" } },
         update: {},
-        create: { ...l, region },
+        create: { ...l, region, itemType: "TRADING_CARD" },
       });
     }
   }
 
-  // Shipping rules
+  // 新アイテム種別（未開封パック・コミック/マガジン）。PSA_USのみ。実価格は未確定のため
+  // プレースホルダー（0円・非表示）で投入し、管理画面で後日入力する。ADR-0023
+  const newItemTypeLevels: Record<"UNOPENED_PACK" | "COMIC_MAGAZINE", ServiceLevel[]> = {
+    UNOPENED_PACK: ["PACK_VALUE", "PACK_ECONOMY", "PACK_EXPRESS"],
+    COMIC_MAGAZINE: [
+      "COMIC_MODERN",
+      "COMIC_MODERN_PLUS",
+      "COMIC_VINTAGE",
+      "COMIC_VINTAGE_PLUS",
+      "COMIC_HIGH_VALUE",
+      "COMIC_EXPRESS",
+      "COMIC_SUPER_EXPRESS",
+      "COMIC_WALK_THROUGH",
+    ],
+  };
+  for (const [itemType, levels] of Object.entries(newItemTypeLevels) as [ItemType, ServiceLevel[]][]) {
+    for (const serviceLevel of levels) {
+      await prisma.servicePrice.upsert({
+        where: { serviceLevel_region_itemType: { serviceLevel, region: "PSA_US", itemType } },
+        update: {},
+        create: {
+          serviceLevel,
+          region: "PSA_US",
+          itemType,
+          pricePerCard: 0,
+          cost: 0,
+          maxDeclaredValue: null,
+          isActive: false,
+        },
+      });
+    }
+  }
+
+  // Autograph（デュアルサービス）追加料金。PSA_US×トレーディングカードの既存レベル分。実価格未確定のためプレースホルダー。ADR-0023
+  for (const l of baseLevels) {
+    await prisma.autographPricing.upsert({
+      where: { region_serviceLevel: { region: "PSA_US", serviceLevel: l.serviceLevel } },
+      update: {},
+      create: { region: "PSA_US", serviceLevel: l.serviceLevel, fee: 0, isActive: false },
+    });
+  }
+
+  // Shipping rules（itemType未指定=TRADING_CARD。新アイテム種別は当面$0フォールバックとなる）
   await prisma.shippingRule.deleteMany();
   await prisma.shippingRule.createMany({
     data: [
-      { returnMethod: "STORE_PICKUP", name: "店頭受取", fee: 0, minAmount: 0, sortOrder: 0 },
-      { returnMethod: "SHIPPING", name: "配送（〜50,000円）", fee: 880, minAmount: 0, maxAmount: 50000, sortOrder: 0 },
-      { returnMethod: "SHIPPING", name: "配送（50,001〜100,000円）", fee: 1320, minAmount: 50001, maxAmount: 100000, sortOrder: 1 },
-      { returnMethod: "SHIPPING", name: "配送（100,001円〜）", fee: 1760, minAmount: 100001, sortOrder: 2 },
+      { returnMethod: "STORE_PICKUP", itemType: "TRADING_CARD", name: "店頭受取", fee: 0, minAmount: 0, sortOrder: 0 },
+      { returnMethod: "SHIPPING", itemType: "TRADING_CARD", name: "配送（〜50,000円）", fee: 880, minAmount: 0, maxAmount: 50000, sortOrder: 0 },
+      { returnMethod: "SHIPPING", itemType: "TRADING_CARD", name: "配送（50,001〜100,000円）", fee: 1320, minAmount: 50001, maxAmount: 100000, sortOrder: 1 },
+      { returnMethod: "SHIPPING", itemType: "TRADING_CARD", name: "配送（100,001円〜）", fee: 1760, minAmount: 100001, sortOrder: 2 },
     ],
   });
 
-  // Insurance rules（PSA US用に温存。PSA日本は下記の合算マトリクスを使用）
+  // Insurance rules（PSA US用に温存。PSA日本は下記の合算マトリクスを使用。itemType未指定=TRADING_CARD）
   await prisma.insuranceRule.deleteMany();
   await prisma.insuranceRule.createMany({
     data: [
-      { minValue: 0, maxValue: 50000, fee: 0, sortOrder: 0 },
-      { minValue: 50001, maxValue: 100000, fee: 500, sortOrder: 1 },
-      { minValue: 100001, maxValue: 300000, fee: 1000, sortOrder: 2 },
-      { minValue: 300001, maxValue: 500000, fee: 2000, sortOrder: 3 },
-      { minValue: 500001, fee: 0, feeRate: 0.5, sortOrder: 4 },
+      { itemType: "TRADING_CARD", minValue: 0, maxValue: 50000, fee: 0, sortOrder: 0 },
+      { itemType: "TRADING_CARD", minValue: 50001, maxValue: 100000, fee: 500, sortOrder: 1 },
+      { itemType: "TRADING_CARD", minValue: 100001, maxValue: 300000, fee: 1000, sortOrder: 2 },
+      { itemType: "TRADING_CARD", minValue: 300001, maxValue: 500000, fee: 2000, sortOrder: 3 },
+      { itemType: "TRADING_CARD", minValue: 500001, fee: 0, feeRate: 0.5, sortOrder: 4 },
     ],
   });
 
@@ -133,12 +175,22 @@ async function main() {
     await prisma.mailTemplate.upsert({ where: { key: t.key }, update: {}, create: t });
   }
 
-  // 料金共通設定（事務手数料・一律）。upsertで既存編集値を保持。ADR-0015
+  // 料金共通設定（事務手数料・一律）。リージョン×アイテム種別。upsertで既存編集値を保持。
+  // 既存2行(id="PSA_JP"/"PSA_US")は id をそのまま where に使い、region/itemType のみバックフィル（非破壊）。ADR-0015 / ADR-0023
   for (const r of ["PSA_JP", "PSA_US"] as const) {
     await prisma.pricingSetting.upsert({
       where: { id: r },
+      update: { region: r, itemType: "TRADING_CARD" },
+      create: { id: r, region: r, itemType: "TRADING_CARD", handlingFee: 0, proxyFee: 0 },
+    });
+  }
+  // 新アイテム種別分（PSA_USのみ）。新規idを採番。
+  for (const itemType of ["UNOPENED_PACK", "COMIC_MAGAZINE"] as const) {
+    const id = `PSA_US_${itemType}`;
+    await prisma.pricingSetting.upsert({
+      where: { id },
       update: {},
-      create: { id: r, handlingFee: 0, proxyFee: 0 },
+      create: { id, region: "PSA_US", itemType, handlingFee: 0, proxyFee: 0 },
     });
   }
 

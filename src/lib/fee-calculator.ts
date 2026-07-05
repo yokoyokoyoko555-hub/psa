@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { ServiceLevel, ReturnMethod, ServiceRegion } from "@prisma/client";
+import { ServiceLevel, ReturnMethod, ServiceRegion, ItemType } from "@prisma/client";
 import { roundMoney } from "./currency";
 
 const TAX_RATE = 0.1;
@@ -8,6 +8,7 @@ const PSA_COST_RATE = 0.8; // 代理店価格: 定価の80%
 export interface FeeBreakdown {
   psaFeeTotal: number;
   psaCostTotal: number;
+  autographFeeTotal: number; // オートグラフ（デュアルサービス）追加料金合計。割引対象外。ADR-0023
   agencyFeeTotal: number; // 代理入力料金（STORE時のみ）
   shippingFee: number; // 「送料・保険」合算額をここに入れる
   insuranceFee: number; // 0（合算のため）
@@ -49,11 +50,12 @@ async function findCampaign(region: ServiceRegion, customerId?: string) {
  */
 async function calcShippingInsuranceMatrix(
   region: ServiceRegion,
+  itemType: ItemType,
   totalDeclaredValue: number,
   cardCount: number,
 ): Promise<number | null> {
   const rates = await prisma.shippingInsuranceRate.findMany({
-    where: { region, isActive: true },
+    where: { region, itemType, isActive: true },
     orderBy: { sortOrder: "asc" },
   });
   if (rates.length === 0) return null; // 未設定 → フォールバック
@@ -73,11 +75,12 @@ async function calcShippingInsuranceMatrix(
 /** PSA US（据え置き）: 従来の ShippingRule / InsuranceRule から算出 */
 async function calcShippingInsuranceLegacy(params: {
   returnMethod: ReturnMethod;
+  itemType: ItemType;
   totalDeclaredValue: number;
 }): Promise<number> {
   const [shippingRules, insuranceRules] = await Promise.all([
-    prisma.shippingRule.findMany({ where: { returnMethod: params.returnMethod, isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.insuranceRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.shippingRule.findMany({ where: { returnMethod: params.returnMethod, itemType: params.itemType, isActive: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.insuranceRule.findMany({ where: { itemType: params.itemType, isActive: true }, orderBy: { sortOrder: "asc" } }),
   ]);
 
   const shippingRule =
@@ -107,6 +110,8 @@ async function calcShippingInsuranceLegacy(params: {
 export async function calculateFees(params: {
   serviceLevel: ServiceLevel;
   region: ServiceRegion;
+  /** 鑑定対象アイテム種別（PSA_USのみ複数）。ADR-0023 */
+  itemType: ItemType;
   returnMethod: ReturnMethod;
   cardCount: number;
   totalDeclaredValue: number;
@@ -117,20 +122,33 @@ export async function calculateFees(params: {
    * 未指定なら従来どおり cardCount（枚数）ベース。後方互換のため任意。[ADR-0020 / PROXY_PREPAY]
    */
   agencyCardTypeCount?: number;
+  /** オートグラフ（デュアルサービス）を希望するカードの枚数。PSA_US×TRADING_CARDのみ意味を持つ。ADR-0023 */
+  autographCount?: number;
   /** 新規(初回)限定キャンペーンの判定に使用（任意） */
   customerId?: string;
 }): Promise<FeeBreakdown> {
   const servicePrice = await prisma.servicePrice.findUnique({
-    where: { serviceLevel_region: { serviceLevel: params.serviceLevel, region: params.region } },
+    where: { serviceLevel_region_itemType: { serviceLevel: params.serviceLevel, region: params.region, itemType: params.itemType } },
   });
   if (!servicePrice) throw new Error("Service price not found");
 
-  const setting = await prisma.pricingSetting.findUnique({ where: { id: params.region } });
+  const setting = await prisma.pricingSetting.findUnique({
+    where: { region_itemType: { region: params.region, itemType: params.itemType } },
+  });
   const psaFeeTotal = servicePrice.pricePerCard * params.cardCount;
   // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替
   const perCardCost =
     servicePrice.cost > 0 ? servicePrice.cost : roundMoney(servicePrice.pricePerCard * PSA_COST_RATE, params.region);
   const psaCostTotal = perCardCost * params.cardCount;
+
+  // オートグラフ（デュアルサービス）追加料金: PSA_US×TRADING_CARDのみ、サービスレベル別の一律額 × 希望枚数
+  let autographFeeTotal = 0;
+  if (params.itemType === "TRADING_CARD" && params.region === "PSA_US" && (params.autographCount ?? 0) > 0) {
+    const autographPricing = await prisma.autographPricing.findUnique({
+      where: { region_serviceLevel: { region: params.region, serviceLevel: params.serviceLevel } },
+    });
+    autographFeeTotal = (autographPricing?.fee ?? 0) * (params.autographCount ?? 0);
+  }
 
   // 代理入力料金: リージョン別の一律額 × 種類数（同一カードは何枚でも1種）。
   // 種類数(agencyCardTypeCount)未指定なら従来どおり枚数(cardCount)で算出（後方互換）。代理入力(STORE)時のみ。
@@ -140,14 +158,19 @@ export async function calculateFees(params: {
   const handlingFee = (setting?.handlingFee ?? 0) * params.cardCount;
 
   // 送料・保険: リージョン別の合算マトリクス（未投入時は従来ロジックにフォールバック）
-  const matrix = await calcShippingInsuranceMatrix(params.region, params.totalDeclaredValue, params.cardCount);
+  const matrix = await calcShippingInsuranceMatrix(params.region, params.itemType, params.totalDeclaredValue, params.cardCount);
   let shippingInsurance =
-    matrix ?? (await calcShippingInsuranceLegacy({ returnMethod: params.returnMethod, totalDeclaredValue: params.totalDeclaredValue }));
+    matrix ??
+    (await calcShippingInsuranceLegacy({
+      returnMethod: params.returnMethod,
+      itemType: params.itemType,
+      totalDeclaredValue: params.totalDeclaredValue,
+    }));
   // N枚以上で送料・保険を無料化（リージョン別しきい値・0=無効）
   const freeQty = setting?.freeShipInsQty ?? 0;
   if (freeQty > 0 && params.cardCount >= freeQty) shippingInsurance = 0;
 
-  // キャンペーン割引: 「鑑定料以外」（代理入力料金＋送料保険＋事務手数料）を対象。鑑定料は対象外。
+  // キャンペーン割引: 「鑑定料以外」（代理入力料金＋送料保険＋事務手数料）を対象。鑑定料・オートグラフ料金は対象外。
   const discountBase = agencyFeeTotal + shippingInsurance + handlingFee;
   const campaign = await findCampaign(params.region, params.customerId);
   let discountAmount = 0;
@@ -159,13 +182,14 @@ export async function calculateFees(params: {
     discountAmount = Math.min(discountAmount, discountBase); // 対象ベースを上限
   }
 
-  const subtotal = psaFeeTotal + discountBase - discountAmount;
+  const subtotal = psaFeeTotal + autographFeeTotal + discountBase - discountAmount;
   const taxAmount = roundMoney(subtotal * TAX_RATE, params.region);
   const totalAmount = roundMoney(subtotal + taxAmount, params.region);
 
   return {
     psaFeeTotal,
     psaCostTotal,
+    autographFeeTotal,
     agencyFeeTotal,
     shippingFee: shippingInsurance,
     insuranceFee: 0,
