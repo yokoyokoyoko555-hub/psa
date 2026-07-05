@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type FocusEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { CustomServicePrice } from "@prisma/client";
 import { saveCustomServicePrice, deleteCustomServicePrice } from "@/actions/pricing";
@@ -17,10 +17,12 @@ type Draft = {
 };
 
 function emptyDraft(nextSortOrder: number): Draft {
-  return { name: "", pricePerCard: "0", cost: "0", maxDeclaredValue: "", isActive: true, sortOrder: String(nextSortOrder) };
+  return { name: "", pricePerCard: "", cost: "", maxDeclaredValue: "", isActive: true, sortOrder: String(nextSortOrder) };
 }
 
 const inputCls = "border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 w-full";
+// 既存値が入った状態でフォーカスした際、選択済みにして即座に上書き入力できるようにする（0を消す手間を無くす）
+const selectOnFocus = (e: FocusEvent<HTMLInputElement>) => e.target.select();
 
 export default function CustomServicePriceForm({
   items,
@@ -131,19 +133,19 @@ export default function CustomServicePriceForm({
             </label>
             <label className="text-sm space-y-1">
               <span className="text-gray-700">価格（{currencySymbol}/枚）</span>
-              <input type="number" min={0} step={priceStep} value={draft.pricePerCard} onChange={(e) => setDraft({ ...draft, pricePerCard: e.target.value })} className={inputCls} />
+              <input type="number" min={0} step={priceStep} placeholder="0" value={draft.pricePerCard} onFocus={selectOnFocus} onChange={(e) => setDraft({ ...draft, pricePerCard: e.target.value })} className={inputCls} />
             </label>
             <label className="text-sm space-y-1">
               <span className="text-gray-700">原価（{currencySymbol}/枚）</span>
-              <input type="number" min={0} step={priceStep} value={draft.cost} onChange={(e) => setDraft({ ...draft, cost: e.target.value })} className={inputCls} />
+              <input type="number" min={0} step={priceStep} placeholder="0" value={draft.cost} onFocus={selectOnFocus} onChange={(e) => setDraft({ ...draft, cost: e.target.value })} className={inputCls} />
             </label>
             <label className="text-sm space-y-1">
               <span className="text-gray-700">申告上限（円・空欄=上限なし）</span>
-              <input type="number" min={0} step="1" placeholder="なし" value={draft.maxDeclaredValue} onChange={(e) => setDraft({ ...draft, maxDeclaredValue: e.target.value })} className={inputCls} />
+              <input type="number" min={0} step="1" placeholder="なし" value={draft.maxDeclaredValue} onFocus={selectOnFocus} onChange={(e) => setDraft({ ...draft, maxDeclaredValue: e.target.value })} className={inputCls} />
             </label>
             <label className="text-sm space-y-1">
               <span className="text-gray-700">表示順</span>
-              <input type="number" value={draft.sortOrder} onChange={(e) => setDraft({ ...draft, sortOrder: e.target.value })} className={inputCls} />
+              <input type="number" value={draft.sortOrder} onFocus={selectOnFocus} onChange={(e) => setDraft({ ...draft, sortOrder: e.target.value })} className={inputCls} />
             </label>
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-700">
