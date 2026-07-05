@@ -103,13 +103,18 @@ export default function CustomServicePriceForm({
       <div className="space-y-2">
         {rows.length === 0 && <p className="text-sm text-gray-400">未登録です。</p>}
         {rows.map((i) => (
-          <div key={i.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg p-3 text-sm">
-            <div className="min-w-0">
-              <p className="font-bold text-gray-900">
+          <div
+            key={i.id}
+            className={`flex items-center justify-between gap-3 border rounded-lg p-3 text-sm ${
+              i.isActive ? "border-gray-100" : "border-gray-100 bg-gray-100"
+            }`}
+          >
+            <div className="min-w-0 flex items-baseline gap-2 whitespace-nowrap overflow-x-auto">
+              <p className="font-bold text-gray-900 shrink-0">
                 {i.name}
                 {!i.isActive && <span className="ml-2 text-xs text-gray-400">(無効)</span>}
               </p>
-              <p className="text-gray-500">
+              <p className="text-gray-500 shrink-0">
                 {formatMoney(i.pricePerCard, region)}/枚 ・ 原価{formatMoney(i.cost, region)} ・ 申告上限{" "}
                 {i.maxDeclaredValue === null ? "なし" : formatMoneyIn(i.maxDeclaredValue, "JPY")}
               </p>
