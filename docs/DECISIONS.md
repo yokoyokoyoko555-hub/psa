@@ -239,4 +239,5 @@
   - **`Card.language`を`CardLanguage`enumから自由記述`String`へ変更**（`CardNameMaster.language`も同様）。UIは`<datalist>`で日本語/英語/韓国語/中国語/その他を候補表示しつつ自由入力可。PSA提出用1行コピー（`admin/applications/[id]`）の英語変換マップは新旧両方の値（自由記述の代表値＋旧enum値）に対応、それ以外はそのまま出力。
 - 影響: `prisma/schema.prisma`に新enum・新モデル・複数列追加（db push、既存データは全て`@default`で非破壊）。`prisma/seed.ts`に新規プレースホルダー行を追加。`ApplyForm.tsx`/`StoreRequestForm.tsx`/`StoreInputForm.tsx`/管理画面設定（新規`AutographPricingForm.tsx`含む）を変更。
 - 未対応: 未開封パック・コミック/マガジン・Autographの実価格は未確定（管理画面から入力が必要）。`Campaign`固定額割引・`Upcharge`は引き続きTRADING_CARD/itemType非対応のまま。
+- **追記（デプロイ障害・即日修正）**: `PricingSetting`に`@@unique([region, itemType])`を追加してデプロイしたところ、既存2行(id="PSA_JP"/"PSA_US")が`db push`時点で`region`/`itemType`ともに同一デフォルト値（PSA_JP/TRADING_CARD）を取り、ユニークインデックス作成が`P2002`で衝突 → 本番ヘルスチェックが失敗し続ける障害が発生（2026-07-05）。**教訓: 複数の既存行を持つテーブルに新規列＋ユニーク制約を同一`db push`で追加すると、行ごとに異なるはずの値が全行同一のデフォルトになり衝突しうる**。対応として`@@unique`を`@@index`に変更し、一意性はアプリ側（`findFirst`→`create`/`update`）で担保する方式に変更（`saveUniformFees`/`fee-calculator.ts`/`admin.ts`）。同種の変更をする場合は「新規列追加→（必要なら別デプロイでバックフィル確認）→ユニーク制約追加」の順に分けるか、初めからアプリ側一意性担保に倒すこと。
 
