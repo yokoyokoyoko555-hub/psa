@@ -32,6 +32,7 @@ export type InitialDraft = {
     autographCustomServiceLevelId?: string | null;
   }[];
   returnSel: string;
+  // デュアルサービス（オートグラフ）は下書き復元時、先頭カードの値から復元する（全カード共通の選択のため）。
 };
 
 const DRAFT_KEY = "psa-apply-draft";
@@ -74,8 +75,6 @@ interface CardItem {
   language: string;
   quantity: number;
   declaredValue: number;
-  autographRequested: boolean;
-  autographCustomServiceLevelId: string | null;
 }
 
 function emptyCard(): CardItem {
@@ -88,8 +87,6 @@ function emptyCard(): CardItem {
     language: "日本語",
     quantity: 1,
     declaredValue: 0,
-    autographRequested: false,
-    autographCustomServiceLevelId: null,
   };
 }
 
@@ -163,13 +160,24 @@ export default function ApplyForm({
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>(
     initialDraft?.returnMethod ?? "SHIPPING"
   );
+  // デュアルサービス（オートグラフ）: サービス選択ステップで一度だけ選び、申込内の全カードに一律適用する。
+  const [autographRequested, setAutographRequested] = useState<boolean>(
+    initialDraft?.cards?.[0]?.autographRequested ?? false
+  );
+  const [autographCustomServiceLevelId, setAutographCustomServiceLevelId] = useState<string | null>(
+    initialDraft?.cards?.[0]?.autographCustomServiceLevelId ?? null
+  );
 
   const [cards, setCards] = useState<CardItem[]>(
     (initialDraft?.cards ?? []).map((c) => ({
-      ...c,
+      tcgTitle: c.tcgTitle,
+      releaseYear: c.releaseYear,
+      cardNumber: c.cardNumber,
+      cardName: c.cardName,
+      rarity: c.rarity,
       language: c.language ?? "日本語",
-      autographRequested: c.autographRequested ?? false,
-      autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? null,
+      quantity: c.quantity,
+      declaredValue: c.declaredValue,
     }))
   );
   const [draft, setDraft] = useState<CardItem>(emptyCard());
@@ -264,15 +272,11 @@ export default function ApplyForm({
 
   const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
   const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
-  // Autograph選択内訳（タイアID別に枚数を集計）
-  const autographSelections = (() => {
-    const map = new Map<string, number>();
-    for (const c of cards) {
-      if (!c.autographRequested || !c.autographCustomServiceLevelId) continue;
-      map.set(c.autographCustomServiceLevelId, (map.get(c.autographCustomServiceLevelId) ?? 0) + c.quantity);
-    }
-    return Array.from(map, ([customServiceLevelId, quantity]) => ({ customServiceLevelId, quantity }));
-  })();
+  // デュアルサービスは申込全体で一律選択（サービス選択ステップ）のため、選択中なら全カード枚数分を計上する。
+  const autographSelections =
+    autographRequested && autographCustomServiceLevelId
+      ? [{ customServiceLevelId: autographCustomServiceLevelId, quantity: cardCount }]
+      : [];
 
   // 料金はサーバー(calculateFees)と同じ計算で取得し、請求額とプレビューを一致させる
   const [fees, setFees] = useState<FeeBreakdown | null>(null);
@@ -316,13 +320,13 @@ export default function ApplyForm({
       if (d.itemType) setItemType(d.itemType);
       if (d.customServiceLevelId) setCustomServiceLevelId(d.customServiceLevelId);
       if (d.returnMethod) setReturnMethod(d.returnMethod);
+      if (typeof d.autographRequested === "boolean") setAutographRequested(d.autographRequested);
+      if (d.autographCustomServiceLevelId) setAutographCustomServiceLevelId(d.autographCustomServiceLevelId);
       if (Array.isArray(d.cards))
         setCards(
           d.cards.map((c: CardItem) => ({
             ...c,
             language: c.language ?? "日本語",
-            autographRequested: c.autographRequested ?? false,
-            autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? null,
           }))
         );
       if (typeof d.maxStep === "number") setMaxStep(Math.min(d.maxStep, 3));
@@ -403,7 +407,17 @@ export default function ApplyForm({
     try {
       localStorage.setItem(
         DRAFT_KEY,
-        JSON.stringify({ region, itemType, customServiceLevelId, returnMethod, cards, step, maxStep })
+        JSON.stringify({
+          region,
+          itemType,
+          customServiceLevelId,
+          autographRequested,
+          autographCustomServiceLevelId,
+          returnMethod,
+          cards,
+          step,
+          maxStep,
+        })
       );
     } catch {
       /* ignore */
@@ -430,8 +444,9 @@ export default function ApplyForm({
           language: c.language,
           quantity: c.quantity,
           declaredValue: c.declaredValue,
-          autographRequested: c.autographRequested,
-          autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? undefined,
+          // デュアルサービスは申込全体で一律選択。全カードに同じ選択を適用する。
+          autographRequested,
+          autographCustomServiceLevelId: autographCustomServiceLevelId ?? undefined,
         })),
       });
       if (res.success && res.draftId) setDraftId(res.draftId);
@@ -479,8 +494,9 @@ export default function ApplyForm({
           declaredValue: c.declaredValue,
           quantity: c.quantity,
           damageImageKeys: [],
-          autographRequested: c.autographRequested,
-          autographCustomServiceLevelId: c.autographCustomServiceLevelId ?? undefined,
+          // デュアルサービスは申込全体で一律選択。全カードに同じ選択を適用する。
+          autographRequested,
+          autographCustomServiceLevelId: autographCustomServiceLevelId ?? undefined,
         })),
         returnAddress:
           returnSel !== "registered" && selectedAddr
@@ -669,6 +685,8 @@ export default function ApplyForm({
                       setRegion(r);
                       if (r === "PSA_JP") setItemType("TRADING_CARD");
                       setCustomServiceLevelId(null);
+                      setAutographRequested(false);
+                      setAutographCustomServiceLevelId(null);
                     }}
                     className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                       region === r
@@ -692,6 +710,8 @@ export default function ApplyForm({
                       onClick={() => {
                         setItemType(it);
                         setCustomServiceLevelId(null);
+                        setAutographRequested(false);
+                        setAutographCustomServiceLevelId(null);
                       }}
                       className={`border-2 rounded-xl p-4 text-center font-bold transition ${
                         itemType === it
@@ -703,6 +723,62 @@ export default function ApplyForm({
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {itemType === "TRADING_CARD" && autographActive && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+                <h2 className="font-bold text-gray-800">デュアルサービス（カードとサインの鑑定）</h2>
+                <p className="text-xs text-gray-500">
+                  カードとサインをまとめて鑑定するオプションです。希望する場合は選択してください。
+                </p>
+                {activeAutographTiers.length === 1 ? (
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={autographRequested}
+                      onChange={(e) => {
+                        setAutographRequested(e.target.checked);
+                        setAutographCustomServiceLevelId(e.target.checked ? activeAutographTiers[0].id : null);
+                      }}
+                    />
+                    <span className="text-sm text-gray-700">
+                      デュアルサービスを希望する（{formatMoney(activeAutographTiers[0].pricePerCard, region)}/枚）
+                    </span>
+                  </label>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={autographRequested}
+                        onChange={(e) => {
+                          setAutographRequested(e.target.checked);
+                          if (!e.target.checked) setAutographCustomServiceLevelId(null);
+                        }}
+                      />
+                      <span className="text-sm text-gray-700">デュアルサービスを希望する</span>
+                    </label>
+                    {autographRequested && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {activeAutographTiers.map((t) => (
+                          <button
+                            key={t.id}
+                            onClick={() => setAutographCustomServiceLevelId(t.id)}
+                            className={`border-2 rounded-xl p-4 text-left transition ${
+                              autographCustomServiceLevelId === t.id
+                                ? "border-brand-500 bg-brand-50"
+                                : "border-gray-200 hover:border-gray-300"
+                            }`}
+                          >
+                            <p className="font-bold text-gray-900">{t.name}</p>
+                            <p className="text-brand-600 font-medium">{formatMoney(t.pricePerCard, region)}/枚</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -867,48 +943,6 @@ export default function ApplyForm({
                     onChange={(e) => setDraftField("declaredValue", parseInt(e.target.value) || 0)}
                   />
                 </div>
-                {autographActive && activeAutographTiers.length === 1 && (
-                  <div className="sm:col-span-2 flex items-center gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="autographRequested"
-                      checked={draft.autographRequested}
-                      onChange={(e) => {
-                        setDraftField("autographRequested", e.target.checked);
-                        setDraftField(
-                          "autographCustomServiceLevelId",
-                          e.target.checked ? activeAutographTiers[0].id : null
-                        );
-                      }}
-                    />
-                    <label htmlFor="autographRequested" className="text-sm text-gray-700">
-                      オートグラフ（デュアルサービス）認証を希望する（{formatMoney(activeAutographTiers[0].pricePerCard, region)}/枚）
-                    </label>
-                  </div>
-                )}
-                {autographActive && activeAutographTiers.length > 1 && (
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs text-gray-500 mb-1">
-                      オートグラフ（デュアルサービス）認証
-                    </label>
-                    <select
-                      className={inputCls}
-                      value={draft.autographRequested ? draft.autographCustomServiceLevelId ?? "" : ""}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        setDraftField("autographRequested", !!id);
-                        setDraftField("autographCustomServiceLevelId", id || null);
-                      }}
-                    >
-                      <option value="">希望しない</option>
-                      {activeAutographTiers.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </div>
               <div className="flex gap-3">
                 <button
@@ -929,7 +963,14 @@ export default function ApplyForm({
             {/* Saved cards list */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="font-bold text-gray-800">アイテム（{cards.length}）</h3>
+                <h3 className="font-bold text-gray-800">
+                  アイテム（{cards.length}）
+                  {autographRequested && (
+                    <span className="ml-2 text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 align-middle">
+                      🖊 デュアルサービス選択中
+                    </span>
+                  )}
+                </h3>
                 <span className="text-sm text-gray-500">
                   申告合計 {formatMoneyInt(totalDeclaredValue, region)}
                 </span>
@@ -947,11 +988,6 @@ export default function ApplyForm({
                           {c.releaseYear ? `${c.releaseYear} ` : ""}
                           {c.tcgTitle} {c.cardNumber} {c.cardName}
                           {c.rarity ? `（${c.rarity}）` : ""}
-                          {c.autographRequested && (
-                            <span className="ml-2 text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 align-middle">
-                              🖊 オートグラフ
-                            </span>
-                          )}
                         </p>
                         <p className="text-xs text-gray-400">
                           {c.quantity}枚 / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
