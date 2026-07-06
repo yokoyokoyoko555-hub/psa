@@ -236,6 +236,13 @@ export default function ApplyForm({
       setError("タイトルとカード名は必須です");
       return;
     }
+    if (draft.releaseYear.trim()) {
+      const y = parseInt(draft.releaseYear, 10);
+      if (!Number.isInteger(y) || y < 1900 || y > 2100) {
+        setError("発行年は1900〜2100の範囲で入力してください（空欄でも構いません）");
+        return;
+      }
+    }
     if (draft.declaredValue < 1) {
       setError("申告金額を入力してください");
       return;
@@ -1116,7 +1123,7 @@ export default function ApplyForm({
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-500">{isDualServiceSelected ? "鑑定料（デュアルサービス）" : "鑑定料"}</span>
+                <span className="text-gray-500">鑑定料（{selectedCustomTier?.name ?? ""}）</span>
                 <span>{formatMoney(psaFeeTotal, region)}</span>
               </div>
               <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoneyIn(shippingInsuranceFee, "JPY")}</span></div>
@@ -1129,10 +1136,10 @@ export default function ApplyForm({
                   <span>-{formatMoney(discountAmount, region)}</span>
                 </div>
               )}
-              <div className="flex justify-between"><span className="text-gray-500">消費税</span><span>{formatMoney(taxAmount, region)}</span></div>
               <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-2 mt-2">
                 <span>合計</span><span>{formatMoney(totalAmount, region)}</span>
               </div>
+              <p className="text-xs text-gray-500 text-right">（内消費税 {formatMoney(taxAmount, region)}）</p>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">

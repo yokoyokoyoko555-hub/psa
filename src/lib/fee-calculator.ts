@@ -165,8 +165,8 @@ export async function calculateFees(params: {
   // 種類数(agencyCardTypeCount)未指定なら従来どおり枚数(cardCount)で算出（後方互換）。代理入力(STORE)時のみ。
   const agencyUnits = params.agencyCardTypeCount ?? params.cardCount;
   const agencyFeeTotal = params.applyAgencyFee ? (setting?.proxyFee ?? 0) * agencyUnits : 0;
-  // 事務手数料: リージョン別の一律額（/枚）× 枚数
-  const handlingFee = (setting?.handlingFee ?? 0) * params.cardCount;
+  // 事務手数料: リージョン別の一律額。1申込（サービスレベル選択）につき1回のみ発生（枚数に関わらず一律）。ADR-0030
+  const handlingFee = setting?.handlingFee ?? 0;
 
   // 送料・保険: リージョン別の合算マトリクス（未投入時は従来ロジックにフォールバック）
   const matrix = await calcShippingInsuranceMatrix(params.region, params.itemType, params.totalDeclaredValue, params.cardCount);
