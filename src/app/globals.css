@@ -42,3 +42,9 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* datalist(list属性)付き入力欄のドロップダウン矢印（ネイティブUI）を全画面で非表示。
+   サジェスト機能自体（入力中の候補表示）は残したまま、紛らわしい矢印アイコンのみ消す。 */
+input[list]::-webkit-calendar-picker-indicator {
+  display: none !important;
+}

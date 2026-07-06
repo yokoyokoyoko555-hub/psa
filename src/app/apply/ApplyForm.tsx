@@ -1185,7 +1185,16 @@ export default function ApplyForm({
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-500">鑑定料（{selectedCustomTier?.name ?? ""}）</span>
+                <span className="text-gray-500">
+                  鑑定料（{selectedCustomTier?.name ?? ""}）
+                  {selectedCustomTier && (
+                    <span className="text-xs text-gray-400">
+                      {" "}
+                      {formatMoney(selectedCustomTier.pricePerCard, region)}×{cardCount}
+                      {fieldLabels.quantityUnit}
+                    </span>
+                  )}
+                </span>
                 <span>{formatMoney(psaFeeTotal, region)}</span>
               </div>
               <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoneyIn(shippingInsuranceFee, "JPY")}</span></div>
