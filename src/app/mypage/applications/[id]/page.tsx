@@ -135,12 +135,12 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                 <span>-{formatMoney(application.discountAmount, application.region)}</span>
               </div>
             )}
-            <div className="flex justify-between text-gray-600">
-              <span>消費税</span><span>{formatMoney(application.taxAmount, application.region)}</span>
-            </div>
             <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
               <span>合計</span><span>{formatMoney(application.totalAmount, application.region)}</span>
             </div>
+            <p className="text-xs text-gray-400 text-right">
+              （内消費税 {formatMoney(application.taxAmount, application.region)}）
+            </p>
           </div>
         </div>
 
