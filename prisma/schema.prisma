@@ -393,11 +393,11 @@ model Card {
 
   // カード情報
   tcgTitle      String // タイトル（セット名など）
-  releaseYear   Int? // 発行年
-  cardName      String // カード名
-  cardNumber    String? // カード番号
-  rarity        String? // レアリティ
-  language      String  @default("日本語") // 自由記述（旧CardLanguage enumから変更）。ADR-0023
+  releaseYear   String? // 発行年（トレカ/パック）または発行年月の自由記述（コミック・マガジン）。ADR-0033
+  cardName      String // カード名（パックはパック名、コミック・マガジンは巻数・号として使用）。ADR-0033
+  cardNumber    String? // カード番号（パック・コミック/マガジンは未使用）
+  rarity        String? // レアリティ（パック・コミック/マガジンは未使用）
+  language      String  @default("日本語") // 自由記述。トレカ/パックは言語、コミック・マガジンは出版社として使用。ADR-0023/0033
   declaredValue Int // 申告価格。リージョン通貨・常に整数（JP=円 / US=USD、小数点以下は扱わない）。ADR-0027
   quantity      Int          @default(1)
 

@@ -52,6 +52,60 @@ const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
+// アイテム種別ごとの入力欄ラベル・単位・表示切替。ADR-0033
+const CARD_FIELD_LABELS: Record<
+  ItemType,
+  {
+    entryLabel: string; // 見出し・ボタン等の総称（カード／パック／コミック・マガジン）
+    releaseYearLabel: string;
+    releaseYearPlaceholder: string;
+    secondaryLabel: string; // languageフィールドの表示名（言語／出版社）
+    secondaryPlaceholder: string;
+    nameLabel: string; // cardNameフィールドの表示名（カード名／パック名／巻数・号）
+    namePlaceholder: string;
+    quantityLabel: string; // 枚数／冊数
+    quantityUnit: string; // 枚／冊
+    showCardNumberRarity: boolean;
+  }
+> = {
+  TRADING_CARD: {
+    entryLabel: "カード",
+    releaseYearLabel: "発行年",
+    releaseYearPlaceholder: "例: 2022",
+    secondaryLabel: "言語",
+    secondaryPlaceholder: "例: 日本語",
+    nameLabel: "カード名",
+    namePlaceholder: "例: モンキー・D・ルフィ",
+    quantityLabel: "枚数",
+    quantityUnit: "枚",
+    showCardNumberRarity: true,
+  },
+  UNOPENED_PACK: {
+    entryLabel: "パック",
+    releaseYearLabel: "発行年",
+    releaseYearPlaceholder: "例: 2022",
+    secondaryLabel: "言語",
+    secondaryPlaceholder: "例: 日本語",
+    nameLabel: "パック名",
+    namePlaceholder: "例: ブースターパック",
+    quantityLabel: "枚数",
+    quantityUnit: "枚",
+    showCardNumberRarity: false,
+  },
+  COMIC_MAGAZINE: {
+    entryLabel: "コミック／マガジン",
+    releaseYearLabel: "発行年月",
+    releaseYearPlaceholder: "例: 2022年5月",
+    secondaryLabel: "出版社",
+    secondaryPlaceholder: "例: 集英社",
+    nameLabel: "巻数・号",
+    namePlaceholder: "例: 3巻",
+    quantityLabel: "冊数",
+    quantityUnit: "冊",
+    showCardNumberRarity: false,
+  },
+};
+
 const AGREEMENT_VERSION = "v1.0";
 const AGREEMENT_TEXT = `PSA鑑定受付代行サービス利用規約
 
@@ -81,8 +135,8 @@ function emptyCard(): CardItem {
     cardNumber: "",
     cardName: "",
     rarity: "",
-    language: "日本語",
-    quantity: 1,
+    language: "", // 初期値は空欄（未入力時はサーバー側で「日本語」を補完）。ADR-0033
+    quantity: 0, // 初期値は空欄。ADR-0033
     declaredValue: 0,
   };
 }
@@ -219,6 +273,7 @@ export default function ApplyForm({
   const hasSelectedService = !!customServiceLevelId;
   const isDualServiceSelected = selectedCustomTier?.category === "AUTOGRAPH";
   const tierOptionsToShow = serviceMode === "DUAL" ? activeAutographTiers : customTierOptions;
+  const fieldLabels = CARD_FIELD_LABELS[itemType];
 
   function setDraftField<K extends keyof CardItem>(field: K, value: CardItem[K]) {
     setDraft((d) => ({ ...d, [field]: value }));
@@ -232,14 +287,16 @@ export default function ApplyForm({
 
   function saveDraft() {
     setError("");
+    const fieldLabels = CARD_FIELD_LABELS[itemType];
     if (!draft.tcgTitle.trim() || !draft.cardName.trim()) {
-      setError("タイトルとカード名は必須です");
+      setError(`タイトルと${fieldLabels.nameLabel}は必須です`);
       return;
     }
-    if (draft.releaseYear.trim()) {
+    // 発行年の範囲チェックは「トレカ／未開封パック」のみ。コミック・マガジンは発行年月の自由記述のため対象外。ADR-0033
+    if (itemType !== "COMIC_MAGAZINE" && draft.releaseYear.trim()) {
       const y = parseInt(draft.releaseYear, 10);
       if (!Number.isInteger(y) || y < 1900 || y > 2100) {
-        setError("発行年は1900〜2100の範囲で入力してください（空欄でも構いません）");
+        setError(`${fieldLabels.releaseYearLabel}は1900〜2100の範囲で入力してください（空欄でも構いません）`);
         return;
       }
     }
@@ -254,7 +311,7 @@ export default function ApplyForm({
       return;
     }
     if (draft.quantity < 1) {
-      setError("枚数は1以上で入力してください");
+      setError(`${fieldLabels.quantityLabel}は1以上で入力してください`);
       return;
     }
 
@@ -481,7 +538,7 @@ export default function ApplyForm({
         returnMethod,
         cards: cards.map((c) => ({
           tcgTitle: c.tcgTitle,
-          releaseYear: c.releaseYear ? parseInt(c.releaseYear) : undefined,
+          releaseYear: c.releaseYear || undefined,
           cardName: c.cardName,
           cardNumber: c.cardNumber || undefined,
           rarity: c.rarity || undefined,
@@ -813,7 +870,7 @@ export default function ApplyForm({
               }}
               className="w-full bg-brand-600 text-white font-bold py-4 rounded-xl hover:bg-brand-700 transition"
             >
-              カード情報の入力へ
+              {fieldLabels.entryLabel}情報の入力へ
             </button>
           </div>
         )}
@@ -823,21 +880,21 @@ export default function ApplyForm({
           <div className="space-y-6">
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
               選択中: <strong>{REGION_LABELS[region]}{region === "PSA_US" ? ` / ${ITEM_TYPE_LABELS[itemType]}` : ""} / {selectedCustomTier?.name}</strong>
-              {cap !== null && <>（申告金額上限 {formatMoneyInt(cap, region)}/枚）</>}
+              {cap !== null && <>（申告金額上限 {formatMoneyInt(cap, region)}/{fieldLabels.quantityUnit}）</>}
             </div>
 
             {/* Card entry form */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h2 className="font-bold text-gray-800">
-                {editingIndex !== null ? "カードを編集" : "カード情報入力"}
+                {editingIndex !== null ? `${fieldLabels.entryLabel}を編集` : `${fieldLabels.entryLabel}情報入力`}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">発行年</label>
+                  <label className="block text-xs text-gray-500 mb-1">{fieldLabels.releaseYearLabel}</label>
                   <input
-                    type="number"
+                    type={itemType === "COMIC_MAGAZINE" ? "text" : "number"}
                     className={inputCls}
-                    placeholder="例: 2022"
+                    placeholder={fieldLabels.releaseYearPlaceholder}
                     value={draft.releaseYear}
                     onChange={(e) => setDraftField("releaseYear", e.target.value)}
                   />
@@ -852,11 +909,11 @@ export default function ApplyForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">言語</label>
+                  <label className="block text-xs text-gray-500 mb-1">{fieldLabels.secondaryLabel}</label>
                   <input
                     className={inputCls}
-                    list="language-suggestions"
-                    placeholder="例: 日本語"
+                    list={itemType !== "COMIC_MAGAZINE" ? "language-suggestions" : undefined}
+                    placeholder={fieldLabels.secondaryPlaceholder}
                     value={draft.language}
                     onChange={(e) => setDraftField("language", e.target.value)}
                   />
@@ -866,41 +923,45 @@ export default function ApplyForm({
                     ))}
                   </datalist>
                 </div>
+                {fieldLabels.showCardNumberRarity && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">カード番号／型番</label>
+                    <input
+                      className={inputCls}
+                      placeholder="例: OP01-003"
+                      value={draft.cardNumber}
+                      onChange={(e) => setDraftField("cardNumber", e.target.value)}
+                    />
+                  </div>
+                )}
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">カード番号／型番</label>
+                  <label className="block text-xs text-gray-500 mb-1">{fieldLabels.nameLabel} *</label>
                   <input
                     className={inputCls}
-                    placeholder="例: OP01-003"
-                    value={draft.cardNumber}
-                    onChange={(e) => setDraftField("cardNumber", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">カード名 *</label>
-                  <input
-                    className={inputCls}
-                    placeholder="例: モンキー・D・ルフィ"
+                    placeholder={fieldLabels.namePlaceholder}
                     value={draft.cardName}
                     onChange={(e) => setDraftField("cardName", e.target.value)}
                   />
                 </div>
+                {fieldLabels.showCardNumberRarity && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">レアリティ</label>
+                    <input
+                      className={inputCls}
+                      placeholder="例: Lパラレル"
+                      value={draft.rarity}
+                      onChange={(e) => setDraftField("rarity", e.target.value)}
+                    />
+                  </div>
+                )}
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">レアリティ</label>
-                  <input
-                    className={inputCls}
-                    placeholder="例: Lパラレル"
-                    value={draft.rarity}
-                    onChange={(e) => setDraftField("rarity", e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">枚数 *</label>
+                  <label className="block text-xs text-gray-500 mb-1">{fieldLabels.quantityLabel} *</label>
                   <input
                     type="number"
                     min={1}
                     className={inputCls}
                     value={draft.quantity || ""}
-                    onChange={(e) => setDraftField("quantity", parseInt(e.target.value) || 1)}
+                    onChange={(e) => setDraftField("quantity", parseInt(e.target.value) || 0)}
                   />
                 </div>
                 <div>
@@ -948,7 +1009,7 @@ export default function ApplyForm({
               </div>
               {cards.length === 0 ? (
                 <p className="px-4 py-8 text-center text-gray-400 text-sm">
-                  上のフォームからカードを追加してください
+                  上のフォームから{fieldLabels.entryLabel}を追加してください
                 </p>
               ) : (
                 <div className="divide-y divide-gray-100">
@@ -961,7 +1022,8 @@ export default function ApplyForm({
                           {c.rarity ? `（${c.rarity}）` : ""}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {c.quantity}枚 / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
+                          {c.quantity}
+                          {fieldLabels.quantityUnit} / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
                         </p>
                       </div>
                       <button
@@ -985,7 +1047,7 @@ export default function ApplyForm({
             <button
               onClick={() => {
                 if (cards.length === 0) {
-                  setError("カードを1枚以上追加してください");
+                  setError(`${fieldLabels.entryLabel}を1${fieldLabels.quantityUnit}以上追加してください`);
                   return;
                 }
                 setError("");
@@ -1111,7 +1173,7 @@ export default function ApplyForm({
                   <div key={i} className="flex justify-between text-sm text-gray-700 py-1">
                     <span>
                       {i + 1}. {c.releaseYear ? `${c.releaseYear} ` : ""}
-                      {c.cardName}（{c.tcgTitle}）× {c.quantity}枚
+                      {c.cardName}（{c.tcgTitle}）× {c.quantity}{fieldLabels.quantityUnit}
                     </span>
                     <span className="text-gray-500">
                       申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}

@@ -340,3 +340,29 @@
 - 影響: `prisma/schema.prisma`に`ExchangeRate`モデル・`Application.exchangeRateUsed`列を追加（db push、非破壊）。`lib/currency.ts`の`stripeCurrency`/`toStripeAmount`のシグネチャ変更（`region`引数削除、呼び出し元4箇所を修正）。管理画面設定ページに為替レート設定セクション（`ExchangeRateForm.tsx`）を追加。デプロイ後、管理画面で為替レート（レート・マージン%）を設定するまでPSA_USの新規申込は作成できない（明示的エラーで停止するため、無言の誤課金にはならない）。
 - 未対応: 為替レートの自動取得（現状は手動設定のみ）。旧USD建て`Payment`レコードに対する返金・Upcharge時の通貨整合は個別対応（本ADRのスコープ外）。
 
+## ADR-0032: 消費税計算を「内税抽出」方式に変更 + 代理申込Webhookのstatus上書きバグ修正
+
+- 日付: 2026-07-06 / 状態: Accepted（実装済）
+- 背景: 料金表（鑑定料・代理入力料金・事務手数料・送料保険料）はすべて税込み金額として設定・運用されているにもかかわらず、`fee-calculator.ts`は`subtotal`に対しさらに10%の消費税を加算して`totalAmount`を算出していた（二重課税）。ユーザーから「単純合計の内税だけ計算すればよく、消費税を別途かける必要はない」との指摘があり修正した。あわせて、代理申込（代理入力）の先払い決済後、管理画面の「代理申込」一覧にデータが反映されない不具合が報告され調査した結果、Stripe Webhookのバグが判明した。
+- 決定:
+  - **`fee-calculator.ts`**: `totalAmount`は`subtotal`（鑑定料JPY換算後＋代理入力料金＋送料保険＋事務手数料－割引）の単純合計とし、追加の10%加算を廃止。`taxAmount`（内消費税）は`totalAmount - Math.floor(totalAmount / 1.1)`で合計から逆算する内税抽出方式に変更。実際に顧客へ請求する金額（`totalAmount`）自体はこの変更の前後で「単純合計」という値そのものは変わらない（従来のバグ＝合計に対しさらに10%上乗せしていた分が是正され、結果的に旧実装よりも合計額は下がる）。
+  - **Stripe Webhook（`api/stripe/webhook/route.ts`）の`handlePaymentSucceeded`のバグ修正**: 従来はPaymentに紐づく`Application`を無条件に`status: "SUBMITTED"`へ更新していたが、これは自己入力（`source: "CUSTOMER"`）を想定した処理であり、代理申込（`source: "STORE"`）の先払い決済ではカード未入力のため`status`は`DRAFT`のまま維持する設計（`confirmStorePrepayPayment`のコメント参照。ADR-0020）と矛盾していた。Webhookは非同期に発火するため、顧客側の`confirmStorePrepayPayment`（意図的に`status`を変更しない）と競合し、Webhookが先に／後に発火すると代理申込が`SUBMITTED`に書き換わってしまい、`getStoreRequests`の`status: "DRAFT"`フィルタから外れて管理画面「代理申込（要対応）」一覧に表示されなくなっていた。修正として、Webhook内で対象`Application`の`source`を確認し、`"CUSTOMER"`の場合のみ`status`を`"SUBMITTED"`に更新するよう限定した。
+- 影響: 消費税の計算方式変更により、既存の運用上「合計金額に別途10%を上乗せしていた」誤りが是正される（画面表示・確認事項として、ユーザーへの実際の請求額が今後変わる点に注意）。Webhook修正はコード変更のみ（スキーマ変更なし）で、代理申込フローの本来の設計（先払い後もDRAFTのまま→スタッフが明細確定時にSUBMITTEDへ進める）に合わせた。
+- 教訓: 複数の経路（クライアントからの直接呼び出し・Stripe Webhookの非同期通知）が同じ`Application`の状態を更新しうる設計では、各経路が「どのsource/フローを対象にした処理か」を明示的に確認しないと、意図しない状態遷移が発生する。
+
+## ADR-0033: アイテム種別ごとの入力欄カスタマイズ（パック／コミック・マガジン）+ 初期値の空欄化
+
+- 日付: 2026-07-06 / 状態: Accepted（実装済）
+- 背景: PSA USの未開封パック・コミック/マガジンは、トレーディングカードと同じ「カード情報入力」フォーム（発行年・タイトル・言語・カード番号・カード名・レアリティ・枚数・申告金額）を流用していたが、パック・コミック/マガジンには「カード番号」「レアリティ」という概念が存在せず、コミック/マガジンには「出版社」「巻数・号」「発行年月（年月単位）」といった別の情報が必要だった。また、自己入力フォームの「言語」「枚数」が初期値としてそれぞれ「日本語」「1」で埋まっており、必ずしも入力者の実情報と一致しないまま見落とされる懸念があった。
+- 決定:
+  - **`Card`モデルのフィールドはitemTypeごとに複製せず、既存の汎用フィールドを意味的に読み替えて再利用する**（`ApplyForm.tsx`/`StoreInputForm.tsx`の入力欄ラベル・プレースホルダーのみをitemType別に切り替える設定オブジェクト`CARD_FIELD_LABELS`で制御）。
+    - トレーディングカード（変更なし）: 発行年=`releaseYear`／タイトル=`tcgTitle`／言語=`language`／カード番号=`cardNumber`／カード名=`cardName`／レアリティ=`rarity`／枚数=`quantity`。
+    - 未開封パック: 発行年=`releaseYear`／タイトル=`tcgTitle`／言語=`language`／**パック名**=`cardName`。`cardNumber`・`rarity`は入力欄を非表示にする（値は空文字のまま保存）。枚数・申告金額はそのまま維持。
+    - コミック・マガジン: **発行年月**（自由記述）=`releaseYear`／タイトル=`tcgTitle`／**出版社**=`language`／**巻数・号**=`cardName`。`cardNumber`・`rarity`は非表示。**枚数→冊数**に表示名変更（`quantity`列自体は変更しない）。申告金額は維持。
+  - **`Card.releaseYear`を`Int?`から`String?`へ変更**（db push、非破壊な型拡張）。トレカ・未開封パックは引き続き「発行年（西暦4桁）」の自由記述文字列として1900〜2100の範囲チェックをアプリケーション層（`createApplication`/`completeStoreApplication`内、itemTypeが`COMIC_MAGAZINE`以外の場合のみ）で行う。コミック・マガジンは「発行年月」の完全自由記述（例:「2022年5月」）としてこの範囲チェックの対象外とする。
+  - **`language`フィールドは空欄入力を許可**し、未入力時はサーバー側（`cardSchema`/`storeCardSchema`のtransform）で「日本語」を自動補完する（`z.string().max(50).optional().transform(...)`）。コミック・マガジンでは同じフィールドを「出版社」として使うため、この場合の補完値「日本語」はトレカ/パック向けの後方互換上のデフォルトであり、コミック・マガジンの実運用では出版社名を都度入力する前提。
+  - **自己入力フォーム（`ApplyForm.tsx`）の新規カード入力の初期値を変更**: `language`の初期値を`"日本語"`→空文字、`quantity`の初期値を`1`→`0`（表示上は空欄）に変更。ユーザー指摘「言語と枚数は空にしてほしい」に対応。代理申込のスタッフ入力（`StoreInputForm.tsx`）側の初期値は変更していない（スタッフは実物を確認しながら都度正確な値を入力する運用のため）。
+  - **表示側**: 顧客・管理者向けの申込詳細ページ（`mypage/applications/[id]/page.tsx`／`admin/applications/[id]/page.tsx`）・代理入力スタッフ画面のカード見出し・PSA提出用1行コピー生成ロジックも、itemTypeに応じて見出し語（カード／パック／コミック・マガジン）・単位（枚／冊）・「言語」「出版社」ラベルを切り替える。`cardNumber`/`rarity`はパック・コミック/マガジンでは常に空文字のため、PSA提出用1行コピーの生成ロジック（複数フィールドを結合してフィルタする既存実装）はitemType分岐を追加しなくても自然に該当項目が省略される。
+- 影響: `prisma/schema.prisma`（`Card.releaseYear`の型変更のみ、db push非破壊）。`application.ts`/`admin.ts`の`cardSchema`/`storeCardSchema`・年範囲バリデーションロジック変更。`ApplyForm.tsx`/`StoreInputForm.tsx`のカード入力UIの大幅な条件分岐追加。既存のトレカ入力フロー・データは一切変更なし（`CARD_FIELD_LABELS.TRADING_CARD`は旧来の見た目のまま）。
+- 未対応: 代理申込の「カード提出予約」レシート画面（`mypage/submission-booking/[applicationId]/page.tsx`）はitemType別のラベル切り替えを行っていない（`cardNumber`が空文字の場合は自然に非表示になるため実害は小さいが、将来的に見出し語を統一する余地がある）。
+

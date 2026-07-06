@@ -53,6 +53,13 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
+// アイテム種別ごとの表示ラベル切替（入力フォームと同じ考え方の表示専用版）。ADR-0033
+const CARD_DISPLAY_LABELS: Record<string, { entryLabel: string; secondaryLabel: string; quantityUnit: string }> = {
+  TRADING_CARD: { entryLabel: "カード", secondaryLabel: "言語", quantityUnit: "枚" },
+  UNOPENED_PACK: { entryLabel: "パック", secondaryLabel: "言語", quantityUnit: "枚" },
+  COMIC_MAGAZINE: { entryLabel: "コミック／マガジン", secondaryLabel: "出版社", quantityUnit: "冊" },
+};
+
 const STATUS_BADGE: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-600",
   SUBMITTED_BY_CUSTOMER: "bg-brand-100 text-brand-700",
@@ -211,14 +218,18 @@ export default async function AdminApplicationDetailPage({
 
           {/* Cards */}
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-bold text-gray-900 mb-4">カード一覧（{application.cards.length}枚）</h2>
+            <h2 className="font-bold text-gray-900 mb-4">
+              {CARD_DISPLAY_LABELS[application.itemType]?.entryLabel ?? "カード"}一覧（{application.cards.length}{CARD_DISPLAY_LABELS[application.itemType]?.quantityUnit ?? "枚"}）
+            </h2>
             <div className="space-y-4">
               {application.cards.map((card) => {
-                // PSA提出フォーム向け1行（発行年 タイトル 言語(英語) カード番号／型番 カード名 レアリティ・半角スペース区切り）
+                const displayLabels = CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
+                // PSA提出フォーム向け1行（発行年 タイトル 言語(英語)/出版社 カード番号／型番 カード名 レアリティ・半角スペース区切り）
+                // トレカ以外はcardNumber/rarityが空文字のためfilterで自然に除外される。ADR-0033
                 const psaLine = [
                   card.releaseYear ?? "",
                   card.tcgTitle,
-                  LANGUAGE_PSA[card.language] ?? card.language,
+                  application.itemType === "TRADING_CARD" ? LANGUAGE_PSA[card.language] ?? card.language : card.language,
                   card.cardNumber ?? "",
                   card.cardName,
                   card.rarity ?? "",
@@ -249,8 +260,8 @@ export default async function AdminApplicationDetailPage({
                       <p className="mt-1 flex gap-3 text-xs text-gray-500">
                         <span className="font-mono text-gray-400">{card.cardNo}</span>
                         <span>申告額: {formatMoneyInt(card.declaredValue, application.region)}</span>
-                        <span>言語: {card.language}</span>
-                        <span>{card.quantity}枚</span>
+                        <span>{displayLabels.secondaryLabel}: {card.language}</span>
+                        <span>{card.quantity}{displayLabels.quantityUnit}</span>
                       </p>
                     </div>
                     <span

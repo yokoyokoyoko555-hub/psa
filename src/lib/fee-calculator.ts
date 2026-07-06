@@ -207,10 +207,11 @@ export async function calculateFees(params: {
     psaFeeTotalJpy = Math.round(psaFeeTotal * exchangeRateUsed);
   }
 
-  // 合計・消費税は常に円で計算する（決済は常にJPY。ADR-0031）。
+  // 料金表（鑑定料・代理入力料金・事務手数料・送料保険料）は全て税込みで設定されているため、
+  // 合計は単純合計のみとし、消費税を追加で加算しない。内消費税は合計から逆算（内税抽出）する。ADR-0032
   const subtotal = psaFeeTotalJpy + autographFeeTotal + discountBase - discountAmount;
-  const taxAmount = roundMoney(subtotal * TAX_RATE, "PSA_JP");
-  const totalAmount = roundMoney(subtotal + taxAmount, "PSA_JP");
+  const totalAmount = roundMoney(subtotal, "PSA_JP");
+  const taxAmount = totalAmount - Math.floor(totalAmount / (1 + TAX_RATE));
 
   return {
     psaFeeTotal,

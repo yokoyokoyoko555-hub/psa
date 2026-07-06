@@ -12,10 +12,61 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
+// アイテム種別ごとの入力欄ラベル・単位・表示切替（ApplyForm.tsxと同じ考え方）。ADR-0033
+const CARD_FIELD_LABELS: Record<
+  string,
+  {
+    entryLabel: string;
+    releaseYearLabel: string;
+    releaseYearPlaceholder: string;
+    secondaryLabel: string; // languageフィールドの表示名（言語／出版社）
+    secondaryPlaceholder: string;
+    nameLabel: string; // cardNameフィールドの表示名（カード名／パック名／巻数・号）
+    namePlaceholder: string;
+    quantityLabel: string;
+    showCardNumberRarity: boolean;
+  }
+> = {
+  TRADING_CARD: {
+    entryLabel: "カード",
+    releaseYearLabel: "発行年",
+    releaseYearPlaceholder: "例: 2022",
+    secondaryLabel: "言語",
+    secondaryPlaceholder: "例: 日本語",
+    nameLabel: "カード名",
+    namePlaceholder: "例: リザードン",
+    quantityLabel: "枚数",
+    showCardNumberRarity: true,
+  },
+  UNOPENED_PACK: {
+    entryLabel: "パック",
+    releaseYearLabel: "発行年",
+    releaseYearPlaceholder: "例: 2022",
+    secondaryLabel: "言語",
+    secondaryPlaceholder: "例: 日本語",
+    nameLabel: "パック名",
+    namePlaceholder: "例: ブースターパック",
+    quantityLabel: "枚数",
+    showCardNumberRarity: false,
+  },
+  COMIC_MAGAZINE: {
+    entryLabel: "コミック／マガジン",
+    releaseYearLabel: "発行年月",
+    releaseYearPlaceholder: "例: 2022年5月",
+    secondaryLabel: "出版社",
+    secondaryPlaceholder: "例: 集英社",
+    nameLabel: "巻数・号",
+    namePlaceholder: "例: 3巻",
+    quantityLabel: "冊数",
+    showCardNumberRarity: false,
+  },
+};
+
 const LANGUAGE_SUGGESTIONS = ["日本語", "英語", "韓国語", "中国語", "その他"];
 
 interface CardRow {
   tcgTitle: string;
+  releaseYear: string;
   cardName: string;
   cardNumber: string;
   rarity: string;
@@ -28,6 +79,7 @@ interface CardRow {
 function newRow(): CardRow {
   return {
     tcgTitle: "",
+    releaseYear: "",
     cardName: "",
     cardNumber: "",
     rarity: "",
@@ -43,6 +95,7 @@ function toCardRow(raw: unknown): CardRow {
   const r = (raw ?? {}) as Record<string, unknown>;
   return {
     tcgTitle: typeof r.tcgTitle === "string" ? r.tcgTitle : "",
+    releaseYear: typeof r.releaseYear === "string" ? r.releaseYear : "",
     cardName: typeof r.cardName === "string" ? r.cardName : "",
     cardNumber: typeof r.cardNumber === "string" ? r.cardNumber : "",
     rarity: typeof r.rarity === "string" ? r.rarity : "",
@@ -88,6 +141,7 @@ export default function StoreInputForm({
   // 選択中タイアは通常サービス・デュアルサービスどちらもありうるため、両リストから検索する。
   const selectedCustomTier = [...customServicePrices, ...activeAutographTiers].find((p) => p.id === customServiceLevelId);
   const hasSelectedService = !!customServiceLevelId;
+  const fieldLabels = CARD_FIELD_LABELS[itemType] ?? CARD_FIELD_LABELS.TRADING_CARD;
 
   async function handleSaveDraft() {
     setError("");
@@ -97,6 +151,7 @@ export default function StoreInputForm({
       customServiceLevelId: customServiceLevelId ?? undefined,
       cards: cards.map((c) => ({
         tcgTitle: c.tcgTitle,
+        releaseYear: c.releaseYear,
         cardName: c.cardName,
         cardNumber: c.cardNumber,
         rarity: c.rarity,
@@ -125,8 +180,20 @@ export default function StoreInputForm({
       return;
     }
     if (cards.some((c) => !c.tcgTitle || !c.cardName || c.declaredValue < 1)) {
-      setError(`各カードのTCGタイトル・カード名・申告価格（1${currencySymbol(region)}以上）を入力してください`);
+      setError(`各${fieldLabels.entryLabel}のTCGタイトル・${fieldLabels.nameLabel}・申告価格（1${currencySymbol(region)}以上）を入力してください`);
       return;
+    }
+    // 発行年の範囲チェックは「トレカ／未開封パック」のみ。コミック・マガジンは発行年月の自由記述のため対象外。ADR-0033
+    if (itemType !== "COMIC_MAGAZINE") {
+      const badYear = cards.find((c) => {
+        if (!c.releaseYear.trim()) return false;
+        const y = parseInt(c.releaseYear, 10);
+        return !Number.isInteger(y) || y < 1900 || y > 2100 || String(y) !== c.releaseYear.trim();
+      });
+      if (badYear) {
+        setError(`${fieldLabels.releaseYearLabel}は1900〜2100の範囲で入力してください（空欄でも構いません）`);
+        return;
+      }
     }
     setLoading(true);
     const result = await completeStoreApplication({
@@ -134,6 +201,7 @@ export default function StoreInputForm({
       customServiceLevelId: customServiceLevelId ?? undefined,
       cards: cards.map((c) => ({
         tcgTitle: c.tcgTitle,
+        releaseYear: c.releaseYear || undefined,
         cardName: c.cardName,
         cardNumber: c.cardNumber || undefined,
         rarity: c.rarity || undefined,
@@ -200,20 +268,20 @@ export default function StoreInputForm({
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">カード明細</h2>
+          <h2 className="font-bold text-gray-900">{fieldLabels.entryLabel}明細</h2>
           <button
             type="button"
             onClick={() => setCards((p) => [...p, newRow()])}
             className="text-brand-600 text-sm font-medium hover:text-brand-800"
           >
-            + カードを追加
+            + {fieldLabels.entryLabel}を追加
           </button>
         </div>
 
         {cards.map((c, i) => (
           <div key={i} className="border border-gray-200 rounded-lg p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <p className="font-bold text-gray-800 text-sm">カード {i + 1}</p>
+              <p className="font-bold text-gray-800 text-sm">{fieldLabels.entryLabel} {i + 1}</p>
               {cards.length > 1 && (
                 <button
                   type="button"
@@ -226,33 +294,44 @@ export default function StoreInputForm({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
+                type={itemType === "COMIC_MAGAZINE" ? "text" : "number"}
+                placeholder={fieldLabels.releaseYearLabel}
+                value={c.releaseYear}
+                onChange={(e) => update(i, "releaseYear", e.target.value)}
+                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+              />
+              <input
                 placeholder="TCGタイトル（例: ポケモンカード）"
                 value={c.tcgTitle}
                 onChange={(e) => update(i, "tcgTitle", e.target.value)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
               />
               <input
-                placeholder="カード名（例: リザードン）"
-                list="card-name-master"
+                placeholder={fieldLabels.namePlaceholder}
+                list={fieldLabels.showCardNumberRarity ? "card-name-master" : undefined}
                 value={c.cardName}
                 onChange={(e) => update(i, "cardName", e.target.value)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
               />
+              {fieldLabels.showCardNumberRarity && (
+                <>
+                  <input
+                    placeholder="型番（任意）"
+                    value={c.cardNumber}
+                    onChange={(e) => update(i, "cardNumber", e.target.value)}
+                    className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+                  />
+                  <input
+                    placeholder="レアリティ（任意）"
+                    value={c.rarity}
+                    onChange={(e) => update(i, "rarity", e.target.value)}
+                    className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+                  />
+                </>
+              )}
               <input
-                placeholder="型番（任意）"
-                value={c.cardNumber}
-                onChange={(e) => update(i, "cardNumber", e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              />
-              <input
-                placeholder="レアリティ（任意）"
-                value={c.rarity}
-                onChange={(e) => update(i, "rarity", e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              />
-              <input
-                placeholder="言語（例: 日本語）"
-                list="language-suggestions"
+                placeholder={fieldLabels.secondaryPlaceholder}
+                list={itemType !== "COMIC_MAGAZINE" ? "language-suggestions" : undefined}
                 value={c.language}
                 onChange={(e) => update(i, "language", e.target.value)}
                 className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
@@ -267,7 +346,7 @@ export default function StoreInputForm({
               />
               <input
                 type="number"
-                placeholder="枚数"
+                placeholder={fieldLabels.quantityLabel}
                 value={c.quantity}
                 min={1}
                 onChange={(e) => update(i, "quantity", parseInt(e.target.value) || 1)}

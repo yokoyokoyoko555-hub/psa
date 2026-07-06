@@ -62,6 +62,13 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
+// アイテム種別ごとの表示ラベル切替。ADR-0033
+const CARD_DISPLAY_LABELS: Record<string, { entryLabel: string; quantityUnit: string }> = {
+  TRADING_CARD: { entryLabel: "カード", quantityUnit: "枚" },
+  UNOPENED_PACK: { entryLabel: "パック", quantityUnit: "枚" },
+  COMIC_MAGAZINE: { entryLabel: "コミック／マガジン", quantityUnit: "冊" },
+};
+
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const customer = await getCustomerSession();
@@ -181,7 +188,11 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
 
         {/* Cards */}
         <div>
-          <h2 className="font-bold text-gray-900 mb-4">カード一覧（{application.cards.length}枚）</h2>
+          <h2 className="font-bold text-gray-900 mb-4">
+            {(CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD).entryLabel}一覧（
+            {application.cards.length}
+            {(CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD).quantityUnit}）
+          </h2>
           <div className="space-y-3">
             {application.cards.map((card) => {
               const statusInfo = CARD_STATUS_LABELS[card.status] ?? { label: card.status, color: "bg-gray-100 text-gray-600" };

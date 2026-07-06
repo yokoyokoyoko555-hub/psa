@@ -323,10 +323,13 @@ export async function getStoreRequests() {
 
 const storeCardSchema = z.object({
   tcgTitle: z.string().min(1).max(200),
+  // 発行年（トレカ/パック）または発行年月の自由記述（コミック・マガジン）。範囲チェックはitemType確定後にcompleteStoreApplication内で行う。ADR-0033
+  releaseYear: z.string().max(20).optional(),
   cardName: z.string().min(1).max(200),
   cardNumber: z.string().max(100).optional(),
   rarity: z.string().max(100).optional(),
-  language: z.string().min(1).max(50),
+  // 空欄可（未入力時は「日本語」を補完。コミック・マガジンでは出版社として使用）。ADR-0033
+  language: z.string().max(50).optional().transform((v) => (v && v.trim() ? v.trim() : "日本語")),
   declaredValue: z.number().int().min(1),
   quantity: z.number().int().min(1).max(100),
   notes: z.string().max(1000).optional(),
@@ -335,10 +338,11 @@ const storeCardSchema = z.object({
 // 代理入力の一時保存（下書き）。確定前の緩いバリデーション（空欄可）。
 const storeDraftCardSchema = z.object({
   tcgTitle: z.string().max(200).default(""),
+  releaseYear: z.string().max(20).default(""),
   cardName: z.string().max(200).default(""),
   cardNumber: z.string().max(100).default(""),
   rarity: z.string().max(100).default(""),
-  language: z.string().default("日本語"),
+  language: z.string().default(""),
   declaredValue: z.number().int().min(0).default(0),
   quantity: z.number().int().min(1).max(100).default(1),
   notes: z.string().max(1000).default(""),
@@ -439,6 +443,18 @@ export async function completeStoreApplication(
     }
   }
 
+  // 発行年は「トレカ／未開封パック」のみ1900〜2100の数値を要求。コミック・マガジンは発行年月の自由記述を許可。ADR-0033
+  if (app.itemType !== "COMIC_MAGAZINE") {
+    const badYear = parsed.data.cards.find((c) => {
+      if (!c.releaseYear || !c.releaseYear.trim()) return false;
+      const y = parseInt(c.releaseYear, 10);
+      return !Number.isInteger(y) || y < 1900 || y > 2100 || String(y) !== c.releaseYear.trim();
+    });
+    if (badYear) {
+      return { success: false, error: "発行年は1900〜2100の範囲で入力してください（空欄でも構いません）" };
+    }
+  }
+
   const cardsInput = parsed.data.cards;
   const totalDeclaredValue = cardsInput.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
   const cardCount = cardsInput.reduce((s, c) => s + c.quantity, 0);
@@ -502,6 +518,7 @@ export async function completeStoreApplication(
           applicationId: app.id,
           cardNo,
           tcgTitle: c.tcgTitle,
+          releaseYear: c.releaseYear,
           cardName: c.cardName,
           cardNumber: c.cardNumber,
           rarity: c.rarity,

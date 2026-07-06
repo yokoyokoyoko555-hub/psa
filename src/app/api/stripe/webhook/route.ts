@@ -66,15 +66,23 @@ async function handlePaymentSucceeded(pi: Stripe.PaymentIntent) {
     });
 
     if (payment.applicationId) {
-      await prisma.application.update({
+      // 代理申込（source=STORE）の先払いはカード未入力のためstatusをDRAFTのまま維持する
+      // （スタッフの明細入力完了時にSUBMITTEDへ進む。ADR-0020）。自己入力（source=CUSTOMER）のみここで確定させる。
+      const app = await prisma.application.findUnique({
         where: { id: payment.applicationId },
-        data: { status: "SUBMITTED" },
+        select: { source: true },
       });
-      // カードステータスを一括更新
-      await prisma.card.updateMany({
-        where: { applicationId: payment.applicationId },
-        data: { status: "SUBMITTED_BY_CUSTOMER" },
-      });
+      if (app?.source === "CUSTOMER") {
+        await prisma.application.update({
+          where: { id: payment.applicationId },
+          data: { status: "SUBMITTED" },
+        });
+        // カードステータスを一括更新
+        await prisma.card.updateMany({
+          where: { applicationId: payment.applicationId },
+          data: { status: "SUBMITTED_BY_CUSTOMER" },
+        });
+      }
     }
   }
 
