@@ -5,7 +5,7 @@ import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getApplicationDetail } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
-import { formatMoney } from "@/lib/currency";
+import { formatMoney, formatMoneyIn } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -107,7 +107,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </div>
             <div>
               <p className="text-gray-500">合計金額</p>
-              <p className="font-bold text-lg">{formatMoney(application.totalAmount, application.region)}</p>
+              <p className="font-bold text-lg">{formatMoneyIn(application.totalAmount, "JPY")}</p>
             </div>
           </div>
 
@@ -118,28 +118,33 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </div>
             {application.agencyFeeTotal > 0 && (
               <div className="flex justify-between text-gray-600">
-                <span>代理入力料金</span><span>{formatMoney(application.agencyFeeTotal, application.region)}</span>
+                <span>代理入力料金</span><span>{formatMoneyIn(application.agencyFeeTotal, "JPY")}</span>
               </div>
             )}
             <div className="flex justify-between text-gray-600">
-              <span>送料・保険料</span><span>{formatMoney(application.shippingFee + application.insuranceFee, application.region)}</span>
+              <span>送料・保険料</span><span>{formatMoneyIn(application.shippingFee + application.insuranceFee, "JPY")}</span>
             </div>
             {application.handlingFee > 0 && (
               <div className="flex justify-between text-gray-600">
-                <span>事務手数料</span><span>{formatMoney(application.handlingFee, application.region)}</span>
+                <span>事務手数料</span><span>{formatMoneyIn(application.handlingFee, "JPY")}</span>
               </div>
             )}
             {application.discountAmount > 0 && (
               <div className="flex justify-between text-brand-700">
                 <span>キャンペーン割引{application.campaignName ? `（${application.campaignName}）` : ""}</span>
-                <span>-{formatMoney(application.discountAmount, application.region)}</span>
+                <span>-{formatMoneyIn(application.discountAmount, "JPY")}</span>
               </div>
             )}
+            {application.region === "PSA_US" && application.exchangeRateUsed && (
+              <p className="text-xs text-gray-400">
+                為替レート: $1 = {formatMoneyIn(application.exchangeRateUsed, "JPY")}（申込時点）
+              </p>
+            )}
             <div className="flex justify-between font-bold border-t border-gray-200 pt-1 mt-1">
-              <span>合計</span><span>{formatMoney(application.totalAmount, application.region)}</span>
+              <span>合計</span><span>{formatMoneyIn(application.totalAmount, "JPY")}</span>
             </div>
             <p className="text-xs text-gray-400 text-right">
-              （内消費税 {formatMoney(application.taxAmount, application.region)}）
+              （内消費税 {formatMoneyIn(application.taxAmount, "JPY")}）
             </p>
           </div>
         </div>

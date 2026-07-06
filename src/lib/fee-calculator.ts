@@ -1,12 +1,14 @@
 import { prisma } from "./prisma";
 import { ReturnMethod, ServiceRegion, ItemType } from "@prisma/client";
-import { roundMoney } from "./currency";
+import { roundMoney, effectiveUsdJpyRate } from "./currency";
 import { pricingSettingId } from "./pricing-setting-id";
 
 const TAX_RATE = 0.1;
 const PSA_COST_RATE = 0.8; // 代理店価格: 定価の80%
+const EXCHANGE_RATE_ID = "default";
 
 export interface FeeBreakdown {
+  /** 表示用の鑑定料合計（JP=円 / US=USD、換算前の生値）。決済額の計算には使わない。ADR-0031 */
   psaFeeTotal: number;
   psaCostTotal: number;
   /** 常に0固定（互換のため残置）。デュアルサービスは通常サービスレベルの代わりに選ぶ形式に変更し、
@@ -19,8 +21,10 @@ export interface FeeBreakdown {
   handlingFee: number; // 事務手数料
   discountAmount: number; // キャンペーン割引（鑑定料以外に適用・正の値）
   campaignName: string | null;
-  taxAmount: number;
-  totalAmount: number;
+  taxAmount: number; // 常に円（内税の内訳額）。ADR-0031
+  totalAmount: number; // 常に円。Stripe決済もこの金額をJPYで実行する。ADR-0031
+  /** PSA US決済時に使用した実効為替レート（USD→JPY、マージン込み）。PSA_JPはnull。ADR-0031 */
+  exchangeRateUsed: number | null;
 }
 
 /** 有効・期間内・条件一致のキャンペーンを1件返す（startAt新しい順で先頭） */
@@ -181,7 +185,7 @@ export async function calculateFees(params: {
   const freeQty = setting?.freeShipInsQty ?? 0;
   if (freeQty > 0 && params.cardCount >= freeQty) shippingInsurance = 0;
 
-  // キャンペーン割引: 「鑑定料以外」（代理入力料金＋送料保険＋事務手数料）を対象。鑑定料・オートグラフ料金は対象外。
+  // キャンペーン割引: 「鑑定料以外」（代理入力料金＋送料保険＋事務手数料。常に円）を対象。鑑定料・オートグラフ料金は対象外。
   const discountBase = agencyFeeTotal + shippingInsurance + handlingFee;
   const campaign = await findCampaign(params.region, params.customerId);
   let discountAmount = 0;
@@ -193,9 +197,20 @@ export async function calculateFees(params: {
     discountAmount = Math.min(discountAmount, discountBase); // 対象ベースを上限
   }
 
-  const subtotal = psaFeeTotal + autographFeeTotal + discountBase - discountAmount;
-  const taxAmount = roundMoney(subtotal * TAX_RATE, params.region);
-  const totalAmount = roundMoney(subtotal + taxAmount, params.region);
+  // PSA USは鑑定料(USD)を決済用にJPYへ換算する。表示用のpsaFeeTotalは換算前の生値のまま返す。ADR-0031
+  let exchangeRateUsed: number | null = null;
+  let psaFeeTotalJpy = psaFeeTotal;
+  if (params.region === "PSA_US") {
+    const rate = await prisma.exchangeRate.findUnique({ where: { id: EXCHANGE_RATE_ID } });
+    if (!rate) throw new Error("為替レートが設定されていません。管理画面で設定してください。");
+    exchangeRateUsed = effectiveUsdJpyRate(rate.usdJpyRate, rate.marginPercent);
+    psaFeeTotalJpy = Math.round(psaFeeTotal * exchangeRateUsed);
+  }
+
+  // 合計・消費税は常に円で計算する（決済は常にJPY。ADR-0031）。
+  const subtotal = psaFeeTotalJpy + autographFeeTotal + discountBase - discountAmount;
+  const taxAmount = roundMoney(subtotal * TAX_RATE, "PSA_JP");
+  const totalAmount = roundMoney(subtotal + taxAmount, "PSA_JP");
 
   return {
     psaFeeTotal,
@@ -210,5 +225,6 @@ export async function calculateFees(params: {
     campaignName: campaign && discountAmount > 0 ? campaign.name : null,
     taxAmount,
     totalAmount,
+    exchangeRateUsed,
   };
 }

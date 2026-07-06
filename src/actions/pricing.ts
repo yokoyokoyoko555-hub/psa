@@ -178,3 +178,26 @@ export async function deleteCustomServicePrice(id: string): Promise<{ success: b
   revalidatePath("/admin/settings");
   return { success: true };
 }
+
+const EXCHANGE_RATE_ID = "default";
+
+const exchangeRateSchema = z.object({
+  usdJpyRate: z.number().positive(),
+  marginPercent: z.number().min(0),
+});
+
+/** USD→JPY為替レート（PSA US決済のJPY一本化用）を保存。1行のみ運用。ADR-0031 */
+export async function saveExchangeRate(
+  input: z.infer<typeof exchangeRateSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdmin();
+  const parsed = exchangeRateSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容を確認してください" };
+  await prisma.exchangeRate.upsert({
+    where: { id: EXCHANGE_RATE_ID },
+    update: { ...parsed.data, updatedBy: user.id },
+    create: { id: EXCHANGE_RATE_ID, ...parsed.data, updatedBy: user.id },
+  });
+  revalidatePath("/admin/settings");
+  return { success: true };
+}

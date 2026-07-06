@@ -25,7 +25,7 @@ export default async function NotificationsPage() {
       <CustomerHeader title="お知らせ" />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <section className="bg-white border border-gray-200">
+        <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="bg-brand-600 text-white px-4 py-3">
             <h2 className="font-bold">お知らせ</h2>
           </div>

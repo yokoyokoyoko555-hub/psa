@@ -46,7 +46,7 @@ export default function HandlingFeeForm({
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        いずれもサービス共通の一律額（{unit}/枚）です。枚数に応じて加算されます。
+        代理入力料金は{unit}/枚（枚数に応じて加算）、事務手数料は{unit}（1申込＝サービスレベル選択1回につき定額）です。
         代理入力料金は代理入力(STORE)の申込のみ、事務手数料は全申込に適用されます。
       </p>
       <div className="space-y-3">
@@ -58,7 +58,7 @@ export default function HandlingFeeForm({
         <div className="flex items-center gap-2">
           <span className="w-28 text-sm text-gray-700">事務手数料</span>
           <input type="number" min={0} value={handling} onChange={(e) => setHandling(e.target.value)} className={inputCls} />
-          <span className="text-sm text-gray-600">{unit} / 枚</span>
+          <span className="text-sm text-gray-600">{unit}（1申込あたり定額）</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-28 text-sm text-gray-700">送料保険 無料化</span>

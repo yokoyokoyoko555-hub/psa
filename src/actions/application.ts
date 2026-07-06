@@ -7,7 +7,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
 import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe } from "@/lib/stripe";
 import { sendTemplate } from "@/lib/mailer";
-import { formatMoney, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
+import { formatMoneyIn, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { pricingSettingId } from "@/lib/pricing-setting-id";
 import { ServiceRegion, ItemType, ReturnMethod, Prisma } from "@prisma/client";
@@ -158,16 +158,22 @@ export async function createApplication(
   const cardCount = cardsInput.reduce((sum, c) => sum + c.quantity, 0);
 
   // 顧客自身の申込は手数料なし（当社入力=STORE は管理画面の代理申込で別途）
-  const fees = await calculateFees({
-    region: parsed.data.region,
-    itemType,
-    customServiceLevelId: parsed.data.customServiceLevelId,
-    returnMethod: parsed.data.returnMethod,
-    cardCount,
-    totalDeclaredValue,
-    applyAgencyFee: false,
-    customerId: customer.id,
-  });
+  let fees;
+  try {
+    fees = await calculateFees({
+      region: parsed.data.region,
+      itemType,
+      customServiceLevelId: parsed.data.customServiceLevelId,
+      returnMethod: parsed.data.returnMethod,
+      cardCount,
+      totalDeclaredValue,
+      applyAgencyFee: false,
+      customerId: customer.id,
+    });
+  } catch (err) {
+    console.error("Failed to calculate fees:", err);
+    return { success: false, error: err instanceof Error ? err.message : "料金の計算に失敗しました" };
+  }
 
   let stripeCustomerId: string;
   try {
@@ -211,6 +217,7 @@ export async function createApplication(
       discountAmount: fees.discountAmount,
       campaignName: fees.campaignName,
       taxAmount: fees.taxAmount,
+      exchangeRateUsed: fees.exchangeRateUsed,
     };
 
     const app = existingDraftId
@@ -293,8 +300,8 @@ export async function createApplication(
   let paymentIntent;
   try {
     paymentIntent = await createPaymentIntent({
-      amount: toStripeAmount(fees.totalAmount, application.region),
-      currency: stripeCurrency(application.region),
+      amount: toStripeAmount(fees.totalAmount),
+      currency: stripeCurrency(),
       customerId: stripeCustomerId,
       applicationId: application.id,
       description: `PSA申込 ${application.applicationNo}`,
@@ -311,7 +318,7 @@ export async function createApplication(
       applicationId: application.id,
       stripePaymentIntentId: paymentIntent.id,
       amount: fees.totalAmount,
-      currency: stripeCurrency(application.region),
+      currency: stripeCurrency(),
       status: "PENDING",
       description: `PSA申込 ${application.applicationNo}`,
     },
@@ -440,7 +447,7 @@ export async function confirmApplicationPayment(
   await sendTemplate("application_received", customer.email, {
     name: decrypt(customer.nameEncrypted),
     applicationNo: application.applicationNo,
-    amount: formatMoney(application.totalAmount, application.region),
+    amount: formatMoneyIn(application.totalAmount, "JPY"),
   });
 
   revalidatePath("/mypage");
@@ -536,8 +543,8 @@ export async function createStoreRequest(
   let paymentIntent;
   try {
     paymentIntent = await createPaymentIntent({
-      amount: toStripeAmount(prepaidAmount, parsed.data.region),
-      currency: stripeCurrency(parsed.data.region),
+      amount: toStripeAmount(prepaidAmount),
+      currency: stripeCurrency(),
       customerId: stripeCustomerId,
       applicationId: application.id,
       description: `PSA代理申込 先払い ${application.applicationNo}`,
@@ -553,7 +560,7 @@ export async function createStoreRequest(
       applicationId: application.id,
       stripePaymentIntentId: paymentIntent.id,
       amount: prepaidAmount,
-      currency: stripeCurrency(parsed.data.region),
+      currency: stripeCurrency(),
       status: "PENDING",
       description: `PSA代理申込 先払い ${application.applicationNo}`,
     },
@@ -666,7 +673,7 @@ export async function confirmStorePrepayPayment(
   await sendTemplate("application_received", customer.email, {
     name: decrypt(customer.nameEncrypted),
     applicationNo: application.applicationNo,
-    amount: formatMoney(application.totalAmount, application.region),
+    amount: formatMoneyIn(application.totalAmount, "JPY"),
   });
 
   revalidatePath("/mypage");

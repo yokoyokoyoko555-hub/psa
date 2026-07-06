@@ -1133,13 +1133,18 @@ export default function ApplyForm({
               {discountAmount > 0 && (
                 <div className="flex justify-between text-brand-700">
                   <span>キャンペーン割引{campaignName ? `（${campaignName}）` : ""}</span>
-                  <span>-{formatMoney(discountAmount, region)}</span>
+                  <span>-{formatMoneyIn(discountAmount, "JPY")}</span>
                 </div>
               )}
+              {region === "PSA_US" && fees?.exchangeRateUsed && (
+                <p className="text-xs text-gray-400">
+                  為替レート: $1 = {formatMoneyIn(fees.exchangeRateUsed, "JPY")}（申込時点）
+                </p>
+              )}
               <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-2 mt-2">
-                <span>合計</span><span>{formatMoney(totalAmount, region)}</span>
+                <span>合計</span><span>{formatMoneyIn(totalAmount, "JPY")}</span>
               </div>
-              <p className="text-xs text-gray-500 text-right">（内消費税 {formatMoney(taxAmount, region)}）</p>
+              <p className="text-xs text-gray-500 text-right">（内消費税 {formatMoneyIn(taxAmount, "JPY")}）</p>
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
@@ -1185,7 +1190,7 @@ export default function ApplyForm({
                 disabled={paymentLoading || !stripeReady || !!cardError}
                 className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
               >
-                {paymentLoading ? "決済処理中..." : `${formatMoney(totalAmount, region)} を支払う`}
+                {paymentLoading ? "決済処理中..." : `${formatMoneyIn(totalAmount, "JPY")} を支払う`}
               </button>
               <p className="text-xs text-gray-400 text-center">
                 カード情報はStripe上で安全に処理され、このサービスには保存されません。

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { format } from "date-fns";
 import Link from "next/link";
-import { formatMoney } from "@/lib/currency";
+import { formatMoneyIn } from "@/lib/currency";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
@@ -102,7 +102,7 @@ export default async function AdminApplicationsPage({
                     <p className="text-xs text-gray-400">{app.customer.email}</p>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{app._count.cards}枚</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{formatMoney(app.totalAmount, app.region)}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{formatMoneyIn(app.totalAmount, "JPY")}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-medium ${paid ? "text-green-600" : "text-red-500"}`}>
                       {paid ? "支払済" : "未払い"}

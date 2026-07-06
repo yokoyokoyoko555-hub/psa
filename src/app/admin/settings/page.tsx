@@ -7,6 +7,7 @@ import ShippingInsuranceForm from "./ShippingInsuranceForm";
 import HandlingFeeForm from "./HandlingFeeForm";
 import CampaignForm from "./CampaignForm";
 import CustomServicePriceForm from "./CustomServicePriceForm";
+import ExchangeRateForm from "./ExchangeRateForm";
 
 const groupCls = "bg-white rounded-xl border border-gray-200 p-6";
 const subCls = "border border-gray-100 rounded-lg p-4";
@@ -20,11 +21,12 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 export default async function SettingsPage() {
   await ensureTradingCardCustomPrices(); // 旧ServicePrice→CustomServicePrice(category=TRADING_CARD)の初回移行。ADR-0026
 
-  const [siRates, settings, campaigns, customServicePrices] = await Promise.all([
+  const [siRates, settings, campaigns, customServicePrices, exchangeRate] = await Promise.all([
     prisma.shippingInsuranceRate.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.pricingSetting.findMany(),
     prisma.campaign.findMany({ orderBy: { startAt: "desc" } }),
     prisma.customServicePrice.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.exchangeRate.findUnique({ where: { id: "default" } }),
   ]);
 
   // region/itemTypeカラムでの照合は既存行のカラム不整合により一致しないことがあるため、idで照合する。
@@ -45,6 +47,19 @@ export default async function SettingsPage() {
   return (
     <div className="p-8 max-w-6xl space-y-4">
       <h1 className="text-2xl font-bold text-gray-900">料金設定</h1>
+
+      {/* 為替レート（PSA US決済のJPY一本化用） */}
+      <details className={groupCls} open>
+        <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">
+          為替レート — PSA US決済用
+        </summary>
+        <div className="mt-4">
+          <ExchangeRateForm
+            usdJpyRate={exchangeRate?.usdJpyRate ?? 150}
+            marginPercent={exchangeRate?.marginPercent ?? 0}
+          />
+        </div>
+      </details>
 
       {regions.map(({ region, title, itemTypes }) => (
         <details key={region} className={groupCls}>

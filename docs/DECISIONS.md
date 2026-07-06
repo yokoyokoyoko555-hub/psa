@@ -326,3 +326,17 @@
 - 影響: 事務手数料の実額が変更される（従来: 単価×枚数 → 変更後: 単価固定）ため、既存の`PricingSetting.handlingFee`設定値がそのまま「1申込あたりの定額」として適用される点に注意（管理画面での再設定は不要だが、実質的な負担額が変わる）。
 - 未対応: 為替レート・合計金額の通貨統一ロジックは引き続き未対応（ADR-0025〜0027から継続）。
 
+## ADR-0031: PSA US決済をJPY一本化（為替レート＋マージン管理）
+
+- 日付: 2026-07-06 / 状態: Accepted（実装済）
+- 背景: PSA USはドル建ての鑑定料（`psaFeeTotal`）と円建ての代理入力料金・事務手数料・送料保険（元々常に円）が混在しており、これまで両者を単純に加算して`totalAmount`とし、Stripe決済も`stripeCurrency(region)`により`"usd"`として全額をUSD建てで課金していた。これは円建て手数料が0でない限り実質的なバグで（例: $63.99＋¥1,100を単純加算した数値をそのままUSDとして課金＝約1,164ドルの誤課金）、ADR-0025〜0030で繰り返し「未対応」として先送りしてきた。ユーザーへの説明の結果、「Stripeの日本国内アカウントはJPYでしか着金せず、USD決済分もStripeが自動でJPY変換（手数料込み）してしまう」ことを確認し、**当社側で先にJPYへ変換してから決済する（レート・マージンを自社でコントロールする）**方針に合意した。
+- 決定:
+  - **新モデル`ExchangeRate`を追加**（`id`は`"default"`固定の1行運用、`PricingSetting`と同じsentinel-idパターン）。`usdJpyRate`（実勢レート）と`marginPercent`（上乗せ%）の2項目を管理画面で individually 設定できる方式を採用（ユーザーが「レート＋マージン%の2項目」を選択）。実効レート = `usdJpyRate × (1 + marginPercent/100)`（`lib/currency.ts`の`effectiveUsdJpyRate()`）。
+  - **`fee-calculator.ts`**: PSA_USの場合のみ、`psaFeeTotal`（USD生値）を実効レートで円換算した`psaFeeTotalJpy`を算出し、`subtotal`/`taxAmount`/`totalAmount`の計算はこの円換算後の値を使う。`FeeBreakdown`が返す`psaFeeTotal`自体は**換算前の生値のまま**（顧客向けのドル表示・`Card.psaFee`/`psaCost`の原価記帳精度を保つため）。`ExchangeRate`が未設定の場合はPSA_USの計算時に明示的な日本語エラー（「為替レートが設定されていません。管理画面で設定してください。」）を投げる。
+  - **`Application.exchangeRateUsed`を追加**（申込作成時点の実効レートのスナップショット。PSA_JPは常にnull）。管理画面でレートを後から変更しても過去の申込金額の根拠が追跡できるようにし、プレビュー時と実決済時のレートのズレも防ぐ。
+  - **Stripe決済は常にJPY**に統一。`stripeCurrency()`/`toStripeAmount()`から`region`引数を削除し、無条件で`"jpy"`／整数丸めを返す（従来のUSD建て決済は完全に廃止）。
+  - **`calculateFees()`の呼び出し元（`createApplication`/`completeStoreApplication`）はtry/catchでラップ**し、為替レート未設定時のエラーを`{success:false, error}`としてクリーンに返す（ADR-0028の本番P2002クラッシュの教訓を踏まえ、新規に追加した`throw`を未処理のまま本番に出さないための予防措置）。
+  - **表示側**: 合計金額・内消費税・代理入力料金・事務手数料・送料保険・割引額など決済に関わる金額は全て`formatMoneyIn(x, "JPY")`に統一（`ApplyForm.tsx`／`mypage/applications/[id]/page.tsx`／`admin/applications/[id]/page.tsx`／`admin/applications/page.tsx`／メールテンプレートの金額差込）。PSA_US申込では「為替レート: $1 = ¥XXX（申込時点）」を`exchangeRateUsed`から表示。**`psaFeeTotal`（鑑定料）表示のみ従来通り`formatMoney(x, region)`のまま**（PSA_USはドル小数点表示を維持）。過去の`Payment`レコードはPSA_US時代にUSDで作成されたものが混在するため、admin詳細ページのPayment一覧は`Payment.currency`列の実値（`"usd"`/`"jpy"`）に応じて表示通貨を切り替える（一律JPY表示にはしない）。
+- 影響: `prisma/schema.prisma`に`ExchangeRate`モデル・`Application.exchangeRateUsed`列を追加（db push、非破壊）。`lib/currency.ts`の`stripeCurrency`/`toStripeAmount`のシグネチャ変更（`region`引数削除、呼び出し元4箇所を修正）。管理画面設定ページに為替レート設定セクション（`ExchangeRateForm.tsx`）を追加。デプロイ後、管理画面で為替レート（レート・マージン%）を設定するまでPSA_USの新規申込は作成できない（明示的エラーで停止するため、無言の誤課金にはならない）。
+- 未対応: 為替レートの自動取得（現状は手動設定のみ）。旧USD建て`Payment`レコードに対する返金・Upcharge時の通貨整合は個別対応（本ADRのスコープ外）。
+

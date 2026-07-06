@@ -42,11 +42,22 @@ export function formatMoneyInt(amount: number, region: string | null | undefined
   return `${currencySymbol(region)}${formatted}`;
 }
 
-/** Stripe API向け最小通貨単位への変換（JPYは無位取りのため整数そのまま / USDはセント）。 */
-export function toStripeAmount(amount: number, region: string | null | undefined): number {
-  return region === "PSA_US" ? Math.round(amount * 100) : Math.round(amount);
+/**
+ * Stripe API向け最小通貨単位への変換。決済は常にJPY（無位取り）で行う。
+ * PSA USも鑑定料等をJPYへ換算してから合算するため、リージョンに関わらず円決済になる。ADR-0031
+ */
+export function toStripeAmount(amount: number): number {
+  return Math.round(amount);
 }
 
-export function stripeCurrency(region: string | null | undefined): string {
-  return region === "PSA_US" ? "usd" : "jpy";
+export function stripeCurrency(): string {
+  return "jpy";
+}
+
+/**
+ * USD→JPYの実効為替レート（実勢レート×(1+マージン%)）を計算する。
+ * PSA USの鑑定料等（USD建て）を決済用にJPYへ換算する際に使う。ADR-0031
+ */
+export function effectiveUsdJpyRate(usdJpyRate: number, marginPercent: number): number {
+  return usdJpyRate * (1 + marginPercent / 100);
 }

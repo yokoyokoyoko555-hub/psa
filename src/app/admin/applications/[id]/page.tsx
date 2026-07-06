@@ -9,7 +9,7 @@ import CardStatusForm from "@/components/CardStatusForm";
 import UpchargeForm from "@/components/UpchargeForm";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { formatMoney, formatMoneyInt } from "@/lib/currency";
+import { formatMoney, formatMoneyInt, formatMoneyIn } from "@/lib/currency";
 
 const CARD_STATUS_LABELS: Record<string, string> = {
   DRAFT: "下書き",
@@ -166,7 +166,7 @@ export default async function AdminApplicationDetailPage({
               <div>
                 <p className="text-gray-500">合計金額</p>
                 <p className="font-bold text-gray-900">
-                  {formatMoney(application.totalAmount, application.region)}
+                  {formatMoneyIn(application.totalAmount, "JPY")}
                 </p>
               </div>
             </div>
@@ -184,20 +184,26 @@ export default async function AdminApplicationDetailPage({
               )}
               <div>
                 <p className="text-gray-500">代理入力料金</p>
-                <p className="font-medium">{formatMoney(application.agencyFeeTotal, application.region)}</p>
+                <p className="font-medium">{formatMoneyIn(application.agencyFeeTotal, "JPY")}</p>
               </div>
               <div>
                 <p className="text-gray-500">送料・保険料</p>
-                <p className="font-medium">{formatMoney(application.shippingFee + application.insuranceFee, application.region)}</p>
+                <p className="font-medium">{formatMoneyIn(application.shippingFee + application.insuranceFee, "JPY")}</p>
               </div>
               <div>
                 <p className="text-gray-500">事務手数料</p>
-                <p className="font-medium">{formatMoney(application.handlingFee, application.region)}</p>
+                <p className="font-medium">{formatMoneyIn(application.handlingFee, "JPY")}</p>
               </div>
               {application.discountAmount > 0 && (
                 <div>
                   <p className="text-gray-500">キャンペーン割引</p>
-                  <p className="font-medium text-brand-700">-{formatMoney(application.discountAmount, application.region)}{application.campaignName ? `（${application.campaignName}）` : ""}</p>
+                  <p className="font-medium text-brand-700">-{formatMoneyIn(application.discountAmount, "JPY")}{application.campaignName ? `（${application.campaignName}）` : ""}</p>
+                </div>
+              )}
+              {application.region === "PSA_US" && application.exchangeRateUsed && (
+                <div>
+                  <p className="text-gray-500">為替レート（申込時点）</p>
+                  <p className="font-medium">$1 = {formatMoneyIn(application.exchangeRateUsed, "JPY")}</p>
                 </div>
               )}
             </div>
@@ -261,7 +267,7 @@ export default async function AdminApplicationDetailPage({
                     <div className="mt-3 space-y-1">
                       {card.upcharges.map((u) => (
                         <div key={u.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
-                          <span className="text-gray-600">Upcharge {formatMoney(u.upchargeAmount, application.region)}（{u.reason}）</span>
+                          <span className="text-gray-600">Upcharge {formatMoneyIn(u.upchargeAmount, "JPY")}（{u.reason}）</span>
                           <span className={`px-2 py-0.5 rounded-full font-medium ${
                             u.status === "PAID" ? "bg-green-100 text-green-700" :
                             u.status === "FAILED" ? "bg-red-100 text-red-700" :
@@ -314,7 +320,7 @@ export default async function AdminApplicationDetailPage({
                       <span className="text-gray-500 font-mono text-xs">{p.stripePaymentIntentId}</span>
                     </div>
                     <span className="font-medium text-gray-900">
-                      {formatMoney(p.amount, application.region)}
+                      {formatMoneyIn(p.amount, p.currency === "usd" ? "USD" : "JPY")}
                     </span>
                   </div>
                 ))}

@@ -8,7 +8,7 @@ import { logOperation } from "@/lib/operation-log";
 import { chargeOffSession } from "@/lib/stripe";
 import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
-import { formatMoney, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
+import { formatMoneyIn, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { pricingSettingId } from "@/lib/pricing-setting-id";
 import { CardStatus } from "@prisma/client";
 import { z } from "zod";
@@ -216,8 +216,8 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
   if (savedMethod) {
     try {
       const pi = await chargeOffSession({
-        amount: toStripeAmount(parsed.upchargeAmount, card.application.region),
-        currency: stripeCurrency(card.application.region),
+        amount: toStripeAmount(parsed.upchargeAmount),
+        currency: stripeCurrency(),
         customerId: card.customer.stripeCustomerId!,
         paymentMethodId: savedMethod.stripePaymentMethodId,
         description: `Upcharge: ${card.cardName}`,
@@ -445,17 +445,23 @@ export async function completeStoreApplication(
 
   // 当社入力は手数料あり。代理入力料金は「種類数 × 手数料」（同一カードは何枚でも1種）。
   // 種類数 = 入力されたカード行数（行ごとに別カードを想定）。[ADR-0020 / PROXY_PREPAY 段階1]
-  const fees = await calculateFees({
-    region: app.region,
-    itemType: app.itemType,
-    customServiceLevelId: parsed.data.customServiceLevelId,
-    returnMethod: app.returnMethod,
-    cardCount,
-    totalDeclaredValue,
-    applyAgencyFee: true,
-    agencyCardTypeCount: parsed.data.cards.length,
-    customerId: app.customerId,
-  });
+  let fees;
+  try {
+    fees = await calculateFees({
+      region: app.region,
+      itemType: app.itemType,
+      customServiceLevelId: parsed.data.customServiceLevelId,
+      returnMethod: app.returnMethod,
+      cardCount,
+      totalDeclaredValue,
+      applyAgencyFee: true,
+      agencyCardTypeCount: parsed.data.cards.length,
+      customerId: app.customerId,
+    });
+  } catch (err) {
+    console.error("Failed to calculate fees:", err);
+    return { success: false, error: err instanceof Error ? err.message : "料金の計算に失敗しました" };
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.application.update({
@@ -476,6 +482,7 @@ export async function completeStoreApplication(
         discountAmount: fees.discountAmount,
         campaignName: fees.campaignName,
         taxAmount: fees.taxAmount,
+        exchangeRateUsed: fees.exchangeRateUsed,
       },
     });
 
@@ -522,7 +529,7 @@ export async function completeStoreApplication(
         customerId: app.customerId,
         applicationId: app.id,
         amount: fees.totalAmount,
-        currency: stripeCurrency(app.region),
+        currency: stripeCurrency(),
         status: "PENDING",
         description: `代理申込 ${app.applicationNo}`,
       },
@@ -548,7 +555,7 @@ export async function completeStoreApplication(
     await sendTemplate("store_input_completed", cust.email, {
       name: decrypt(cust.nameEncrypted),
       applicationNo: app.applicationNo,
-      amount: formatMoney(fees.totalAmount, app.region),
+      amount: formatMoneyIn(fees.totalAmount, "JPY"),
     });
   }
 
