@@ -713,7 +713,7 @@ export default function ApplyForm({
               <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
                 <h2 className="font-bold text-gray-800">鑑定の種類</h2>
                 <p className="text-xs text-gray-500">
-                  デュアルサービスは通常サービスの代わりに、カードとサインをまとめて鑑定するオプションです（追加料金ではありません）。
+                  デュアルサービスは、カードとサイン（オートグラフ）の両方を鑑定するサービスです。
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -740,7 +740,7 @@ export default function ApplyForm({
                         : "border-gray-200 text-gray-700 hover:border-gray-300"
                     }`}
                   >
-                    デュアルサービス（カードとサインの鑑定）
+                    デュアルサービス
                   </button>
                 </div>
               </div>
