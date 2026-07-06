@@ -208,7 +208,9 @@ export async function createApplication(
 
   const applicationNo = existingDraftId ? null : await generateApplicationNo();
 
-  const application = await prisma.$transaction(async (tx) => {
+  let application;
+  try {
+    application = await prisma.$transaction(async (tx) => {
     const commonData = {
       serviceLevel: "CUSTOM" as const,
       region: parsed.data.region,
@@ -308,7 +310,11 @@ export async function createApplication(
     });
 
     return app;
-  });
+    });
+  } catch (err) {
+    console.error("Failed to create application/cards:", err);
+    return { success: false, error: "申込データの保存に失敗しました。入力内容をご確認のうえ、時間をおいて再度お試しください。" };
+  }
 
   // Stripe PaymentIntent作成
   let paymentIntent;

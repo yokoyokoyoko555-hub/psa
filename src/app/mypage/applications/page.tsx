@@ -34,6 +34,17 @@ const SERVICE_LABELS: Record<string, string> = {
   COMIC_WALK_THROUGH: "ウォークスルー",
 };
 
+const REGION_LABELS: Record<string, string> = {
+  PSA_JP: "PSA 日本",
+  PSA_US: "PSA US",
+};
+
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  TRADING_CARD: "トレーディングカード",
+  UNOPENED_PACK: "未開封パック",
+  COMIC_MAGAZINE: "コミック・マガジン",
+};
+
 export default async function ApplicationsPage() {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
@@ -45,11 +56,17 @@ export default async function ApplicationsPage() {
       app.status === "DRAFT" && app.draftData
         ? ((app.draftData as { cards?: unknown[] }).cards?.length ?? 0)
         : 0;
+    // サービスレベルは動的タイア（CustomServicePrice）のスナップショット名を優先し、
+    // 未選択（代理入力の明細入力待ちなど）の場合のみ「未選択」とする。ADR-0026以降serviceLevelは常に"CUSTOM"のため。
+    const serviceLevel =
+      app.customServiceLevelName ?? SERVICE_LABELS[app.serviceLevel] ?? (app.serviceLevel === "CUSTOM" ? "未選択" : app.serviceLevel);
     return {
       id: app.id,
       applicationNo: app.applicationNo,
       cardCount: app.status === "DRAFT" ? draftCards : app.cards.length,
-      serviceLevel: SERVICE_LABELS[app.serviceLevel] ?? app.serviceLevel,
+      serviceLevel,
+      region: REGION_LABELS[app.region] ?? app.region,
+      itemType: app.region === "PSA_US" ? (ITEM_TYPE_LABELS[app.itemType] ?? app.itemType) : null,
       createdAt: new Date(app.createdAt).toISOString(),
       status: app.status,
       source: app.source,

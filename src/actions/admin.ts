@@ -479,7 +479,8 @@ export async function completeStoreApplication(
     return { success: false, error: err instanceof Error ? err.message : "料金の計算に失敗しました" };
   }
 
-  await prisma.$transaction(async (tx) => {
+  try {
+    await prisma.$transaction(async (tx) => {
     await tx.application.update({
       where: { id: app.id },
       data: {
@@ -551,7 +552,11 @@ export async function completeStoreApplication(
         description: `代理申込 ${app.applicationNo}`,
       },
     });
-  });
+    });
+  } catch (err) {
+    console.error("Failed to complete store application:", err);
+    return { success: false, error: "申込データの保存に失敗しました。入力内容をご確認のうえ、時間をおいて再度お試しください。" };
+  }
 
   const hdrs = await headers();
   await logOperation({

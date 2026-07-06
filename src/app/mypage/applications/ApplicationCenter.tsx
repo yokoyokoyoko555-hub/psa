@@ -10,6 +10,8 @@ export interface AppRow {
   applicationNo: string;
   cardCount: number;
   serviceLevel: string; // 表示用ラベル or "-"
+  region: string; // 表示用ラベル（PSA 日本／PSA US）
+  itemType: string | null; // PSA_USのみ表示用ラベル。PSA_JPはnull
   createdAt: string; // ISO
   status: string;
   source: string; // CUSTOMER | STORE
@@ -85,6 +87,10 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
                     {a.cardCount}枚 / {a.serviceLevel}
                     <SourceBadge source={a.source} />
                   </p>
+                  <p className="text-xs text-gray-400">
+                    {a.region}
+                    {a.itemType ? ` / ${a.itemType}` : ""}
+                  </p>
                 </div>
                 <span className="text-sm text-gray-500">{fmt(a.createdAt)}</span>
               </Link>
@@ -123,6 +129,7 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">申込</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">種別</th>
+                  <th className="text-left px-4 py-3 text-gray-500 font-medium">提出先</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">サービスレベル</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">作成日</th>
                   <th className="px-4 py-3"></th>
@@ -135,6 +142,10 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
                       {a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : `${a.cardCount} 枚`}
                     </td>
                     <td className="px-4 py-4"><SourceBadge source={a.source} /></td>
+                    <td className="px-4 py-4 text-gray-700">
+                      {a.region}
+                      {a.itemType ? ` / ${a.itemType}` : ""}
+                    </td>
                     <td className="px-4 py-4 text-gray-700">{a.serviceLevel}</td>
                     <td className="px-4 py-4 text-gray-700">{fmt(a.createdAt)}</td>
                     <td className="px-4 py-4">
