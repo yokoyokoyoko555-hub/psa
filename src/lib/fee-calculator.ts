@@ -119,8 +119,8 @@ export async function calculateFees(params: {
   region: ServiceRegion;
   /** 鑑定対象アイテム種別（PSA_USのみ複数）。ADR-0023 */
   itemType: ItemType;
-  /** 選択したCustomServicePrice.id（category=itemType）。全itemTypeで必須。ADR-0025/0026 */
-  customServiceLevelId: string;
+  /** 選択したCustomServicePrice.id（category=itemType）。cardServiceLevels未指定時は必須。ADR-0025/0026 */
+  customServiceLevelId?: string;
   returnMethod: ReturnMethod;
   cardCount: number;
   totalDeclaredValue: number;
@@ -133,6 +133,11 @@ export async function calculateFees(params: {
   agencyCardTypeCount?: number;
   /** 新規(初回)限定キャンペーンの判定に使用（任意） */
   customerId?: string;
+  /**
+   * カード（明細行）ごとに異なるサービスレベルを与える場合の内訳（代理入力の明細確定時のみ使用）。
+   * 指定時はcustomServiceLevelIdより優先し、psaFeeTotal/psaCostTotalをタイアごとに合算する。ADR-0038
+   */
+  cardServiceLevels?: { customServiceLevelId: string; quantity: number }[];
 }): Promise<FeeBreakdown> {
   // トレーディングカードを含む全itemTypeがCustomServicePriceを参照する（ADR-0026）。
   // PSA_US×TRADING_CARDのみ、通常タイア(category=itemType)に加えてデュアルサービスタイア
@@ -141,21 +146,44 @@ export async function calculateFees(params: {
     params.itemType === "TRADING_CARD" && params.region === "PSA_US"
       ? ["TRADING_CARD", "AUTOGRAPH"]
       : [params.itemType];
-  const customPrice = await prisma.customServicePrice.findFirst({
-    where: {
-      id: params.customServiceLevelId,
-      category: { in: categoryCandidates },
-      region: params.region,
-      isActive: true,
-    },
-  });
-  if (!customPrice) throw new Error("Custom service price not found");
-  const pricePerCard = customPrice.pricePerCard;
-  // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替
-  const perCardCost =
-    customPrice.cost > 0 ? customPrice.cost : roundMoney(customPrice.pricePerCard * PSA_COST_RATE, params.region);
-  const psaFeeTotal = pricePerCard * params.cardCount;
-  const psaCostTotal = perCardCost * params.cardCount;
+
+  let psaFeeTotal: number;
+  let psaCostTotal: number;
+
+  if (params.cardServiceLevels && params.cardServiceLevels.length > 0) {
+    // カード別サービスレベル（代理入力の明細確定時）。ADR-0038
+    const ids = [...new Set(params.cardServiceLevels.map((c) => c.customServiceLevelId))];
+    const prices = await prisma.customServicePrice.findMany({
+      where: { id: { in: ids }, category: { in: categoryCandidates }, region: params.region, isActive: true },
+    });
+    const priceMap = new Map(prices.map((p) => [p.id, p]));
+    psaFeeTotal = 0;
+    psaCostTotal = 0;
+    for (const row of params.cardServiceLevels) {
+      const price = priceMap.get(row.customServiceLevelId);
+      if (!price) throw new Error("Custom service price not found");
+      const cost = price.cost > 0 ? price.cost : roundMoney(price.pricePerCard * PSA_COST_RATE, params.region);
+      psaFeeTotal += price.pricePerCard * row.quantity;
+      psaCostTotal += cost * row.quantity;
+    }
+  } else {
+    if (!params.customServiceLevelId) throw new Error("Custom service price not found");
+    const customPrice = await prisma.customServicePrice.findFirst({
+      where: {
+        id: params.customServiceLevelId,
+        category: { in: categoryCandidates },
+        region: params.region,
+        isActive: true,
+      },
+    });
+    if (!customPrice) throw new Error("Custom service price not found");
+    const pricePerCard = customPrice.pricePerCard;
+    // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替
+    const perCardCost =
+      customPrice.cost > 0 ? customPrice.cost : roundMoney(customPrice.pricePerCard * PSA_COST_RATE, params.region);
+    psaFeeTotal = pricePerCard * params.cardCount;
+    psaCostTotal = perCardCost * params.cardCount;
+  }
 
   const setting = await prisma.pricingSetting.findUnique({
     where: { id: pricingSettingId(params.region, params.itemType) },

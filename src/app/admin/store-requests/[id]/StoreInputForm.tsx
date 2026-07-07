@@ -74,9 +74,11 @@ interface CardRow {
   declaredValue: number;
   quantity: number;
   notes: string;
+  // カードごとに選択したCustomServicePrice.id（複数サービスレベルにまたがる代理入力に対応）。ADR-0038
+  customServiceLevelId: string;
 }
 
-function newRow(): CardRow {
+function newRow(defaultServiceLevelId = ""): CardRow {
   return {
     tcgTitle: "",
     releaseYear: "",
@@ -87,6 +89,7 @@ function newRow(): CardRow {
     declaredValue: 0,
     quantity: 1,
     notes: "",
+    customServiceLevelId: defaultServiceLevelId,
   };
 }
 
@@ -103,6 +106,7 @@ function toCardRow(raw: unknown): CardRow {
     declaredValue: typeof r.declaredValue === "number" ? r.declaredValue : 0,
     quantity: typeof r.quantity === "number" && r.quantity >= 1 ? r.quantity : 1,
     notes: typeof r.notes === "string" ? r.notes : "",
+    customServiceLevelId: typeof r.customServiceLevelId === "string" ? r.customServiceLevelId : "",
   };
 }
 
@@ -121,15 +125,12 @@ export default function StoreInputForm({
   customServicePrices?: CustomServicePrice[];
   autographPricing?: CustomServicePrice[];
   masterNames?: string[];
-  initialDraft?: { customServiceLevelId?: string; cards?: unknown[] } | null;
+  initialDraft?: { cards?: unknown[] } | null;
 }) {
   const router = useRouter();
   const draftCards = initialDraft?.cards?.map(toCardRow) ?? [];
-  // 選択したCustomServicePrice.id（category=itemType）。トレカ含む全itemType共通。ADR-0025/0026
-  const [customServiceLevelId, setCustomServiceLevelId] = useState<string | null>(
-    initialDraft?.customServiceLevelId ?? customServicePrices[0]?.id ?? null
-  );
   const [cards, setCards] = useState<CardRow[]>(draftCards.length > 0 ? draftCards : [newRow()]);
+  const [bulkServiceLevelId, setBulkServiceLevelId] = useState(""); // 一括設定用（保存はしない）
   const [loading, setLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -138,17 +139,19 @@ export default function StoreInputForm({
   const isAutographEligible = region === "PSA_US" && itemType === "TRADING_CARD";
   const activeAutographTiers = isAutographEligible ? autographPricing.filter((a) => a.isActive) : [];
   const autographActive = activeAutographTiers.length > 0;
-  // 選択中タイアは通常サービス・デュアルサービスどちらもありうるため、両リストから検索する。
-  const selectedCustomTier = [...customServicePrices, ...activeAutographTiers].find((p) => p.id === customServiceLevelId);
-  const hasSelectedService = !!customServiceLevelId;
+  const allTiers = [...customServicePrices, ...activeAutographTiers];
   const fieldLabels = CARD_FIELD_LABELS[itemType] ?? CARD_FIELD_LABELS.TRADING_CARD;
+
+  function applyBulkServiceLevel() {
+    if (!bulkServiceLevelId) return;
+    setCards((prev) => prev.map((c) => ({ ...c, customServiceLevelId: bulkServiceLevelId })));
+  }
 
   async function handleSaveDraft() {
     setError("");
     setSavingDraft(true);
     const result = await saveStoreInputDraft({
       applicationId,
-      customServiceLevelId: customServiceLevelId ?? undefined,
       cards: cards.map((c) => ({
         tcgTitle: c.tcgTitle,
         releaseYear: c.releaseYear,
@@ -159,6 +162,7 @@ export default function StoreInputForm({
         declaredValue: c.declaredValue,
         quantity: c.quantity,
         notes: c.notes,
+        customServiceLevelId: c.customServiceLevelId,
       })),
     });
     setSavingDraft(false);
@@ -175,12 +179,22 @@ export default function StoreInputForm({
 
   async function handleSubmit() {
     setError("");
-    if (!hasSelectedService) {
-      setError("サービスレベルを選択してください");
+    if (cards.some((c) => !c.customServiceLevelId)) {
+      setError(`各${fieldLabels.entryLabel}のサービスレベルを選択してください`);
       return;
     }
     if (cards.some((c) => !c.tcgTitle || !c.cardName || c.declaredValue < 1)) {
       setError(`各${fieldLabels.entryLabel}のTCGタイトル・${fieldLabels.nameLabel}・申告価格（1${currencySymbol(region)}以上）を入力してください`);
+      return;
+    }
+    // 申告価格上限は各カードが選択したタイアの上限と比較する。ADR-0038
+    const overCap = cards.find((c) => {
+      const tier = allTiers.find((t) => t.id === c.customServiceLevelId);
+      return tier?.maxDeclaredValue != null && c.declaredValue > tier.maxDeclaredValue;
+    });
+    if (overCap) {
+      const tier = allTiers.find((t) => t.id === overCap.customServiceLevelId)!;
+      setError(`申告価格上限（${formatMoneyInt(tier.maxDeclaredValue!, region)}）を超えています（${overCap.cardName}: ${formatMoneyInt(overCap.declaredValue, region)}）。`);
       return;
     }
     // 発行年の範囲チェックは「トレカ／未開封パック」のみ。コミック・マガジンは発行年月の自由記述のため対象外。ADR-0033
@@ -198,7 +212,6 @@ export default function StoreInputForm({
     setLoading(true);
     const result = await completeStoreApplication({
       applicationId,
-      customServiceLevelId: customServiceLevelId ?? undefined,
       cards: cards.map((c) => ({
         tcgTitle: c.tcgTitle,
         releaseYear: c.releaseYear || undefined,
@@ -209,6 +222,7 @@ export default function StoreInputForm({
         declaredValue: c.declaredValue,
         quantity: c.quantity,
         notes: c.notes || undefined,
+        customServiceLevelId: c.customServiceLevelId,
       })),
     });
     setLoading(false);
@@ -232,33 +246,47 @@ export default function StoreInputForm({
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-bold text-gray-900 mb-3">サービスレベル</h2>
+        <h2 className="font-bold text-gray-900 mb-3">サービスレベル（{fieldLabels.entryLabel}ごとに選択）</h2>
         {region === "PSA_US" && (
           <p className="text-xs text-gray-500 mb-2">アイテム種別: {ITEM_TYPE_LABELS[itemType] ?? itemType}</p>
         )}
-        <select
-          value={customServiceLevelId ?? ""}
-          onChange={(e) => setCustomServiceLevelId(e.target.value || null)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
-        >
-          <option value="">選択してください</option>
-          {customServicePrices.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}（{formatMoney(p.pricePerCard, region)}/枚）
-              {p.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(p.maxDeclaredValue, region)}` : ""}
-            </option>
-          ))}
-          {autographActive && (
-            <optgroup label="デュアルサービス（カードとサインの鑑定）">
-              {activeAutographTiers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
-                  {t.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(t.maxDeclaredValue, region)}` : ""}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+        <p className="text-xs text-gray-500 mb-2">
+          複数のサービスレベルにまたがる場合も、{fieldLabels.entryLabel}ごとに下の明細で個別に選択してください。
+          全て同じ場合は、以下から一括設定できます。
+        </p>
+        <div className="flex items-center gap-2">
+          <select
+            value={bulkServiceLevelId}
+            onChange={(e) => setBulkServiceLevelId(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+          >
+            <option value="">一括設定するサービスレベルを選択</option>
+            {customServicePrices.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}（{formatMoney(p.pricePerCard, region)}/枚）
+                {p.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(p.maxDeclaredValue, region)}` : ""}
+              </option>
+            ))}
+            {autographActive && (
+              <optgroup label="デュアルサービス（カードとサインの鑑定）">
+                {activeAutographTiers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
+                    {t.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(t.maxDeclaredValue, region)}` : ""}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <button
+            type="button"
+            onClick={applyBulkServiceLevel}
+            disabled={!bulkServiceLevelId}
+            className="border border-brand-600 text-brand-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-50 disabled:opacity-50"
+          >
+            全{fieldLabels.entryLabel}に適用
+          </button>
+        </div>
         {autographActive && (
           <p className="text-xs text-gray-500 mt-2">
             デュアルサービスは通常サービスの代わりに選択します（追加料金ではありません）。
@@ -271,7 +299,7 @@ export default function StoreInputForm({
           <h2 className="font-bold text-gray-900">{fieldLabels.entryLabel}明細</h2>
           <button
             type="button"
-            onClick={() => setCards((p) => [...p, newRow()])}
+            onClick={() => setCards((p) => [...p, newRow(bulkServiceLevelId)])}
             className="text-brand-600 text-sm font-medium hover:text-brand-800"
           >
             + {fieldLabels.entryLabel}を追加
@@ -293,6 +321,29 @@ export default function StoreInputForm({
               )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <select
+                value={c.customServiceLevelId}
+                onChange={(e) => update(i, "customServiceLevelId", e.target.value)}
+                className="sm:col-span-2 border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+              >
+                <option value="">サービスレベルを選択</option>
+                {customServicePrices.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}（{formatMoney(p.pricePerCard, region)}/枚）
+                    {p.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(p.maxDeclaredValue, region)}` : ""}
+                  </option>
+                ))}
+                {autographActive && (
+                  <optgroup label="デュアルサービス（カードとサインの鑑定）">
+                    {activeAutographTiers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
+                        {t.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(t.maxDeclaredValue, region)}` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
               <input
                 type={itemType === "COMIC_MAGAZINE" ? "text" : "number"}
                 placeholder={fieldLabels.releaseYearLabel}
@@ -362,9 +413,9 @@ export default function StoreInputForm({
         ))}
       </datalist>
 
-      {selectedCustomTier && (
+      {cards.length > 0 && cards.every((c) => c.customServiceLevelId) && (
         <p className="text-sm text-gray-500">
-          ※ 確定すると料金が計算され（手数料あり）、申込が確定します。決済はStripe統合後に通電予定です。
+          ※ 確定すると料金が計算され（手数料あり）、先払い済み額を超える残額は登録済みカードへ自動請求されます。
         </p>
       )}
 

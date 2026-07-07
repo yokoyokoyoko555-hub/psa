@@ -343,8 +343,10 @@ model Application {
   status         ApplicationStatus @default(DRAFT)
   // 代理入力(STORE)の先払い: 概算(枚数×鑑定料+税)を先に決済した額。段階4の差額計算用。ADR-0020
   prepaidAmount      Float   @default(0)
-  // 代理入力(STORE)の先払い時に顧客が申告したカード枚数（概算根拠）
+  // 代理入力(STORE)の先払い時に顧客が申告した申込総数（当社の総量把握のための参考値。料金計算には使わない）。ADR-0037
   estimatedCardCount Int?
+  // 代理入力(STORE)の先払い時に顧客が申告した代理入力数（同一カードは1件、料金計算の基準）。一覧表示用。ADR-0038
+  agencyQuantity     Int?
   // 先払い概算のサービスレベル別内訳（複数レベル同時申込に対応。例: [{serviceLevel,quantity}]）。ADR-0024
   estimatedServiceLevels Json?
   totalAmount    Float             @default(0) // 常に円。PSA USは鑑定料をJPY換算してから合算。ADR-0022/0031
@@ -401,6 +403,10 @@ model Card {
   language      String  @default("日本語") // 自由記述。トレカ/パックは言語、コミック・マガジンは出版社として使用。ADR-0023/0033
   declaredValue Int // 申告価格。リージョン通貨・常に整数（JP=円 / US=USD、小数点以下は扱わない）。ADR-0027
   quantity      Int          @default(1)
+  // カード単位のサービスレベル（代理入力の明細確定時、カードごとに異なるタイアを選べるようにするため）。
+  // 自己入力はApplication.customServiceLevelIdが全カード共通のため未設定のまま。ADR-0038
+  customServiceLevelId   String?
+  customServiceLevelName String?
 
   // 料金
   psaFee    Float @default(0) // PSA鑑定料（売価）。JP=円 / US=USD（小数点以下2桁）。ADR-0022

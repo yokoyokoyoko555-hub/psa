@@ -543,6 +543,7 @@ export async function createStoreRequest(
         shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
         status: "DRAFT",
         estimatedCardCount: parsed.data.estimatedTotalCount,
+        agencyQuantity: parsed.data.agencyQuantity,
         agencyFeeTotal,
         prepaidAmount,
         totalAmount: prepaidAmount,

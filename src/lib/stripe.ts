@@ -47,13 +47,15 @@ export async function createPaymentIntent(params: {
   });
 }
 
+/** 保存済みカードへの即時off-session課金。Upcharge・代理申込の確定分請求など、後日の追加請求全般で使う。ADR-0038 */
 export async function chargeOffSession(params: {
   amount: number;
   currency: string;
   customerId: string;
   paymentMethodId: string;
   description: string;
-  upchargeId: string;
+  /** Stripeメタデータに残す参照ID（Upcharge.id、Application.idなど呼び出し元の対象を識別する値） */
+  referenceId: string;
 }) {
   return getStripe().paymentIntents.create({
     amount: params.amount,
@@ -64,7 +66,7 @@ export async function chargeOffSession(params: {
     confirm: true,
     description: params.description,
     metadata: {
-      upchargeId: params.upchargeId,
+      referenceId: params.referenceId,
     },
   });
 }

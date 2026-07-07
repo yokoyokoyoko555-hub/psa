@@ -292,7 +292,7 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
         customerId: card.customer.stripeCustomerId!,
         paymentMethodId: savedMethod.stripePaymentMethodId,
         description: `Upcharge: ${card.cardName}`,
-        upchargeId: upcharge.id,
+        referenceId: upcharge.id,
       });
 
       await prisma.upcharge.update({
@@ -389,6 +389,8 @@ export async function getStoreRequests() {
     createdAt: a.createdAt,
     customerEmail: a.customer.email,
     customerName: decrypt(a.customer.nameEncrypted),
+    agencyQuantity: a.agencyQuantity, // 代理入力数（顧客申告）。ADR-0038
+    estimatedCardCount: a.estimatedCardCount, // 申込総数（顧客申告・参考値）。ADR-0037
   }));
 }
 
@@ -404,6 +406,8 @@ const storeCardSchema = z.object({
   declaredValue: z.number().int().min(1),
   quantity: z.number().int().min(1).max(100),
   notes: z.string().max(1000).optional(),
+  // カードごとに選択したCustomServicePrice.id（複数サービスレベルにまたがる代理入力に対応）。ADR-0038
+  customServiceLevelId: z.string().min(1),
 });
 
 // 代理入力の一時保存（下書き）。確定前の緩いバリデーション（空欄可）。
@@ -417,18 +421,19 @@ const storeDraftCardSchema = z.object({
   declaredValue: z.number().int().min(0).default(0),
   quantity: z.number().int().min(1).max(100).default(1),
   notes: z.string().max(1000).default(""),
+  customServiceLevelId: z.string().default(""), // ADR-0038
 });
 
 const saveStoreDraftSchema = z.object({
   applicationId: z.string(),
-  customServiceLevelId: z.string().optional(), // 選択したCustomServicePrice.id（category=itemType）。ADR-0025/0026
   cards: z.array(storeDraftCardSchema).max(200).default([]),
 });
 
 export type StoreInputDraft = z.infer<typeof saveStoreDraftSchema>;
 
 /**
- * 代理入力（当社入力）の途中内容を一時保存する。Application.draftData に { customServiceLevelId, cards } を格納。
+ * 代理入力（当社入力）の途中内容を一時保存する。Application.draftData に { cards } を格納
+ * （カードごとにcustomServiceLevelIdを持つため、申込単位のcustomServiceLevelIdは不要）。ADR-0038
  * 確定は completeStoreApplication。DRAFT の STORE 申込のみ。
  */
 export async function saveStoreInputDraft(
@@ -448,7 +453,6 @@ export async function saveStoreInputDraft(
     where: { id: app.id },
     data: {
       draftData: {
-        customServiceLevelId: parsed.data.customServiceLevelId,
         cards: parsed.data.cards,
       },
     },
@@ -458,14 +462,14 @@ export async function saveStoreInputDraft(
 
 const completeStoreSchema = z.object({
   applicationId: z.string(),
-  customServiceLevelId: z.string().min(1), // 選択したCustomServicePrice.id（category=itemType）。全itemTypeで必須。ADR-0025/0026
-  cards: z.array(storeCardSchema).min(1).max(200),
+  cards: z.array(storeCardSchema).min(1).max(200), // カードごとにcustomServiceLevelIdを持つ。ADR-0038
 });
 
 /**
- * 店舗（当社）が代理申込にカード明細・サービスを入力して確定する。
+ * 店舗（当社）が代理申込にカード明細・サービスを入力して確定する。カードごとに異なるサービスレベルを
+ * 選択できる（複数レベルにまたがる代理入力に対応）。ADR-0038
  * 手数料あり(applyAgencyFee=true)で料金計算し、申込を SUBMITTED にする。
- * ※ 決済（登録カードへの即時 off_session 課金）は Stripe 統合後に通電予定。現状は Payment を PENDING で作成のみ。
+ * 先払い済み額(prepaidAmount)を超える残額は、登録済みカードへ即時off-session課金で確定分請求する。
  */
 export async function completeStoreApplication(
   input: z.infer<typeof completeStoreSchema>
@@ -489,34 +493,33 @@ export async function completeStoreApplication(
   const categoryCandidates: ("TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE" | "AUTOGRAPH")[] = isAutographEligible
     ? [app.itemType, "AUTOGRAPH"]
     : [app.itemType];
-  const customPrice = await prisma.customServicePrice.findFirst({
-    where: {
-      id: parsed.data.customServiceLevelId,
-      category: { in: categoryCandidates },
-      region: app.region,
-      isActive: true,
-    },
-  });
-  if (!customPrice) return { success: false, error: "サービスが見つかりません" };
-  const isDualService = customPrice.category === "AUTOGRAPH";
-  const maxDeclaredValue = customPrice.maxDeclaredValue;
-  const unitPricePerCard = customPrice.pricePerCard;
-  const unitCost = customPrice.cost;
-  const customServiceLevelName = customPrice.name;
 
-  if (maxDeclaredValue !== null) {
-    const over = parsed.data.cards.find((c) => c.declaredValue > maxDeclaredValue!);
-    if (over) {
+  const cardsInput = parsed.data.cards;
+
+  // カードごとに異なるサービスレベルを持ちうるため、参照される全タイアをまとめて取得する。ADR-0038
+  const tierIds = [...new Set(cardsInput.map((c) => c.customServiceLevelId))];
+  const prices = await prisma.customServicePrice.findMany({
+    where: { id: { in: tierIds }, category: { in: categoryCandidates }, region: app.region, isActive: true },
+  });
+  const priceMap = new Map(prices.map((p) => [p.id, p]));
+  if (priceMap.size !== tierIds.length) {
+    return { success: false, error: "サービスが見つかりません" };
+  }
+
+  // 申告価格上限は各カードが選択したタイアの上限と比較する。ADR-0038
+  for (const c of cardsInput) {
+    const price = priceMap.get(c.customServiceLevelId)!;
+    if (price.maxDeclaredValue !== null && c.declaredValue > price.maxDeclaredValue) {
       return {
         success: false,
-        error: `申告価格上限（${formatMoneyInt(maxDeclaredValue, app.region)}）を超えるカードがあります（${over.cardName}: ${formatMoneyInt(over.declaredValue, app.region)}）。`,
+        error: `申告価格上限（${formatMoneyInt(price.maxDeclaredValue, app.region)}）を超えるカードがあります（${c.cardName}: ${formatMoneyInt(c.declaredValue, app.region)}）。`,
       };
     }
   }
 
   // 発行年は「トレカ／未開封パック」のみ1900〜2100の数値を要求。コミック・マガジンは発行年月の自由記述を許可。ADR-0033
   if (app.itemType !== "COMIC_MAGAZINE") {
-    const badYear = parsed.data.cards.find((c) => {
+    const badYear = cardsInput.find((c) => {
       if (!c.releaseYear || !c.releaseYear.trim()) return false;
       const y = parseInt(c.releaseYear, 10);
       return !Number.isInteger(y) || y < 1900 || y > 2100 || String(y) !== c.releaseYear.trim();
@@ -526,9 +529,13 @@ export async function completeStoreApplication(
     }
   }
 
-  const cardsInput = parsed.data.cards;
   const totalDeclaredValue = cardsInput.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
   const cardCount = cardsInput.reduce((s, c) => s + c.quantity, 0);
+
+  // Application用のサービスレベルsnapshot: 単一タイアのみならそのid/name、複数タイアにまたがる場合はidをnullにし名称を連結する。ADR-0038
+  const distinctTierIds = [...new Set(cardsInput.map((c) => c.customServiceLevelId))];
+  const snapshotServiceLevelId = distinctTierIds.length === 1 ? distinctTierIds[0] : null;
+  const snapshotServiceLevelName = distinctTierIds.map((id) => priceMap.get(id)!.name).join(" / ");
 
   // 当社入力は手数料あり。代理入力料金は「種類数 × 手数料」（同一カードは何枚でも1種）。
   // 種類数 = 入力されたカード行数（行ごとに別カードを想定）。[ADR-0020 / PROXY_PREPAY 段階1]
@@ -537,92 +544,102 @@ export async function completeStoreApplication(
     fees = await calculateFees({
       region: app.region,
       itemType: app.itemType,
-      customServiceLevelId: parsed.data.customServiceLevelId,
       returnMethod: app.returnMethod,
       cardCount,
       totalDeclaredValue,
       applyAgencyFee: true,
-      agencyCardTypeCount: parsed.data.cards.length,
+      agencyCardTypeCount: cardsInput.length,
       customerId: app.customerId,
+      cardServiceLevels: cardsInput.map((c) => ({ customServiceLevelId: c.customServiceLevelId, quantity: c.quantity })),
     });
   } catch (err) {
     console.error("Failed to calculate fees:", err);
     return { success: false, error: err instanceof Error ? err.message : "料金の計算に失敗しました" };
   }
 
+  // 先払い済み額(prepaidAmount)を超える残額のみ確定分として追加請求する。ADR-0038
+  const additionalAmount = Math.max(0, Math.round(fees.totalAmount - app.prepaidAmount));
+
+  let paymentId: string | null = null;
   try {
     await prisma.$transaction(async (tx) => {
-    await tx.application.update({
-      where: { id: app.id },
-      data: {
-        serviceLevel: "CUSTOM",
-        customServiceLevelId: parsed.data.customServiceLevelId,
-        customServiceLevelName,
-        status: "SUBMITTED",
-        submittedAt: new Date(),
-        totalAmount: fees.totalAmount,
-        psaFeeTotal: fees.psaFeeTotal,
-        autographFeeTotal: fees.autographFeeTotal,
-        agencyFeeTotal: fees.agencyFeeTotal,
-        handlingFee: fees.handlingFee,
-        shippingFee: fees.shippingFee,
-        insuranceFee: fees.insuranceFee,
-        discountAmount: fees.discountAmount,
-        campaignName: fees.campaignName,
-        taxAmount: fees.taxAmount,
-        exchangeRateUsed: fees.exchangeRateUsed,
-      },
-    });
-
-    const proxyFeePerCard =
-      (await prisma.pricingSetting.findUnique({ where: { id: pricingSettingId(app.region, app.itemType) } }))
-        ?.proxyFee ?? 0;
-
-    for (const c of cardsInput) {
-      const cardNo = await generateCardNo();
-      const psaFee = unitPricePerCard * c.quantity;
-      const perCardCost = unitCost > 0 ? unitCost : roundMoney(unitPricePerCard * 0.8, app.region);
-      const psaCost = perCardCost * c.quantity;
-      const agencyFee = proxyFeePerCard * c.quantity;
-      await tx.card.create({
+      await tx.application.update({
+        where: { id: app.id },
         data: {
-          customerId: app.customerId,
-          applicationId: app.id,
-          cardNo,
-          tcgTitle: c.tcgTitle,
-          releaseYear: c.releaseYear,
-          cardName: c.cardName,
-          cardNumber: c.cardNumber,
-          rarity: c.rarity,
-          language: c.language,
-          declaredValue: c.declaredValue,
-          quantity: c.quantity,
-          psaFee,
-          psaCost,
-          agencyFee,
-          // デュアルサービスは通常サービスの代わりに選ぶ形式のため追加料金は発生しない（0固定）。ADR-0029
-          autographRequested: isDualService,
-          autographFee: 0,
-          autographCost: 0,
-          autographCustomServiceLevelId: isDualService ? customPrice.id : null,
-          autographCustomServiceLevelName: isDualService ? customPrice.name : null,
-          status: "SUBMITTED_BY_CUSTOMER",
-          statusHistory: { create: { status: "SUBMITTED_BY_CUSTOMER", changedBy: user.id } },
+          serviceLevel: "CUSTOM",
+          customServiceLevelId: snapshotServiceLevelId,
+          customServiceLevelName: snapshotServiceLevelName,
+          status: "SUBMITTED",
+          submittedAt: new Date(),
+          totalAmount: fees.totalAmount,
+          psaFeeTotal: fees.psaFeeTotal,
+          autographFeeTotal: fees.autographFeeTotal,
+          agencyFeeTotal: fees.agencyFeeTotal,
+          handlingFee: fees.handlingFee,
+          shippingFee: fees.shippingFee,
+          insuranceFee: fees.insuranceFee,
+          discountAmount: fees.discountAmount,
+          campaignName: fees.campaignName,
+          taxAmount: fees.taxAmount,
+          exchangeRateUsed: fees.exchangeRateUsed,
         },
       });
-    }
 
-    // TODO(Stripe統合後): ここで登録カードへ off_session 即時決済を実行する。
-    await tx.payment.create({
-      data: {
-        customerId: app.customerId,
-        applicationId: app.id,
-        amount: fees.totalAmount,
-        currency: stripeCurrency(),
-        status: "PENDING",
-        description: `代理申込 ${app.applicationNo}`,
-      },
-    });
+      const proxyFeePerCard =
+        (await prisma.pricingSetting.findUnique({ where: { id: pricingSettingId(app.region, app.itemType) } }))
+          ?.proxyFee ?? 0;
+
+      for (const c of cardsInput) {
+        const price = priceMap.get(c.customServiceLevelId)!;
+        const isDualService = price.category === "AUTOGRAPH";
+        const cardNo = await generateCardNo();
+        const psaFee = price.pricePerCard * c.quantity;
+        const perCardCost = price.cost > 0 ? price.cost : roundMoney(price.pricePerCard * 0.8, app.region);
+        const psaCost = perCardCost * c.quantity;
+        const agencyFee = proxyFeePerCard * c.quantity;
+        await tx.card.create({
+          data: {
+            customerId: app.customerId,
+            applicationId: app.id,
+            cardNo,
+            tcgTitle: c.tcgTitle,
+            releaseYear: c.releaseYear,
+            cardName: c.cardName,
+            cardNumber: c.cardNumber,
+            rarity: c.rarity,
+            language: c.language,
+            declaredValue: c.declaredValue,
+            quantity: c.quantity,
+            customServiceLevelId: price.id,
+            customServiceLevelName: price.name,
+            psaFee,
+            psaCost,
+            agencyFee,
+            // デュアルサービスは通常サービスの代わりに選ぶ形式のため追加料金は発生しない（0固定）。ADR-0029
+            autographRequested: isDualService,
+            autographFee: 0,
+            autographCost: 0,
+            autographCustomServiceLevelId: isDualService ? price.id : null,
+            autographCustomServiceLevelName: isDualService ? price.name : null,
+            status: "SUBMITTED_BY_CUSTOMER",
+            statusHistory: { create: { status: "SUBMITTED_BY_CUSTOMER", changedBy: user.id } },
+          },
+        });
+      }
+
+      if (additionalAmount > 0) {
+        const payment = await tx.payment.create({
+          data: {
+            customerId: app.customerId,
+            applicationId: app.id,
+            amount: additionalAmount,
+            currency: stripeCurrency(),
+            status: "PENDING",
+            description: `代理申込 確定分請求 ${app.applicationNo}`,
+          },
+        });
+        paymentId = payment.id;
+      }
     });
   } catch (err) {
     console.error("Failed to complete store application:", err);
@@ -636,11 +653,38 @@ export async function completeStoreApplication(
     action: "STORE_APPLICATION_COMPLETE",
     targetType: "applications",
     targetId: app.id,
-    after: {
-      customServiceLevelId: parsed.data.customServiceLevelId,
-      totalAmount: fees.totalAmount,
-    },
+    after: { totalAmount: fees.totalAmount, additionalAmount },
   });
+
+  // 先払い済み額を超える残額を、登録済みカードへ即時off-session課金で確定分請求する（Upchargeと同じ仕組み）。ADR-0038
+  if (paymentId && additionalAmount > 0) {
+    const [savedMethod, customer] = await Promise.all([
+      prisma.savedPaymentMethod.findFirst({ where: { customerId: app.customerId, isDefault: true } }),
+      prisma.customer.findUnique({ where: { id: app.customerId } }),
+    ]);
+    if (savedMethod && customer?.stripeCustomerId) {
+      try {
+        const pi = await chargeOffSession({
+          amount: toStripeAmount(additionalAmount),
+          currency: stripeCurrency(),
+          customerId: customer.stripeCustomerId,
+          paymentMethodId: savedMethod.stripePaymentMethodId,
+          description: `代理申込 確定分請求 ${app.applicationNo}`,
+          referenceId: paymentId,
+        });
+        await prisma.payment.update({
+          where: { id: paymentId },
+          data: { status: "SUCCEEDED", stripePaymentIntentId: pi.id, paidAt: new Date() },
+        });
+      } catch (err) {
+        console.error("Failed to charge additional amount for store application:", err);
+        await prisma.payment.update({
+          where: { id: paymentId },
+          data: { status: "FAILED", failureReason: err instanceof Error ? err.message : "課金に失敗しました" },
+        });
+      }
+    }
+  }
 
   // 代理入力完了メール（best-effort・SMTP未設定/無効なら送信されない）
   const cust = await prisma.customer.findUnique({ where: { id: app.customerId } });

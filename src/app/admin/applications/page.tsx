@@ -17,6 +17,19 @@ const STATUS_BADGE_CLS: Record<string, string> = {
 const SORTABLE_COLUMNS = ["region", "itemType", "serviceLevel", "status"] as const;
 type SortColumn = (typeof SORTABLE_COLUMNS)[number];
 
+function SourceBadge({ source }: { source: string }) {
+  const isStore = source === "STORE";
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
+        isStore ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"
+      }`}
+    >
+      {isStore ? "代理入力" : "自己入力"}
+    </span>
+  );
+}
+
 export default async function AdminApplicationsPage({
   searchParams,
 }: {
@@ -28,9 +41,9 @@ export default async function AdminApplicationsPage({
   const sortCol = SORTABLE_COLUMNS.includes(sp.sort as SortColumn) ? (sp.sort as SortColumn) : null;
   const sortDir = sp.dir === "desc" ? "desc" : "asc";
 
-  // 申込管理は自己入力(CUSTOMER)のみ。代理入力(STORE)は「代理申込」画面で扱う。下書き(DRAFT)は表示しない。
+  // 自己入力(CUSTOMER)・代理入力(STORE)の両方を表示する。代理入力は先払い・明細確定が完了する
+  // （status非DRAFT）まではここに出さず、「代理申込」画面（要対応）で扱う。下書き(DRAFT)は表示しない。ADR-0038
   const where = {
-    source: "CUSTOMER" as const,
     status: sp.status
       ? (sp.status as "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED")
       : { not: "DRAFT" as const },
@@ -87,7 +100,7 @@ export default async function AdminApplicationsPage({
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">申込管理（自己入力）</h1>
+        <h1 className="text-2xl font-bold text-gray-900">申込管理</h1>
         <p className="text-gray-500 text-sm">全{total}件</p>
       </div>
 
@@ -118,6 +131,7 @@ export default async function AdminApplicationsPage({
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">申込番号</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">種別</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">顧客</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("region", "提出先")}</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("itemType", "アイテム種別")}</th>
@@ -140,6 +154,9 @@ export default async function AdminApplicationsPage({
                     <Link href={`/admin/applications/${app.id}`} className="text-brand-600 hover:underline">
                       {app.applicationNo}
                     </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <SourceBadge source={app.source} />
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/admin/customers/${app.customerId}`} className="text-gray-900 hover:text-brand-600 hover:underline">

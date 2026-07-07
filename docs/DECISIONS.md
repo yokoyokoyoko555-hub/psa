@@ -417,3 +417,17 @@
 - 影響: `prisma/schema.prisma`の変更なし（既存フィールドの用途を明確化しただけ）。`createStoreRequest`のスキーマに`estimatedTotalCount`を追加（必須項目、呼び出し元は`StoreRequestForm.tsx`のみのため影響範囲は限定的）。
 - 未対応: 申込総数と代理入力数の整合性チェック（例: 申込総数が代理入力数を下回っていないか等）は行っていない（あくまで参考値のため、意図的にバリデーションを緩くしている）。
 
+## ADR-0038: 代理申込のカード別サービスレベル対応 + 確定分の差額を自動請求
+
+- 日付: 2026-07-07 / 状態: Accepted（実装済）
+- 背景: 代理申込の明細確定画面（`StoreInputForm.tsx`）は、申込単位で1つの`customServiceLevelId`しか選べず、実際にはカードごとに異なるサービスレベル（例: 一部はレギュラー、一部はエクスプレス）で提出したいケースに対応できなかった。また、先払い（`createStoreRequest`）は代理入力料金の概算のみを徴収し、明細確定時に決まる鑑定料・事務手数料・送料保険等を含む最終合計との差額を請求する仕組みが「Stripe統合後」のTODOのまま放置されていた（`completeStoreApplication`は`Payment`を`PENDING`のまま作成するだけで、実際の課金は一切行われていなかった）。加えて、代理申込は完了しても管理画面の「申込管理」に一切反映されず、確定後の状態を追えなかった。
+- 決定:
+  - **`Card.customServiceLevelId`/`customServiceLevelName`を追加**（カード単位のサービスレベル・スナップショット名）。`StoreInputForm.tsx`の明細入力を「カードごとに個別の`<select>`で選ぶ」形式に変更し、申込単位の単一選択は廃止。よくある「全カード同じレベル」向けに、一括で全行へ適用する「一括設定」の簡易操作も残した。
+  - **`fee-calculator.ts`の`calculateFees()`に`cardServiceLevels`パラメータを追加**（`{customServiceLevelId, quantity}[]`）。指定時は複数タイアの`pricePerCard`/`cost`をそれぞれ合算し、`psaFeeTotal`/`psaCostTotal`を算出する。既存の単一`customServiceLevelId`指定（自己入力・先払い見積り）は変更なし。
+  - **申告価格上限のチェックをカードごとに、そのカードが選んだタイアの上限と比較する**ように変更（従来は申込全体で1つの上限だった）。
+  - **先払い済み額(`prepaidAmount`)を超える残額を、登録済みカードへ即時off-session課金で自動請求する**（Upchargeと全く同じ仕組みを流用）。`lib/stripe.ts`の`chargeOffSession()`の`upchargeId`パラメータを汎用的な`referenceId`に改名し、Upcharge以外の請求（今回の代理申込確定分請求）でも使えるようにした。課金が失敗した場合は`Payment.status`を`FAILED`にし、`failureReason`を記録して申込自体の確定は妨げない（スタッフが後で個別対応する前提）。残額が0円以下の場合は追加請求自体を行わない。
+  - **管理画面の「申込管理」（`admin/applications/page.tsx`）から`source: "CUSTOMER"`限定のフィルタを撤廃**し、代理入力(STORE)も明細確定後（`status`が`DRAFT`でなくなった時点）に表示されるようにした。「種別」列（自己入力／代理入力バッジ）を追加し、ページタイトルも「申込管理（自己入力）」→「申込管理」に変更。
+  - **「代理申込（要対応）」一覧（`admin/store-requests/page.tsx`）に「代理入力数」「総枚数」列を追加**（提出先の右）。表示元として`Application.agencyQuantity`（新規フィールド。顧客が先払い時に申告した代理入力数の生値）を追加し、`createStoreRequest`で保存するようにした。
+- 影響: `prisma/schema.prisma`に`Card.customServiceLevelId`/`customServiceLevelName`・`Application.agencyQuantity`を追加（db push、非破壊）。`completeStoreApplication`/`saveStoreInputDraft`のAPIシグネチャ変更（申込単位の`customServiceLevelId`引数を廃止し、カードごとの`customServiceLevelId`に統一。呼び出し元は`StoreInputForm.tsx`のみのため影響範囲は限定的）。`chargeOffSession()`の引数名変更（`upchargeId`→`referenceId`、呼び出し元2箇所を修正）。
+- 未対応: off-session課金が失敗した場合の再請求・顧客への通知UIは用意していない（`Payment.status=FAILED`のレコードを管理画面から目視確認し、個別対応する運用を前提とする）。「申込管理」の決済列は「いずれかの支払いが成功しているか」のみを見ており、代理申込特有の「先払い＋確定分請求の両方が完了しているか」は区別して表示していない。
+
