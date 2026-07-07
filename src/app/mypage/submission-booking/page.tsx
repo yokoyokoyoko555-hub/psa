@@ -21,17 +21,26 @@ export default async function SubmissionBookingPage() {
 
   // 支払い済み（SUCCEEDED な決済あり）のみ予約対象。STORE/CUSTOMER 共通（代理申込も先払い化）。ADR-0020
   // STORE は先払い後も status=DRAFT のため status では絞らず決済で判定する。
-  const applications = await prisma.application.findMany({
+  // 受取完了済み（当社が実物を受け取り済み）は既に提出済みのため予約対象から除外する。ADR-0034
+  const applicationsRaw = await prisma.application.findMany({
     where: {
       customerId: customer.id,
       status: { not: "CANCELLED" },
       payments: { some: { status: "SUCCEEDED" } },
+      receivedAt: null,
     },
     include: {
       _count: { select: { cards: true } },
       submissionBooking: true,
     },
     orderBy: { createdAt: "desc" },
+  });
+
+  // 未予約を上位、予約済を下位に表示する。ADR-0034
+  const applications = [...applicationsRaw].sort((a, b) => {
+    const aBooked = a.submissionBooking?.status === "BOOKED" ? 1 : 0;
+    const bBooked = b.submissionBooking?.status === "BOOKED" ? 1 : 0;
+    return aBooked - bBooked;
   });
 
   return (
