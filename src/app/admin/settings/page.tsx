@@ -9,6 +9,7 @@ import CampaignForm from "./CampaignForm";
 import CustomServicePriceForm from "./CustomServicePriceForm";
 import ExchangeRateForm from "./ExchangeRateForm";
 import PsaProgressStatusForm from "./PsaProgressStatusForm";
+import StoreSettingsForm from "./StoreSettingsForm";
 
 const groupCls = "bg-white rounded-xl border border-gray-200 p-6";
 const subCls = "border border-gray-100 rounded-lg p-4";
@@ -22,13 +23,14 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 export default async function SettingsPage() {
   await ensureTradingCardCustomPrices(); // 旧ServicePrice→CustomServicePrice(category=TRADING_CARD)の初回移行。ADR-0026
 
-  const [siRates, settings, campaigns, customServicePrices, exchangeRate, psaProgressStatuses] = await Promise.all([
+  const [siRates, settings, campaigns, customServicePrices, exchangeRate, psaProgressStatuses, storeSettings] = await Promise.all([
     prisma.shippingInsuranceRate.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.pricingSetting.findMany(),
     prisma.campaign.findMany({ orderBy: { startAt: "desc" } }),
     prisma.customServicePrice.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.exchangeRate.findUnique({ where: { id: "default" } }),
     prisma.psaProgressStatus.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.storeSettings.findUnique({ where: { id: "default" } }),
   ]);
 
   // region/itemTypeカラムでの照合は既存行のカラム不整合により一致しないことがあるため、idで照合する。
@@ -131,6 +133,19 @@ export default async function SettingsPage() {
         <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">PSA進捗ステータス</summary>
         <div className="mt-4">
           <PsaProgressStatusForm statuses={psaProgressStatuses} />
+        </div>
+      </details>
+
+      {/* 店舗情報（郵送先住所） */}
+      <details className={groupCls}>
+        <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">店舗情報（郵送先住所）</summary>
+        <div className="mt-4">
+          <StoreSettingsForm
+            postalCode={storeSettings?.postalCode ?? ""}
+            address={storeSettings?.address ?? ""}
+            storeName={storeSettings?.storeName ?? ""}
+            phone={storeSettings?.phone ?? ""}
+          />
         </div>
       </details>
     </div>

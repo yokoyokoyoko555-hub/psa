@@ -160,7 +160,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h2 className="font-bold text-gray-900">カード提出予約</h2>
+              <h2 className="font-bold text-gray-900">提出予約</h2>
               {application.submissionBooking?.status === "BOOKED" ? (
                 <p className="text-sm text-gray-600 mt-1">
                   {format(new Date(application.submissionBooking.scheduledAt), "yyyy/MM/dd HH:mm", { locale: ja })}

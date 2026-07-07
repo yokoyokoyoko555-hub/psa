@@ -404,7 +404,7 @@ export default async function AdminApplicationDetailPage({
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-bold text-gray-900 mb-3">カード提出予約</h2>
+            <h2 className="font-bold text-gray-900 mb-3">提出予約</h2>
             {application.submissionBooking?.status === "BOOKED" ? (
               <dl className="space-y-2 text-sm">
                 <div>

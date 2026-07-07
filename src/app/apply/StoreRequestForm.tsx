@@ -167,7 +167,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
     } else {
       setError(
         confirmed.error ??
-          "決済は完了しましたが、反映に時間がかかっています。少し待ってからカード提出予約へ進んでください。"
+          "決済は完了しましたが、反映に時間がかかっています。少し待ってから提出予約へ進んでください。"
       );
     }
   }

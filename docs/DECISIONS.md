@@ -380,3 +380,15 @@
 - 影響: `prisma/schema.prisma`に`Application.receivedAt`・新モデル`PsaProgressStatus`を追加（db push、非破壊）。`admin.ts`に`markApplicationReceived`/`advanceGroupStatus`、新規`src/actions/psa-progress.ts`にCRUDアクションを追加。
 - 未対応: PSA進捗ステータスの遷移順序・逆戻り防止のバリデーションは行っていない（管理画面操作者の裁量に委ねる）。カード単位での個別ステータスの可視化（顧客向け）は引き続き申込詳細ページ側のみ。
 
+## ADR-0035: 提出予約の改修（名称統一・満席判定・郵送先住所の管理画面編集）
+
+- 日付: 2026-07-07 / 状態: Accepted（実装済）
+- 背景: 「カード提出予約」という名称が画面ごとに「提出予約」と表記ゆれしていた（ADR-0033のカード非依存化の流れに合わせ統一したい）。また、店頭持込の予約は時間帯ごとの予約枠という概念があるにもかかわらず満席判定が無く、複数の顧客が同じ日時を選べてしまっていた。郵送を選ぶ顧客には発送先住所を案内する仕組みが無かった。
+- 決定:
+  - **名称統一**: 画面上の「カード提出予約」を全て「提出予約」に統一（`mypage/applications/[id]/page.tsx`・`mypage/page.tsx`・`mypage/submission-booking`配下・`ApplyForm.tsx`/`StoreRequestForm.tsx`のエラーメッセージ・`admin/applications/[id]/page.tsx`）。
+  - **店頭持込の満席判定**: `SubmissionBooking`（既存モデル、変更なし）から`method=STORE_DROP_OFF`・`status=BOOKED`・自分自身の申込以外の予約日時を集計し、`BookingForm.tsx`で該当する時間帯ボタンを無効化（グレーアウト＋「満席です」ツールチップ）。カレンダー上でも、その日の全時間帯（7枠）が埋まっている場合は日付自体をクリック不可にし「満席」バッジを表示する。予約枠は1日時につき1件（同一時間帯の重複予約不可）という前提。郵送(`SHIPPING`)にはこの制約を適用しない。
+  - **郵送選択時のUI変更**: 「時間」の時間帯選択UIを非表示にし、「発送日を選択してください」という案内文に置き換える（郵送は日付のみ必要で、正確な時刻は不要なため）。送信時の`scheduledAt`は日付＋固定時刻`00:00`で記録する。
+  - **新モデル`StoreSettings`を追加**（`PricingSetting`/`ExchangeRate`と同じ、id="default"固定の1行運用パターン）。郵便番号・住所・店舗名（宛名）・電話番号を保持し、管理画面の設定ページに`StoreSettingsForm.tsx`で編集UIを追加。郵送選択時、`BookingForm.tsx`にこの内容をそのまま「郵送先」ブロックとして表示する。
+- 影響: `prisma/schema.prisma`に`StoreSettings`モデルを追加（db push、非破壊）。`BookingForm.tsx`のprops追加（`takenSlots`・`storeAddress`）に伴い、呼び出し元`mypage/submission-booking/[applicationId]/edit/page.tsx`で予約集計クエリと店舗設定取得を追加。
+- 未対応: 満席判定は「1日時=1件まで」固定の前提（複数人受け入れ可能な時間帯を将来的に設定したい場合は容量（capacity）概念の追加が必要）。郵送先住所が未設定（`StoreSettings`が空）の場合は住所ブロックを表示しないだけで、エラーにはしていない。
+

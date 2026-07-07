@@ -39,11 +39,16 @@ export default function BookingForm({
   existingBooking,
   closedDates,
   shippingDates,
+  takenSlots,
+  storeAddress,
 }: {
   applicationId: string;
   existingBooking: ExistingBooking;
   closedDates: string[];
   shippingDates: string[];
+  /** 既に他の予約で埋まっている店頭持込の日時（`${dateKey}T${time}`形式）。自分自身の既存予約は含まない。ADR-0035 */
+  takenSlots: string[];
+  storeAddress: { postalCode: string; address: string; storeName: string; phone: string } | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -63,6 +68,8 @@ export default function BookingForm({
   const [message, setMessage] = useState("");
   const days = useMemo(() => makeMonthDays(month), [month]);
   const todayKey = toDateKey(new Date());
+  const takenSlotSet = useMemo(() => new Set(takenSlots), [takenSlots]);
+  const isShipping = method === "SHIPPING";
 
   function moveMonth(offset: number) {
     setMonth((c) => new Date(c.getFullYear(), c.getMonth() + offset, 1));
@@ -73,12 +80,17 @@ export default function BookingForm({
       setMessage("この日は予約受付不可です。別の日を選択してください");
       return;
     }
+    const submitTime = isShipping ? "00:00" : time;
+    if (!isShipping && takenSlotSet.has(`${selectedDate}T${submitTime}`)) {
+      setMessage("この日時は満席です。別の日時を選択してください");
+      return;
+    }
     setMessage("");
     startTransition(async () => {
       const result = await upsertSubmissionBooking({
         applicationId,
         method,
-        scheduledAt: `${selectedDate}T${time}:00+09:00`,
+        scheduledAt: `${selectedDate}T${submitTime}:00+09:00`,
         note,
       });
       if (result.success) {
@@ -116,7 +128,9 @@ export default function BookingForm({
             const inMonth = date.getMonth() === month.getMonth();
             const isClosed = closedDates.includes(key);
             const isShippingDay = shippingDates.includes(key);
-            const disabled = key < todayKey || isClosed;
+            const isFullyBooked =
+              !isShipping && TIME_SLOTS.every((slot) => takenSlotSet.has(`${key}T${slot}`));
+            const disabled = key < todayKey || isClosed || (isFullyBooked && !isShipping);
             const active = key === selectedDate && !isClosed;
             return (
               <button
@@ -140,6 +154,9 @@ export default function BookingForm({
                 <span className="mt-2 flex flex-wrap gap-1">
                   {isClosed && (
                     <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700">受付不可</span>
+                  )}
+                  {!isClosed && isFullyBooked && (
+                    <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-bold text-gray-600">満席</span>
                   )}
                   {isShippingDay && (
                     <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">発送日</span>
@@ -173,23 +190,48 @@ export default function BookingForm({
           </div>
         </div>
 
-        <div>
-          <p className="text-sm font-bold text-gray-900 mb-2">時間</p>
-          <div className="grid grid-cols-3 gap-2">
-            {TIME_SLOTS.map((slot) => (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => setTime(slot)}
-                className={`rounded-lg border px-2 py-2 text-sm font-bold ${
-                  time === slot ? "border-brand-600 bg-brand-600 text-white" : "border-gray-200 text-gray-700 hover:border-brand-300"
-                }`}
-              >
-                {slot}
-              </button>
-            ))}
+        {isShipping ? (
+          <div>
+            <p className="text-sm font-bold text-gray-900 mb-2">発送日を選択してください</p>
+            <p className="text-sm text-gray-500">左のカレンダーから発送予定日を選んでください。</p>
+            {storeAddress && (
+              <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                <p className="font-bold text-gray-900 mb-1">郵送先</p>
+                <p>〒{storeAddress.postalCode}</p>
+                <p>{storeAddress.address}</p>
+                <p>{storeAddress.storeName}</p>
+                <p>{storeAddress.phone}</p>
+              </div>
+            )}
           </div>
-        </div>
+        ) : (
+          <div>
+            <p className="text-sm font-bold text-gray-900 mb-2">時間</p>
+            <div className="grid grid-cols-3 gap-2">
+              {TIME_SLOTS.map((slot) => {
+                const taken = takenSlotSet.has(`${selectedDate}T${slot}`);
+                return (
+                  <button
+                    key={slot}
+                    type="button"
+                    disabled={taken}
+                    onClick={() => setTime(slot)}
+                    title={taken ? "満席です" : undefined}
+                    className={`rounded-lg border px-2 py-2 text-sm font-bold ${
+                      taken
+                        ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"
+                        : time === slot
+                        ? "border-brand-600 bg-brand-600 text-white"
+                        : "border-gray-200 text-gray-700 hover:border-brand-300"
+                    }`}
+                  >
+                    {slot}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-bold text-gray-900 mb-2">備考</label>

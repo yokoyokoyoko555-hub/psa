@@ -8,7 +8,7 @@ import CustomerHeader from "@/components/CustomerHeader";
 import { formatMoney } from "@/lib/currency";
 import { format } from "date-fns";
 
-export const metadata = { title: "カード提出予約 | トレカビンクス" };
+export const metadata = { title: "提出予約 | トレカビンクス" };
 
 const METHOD_LABELS: Record<string, string> = {
   STORE_DROP_OFF: "店頭持込",
@@ -45,7 +45,7 @@ export default async function SubmissionBookingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <CustomerHeader title="カード提出予約" />
+      <CustomerHeader title="提出予約" />
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white border border-gray-200 rounded-xl p-5">

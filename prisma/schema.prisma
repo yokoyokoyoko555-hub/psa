@@ -613,6 +613,19 @@ model ExchangeRate {
   @@map("exchange_rates")
 }
 
+// 店舗情報（郵送先住所等）。管理画面で編集可能。1行のみ運用（id="default"固定）。ADR-0035
+model StoreSettings {
+  id         String   @id
+  postalCode String   @default("")
+  address    String   @default("")
+  storeName  String   @default("") // 例: "トレカビンクス池袋店　PSA鑑定"
+  phone      String   @default("")
+  updatedAt  DateTime @updatedAt
+  updatedBy  String?
+
+  @@map("store_settings")
+}
+
 // メール文面テンプレート（管理画面で編集。{{var}} を差込）。ADR-0018
 model MailTemplate {
   id        String   @id @default(cuid())

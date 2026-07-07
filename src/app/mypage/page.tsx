@@ -143,7 +143,7 @@ export default async function MypagePage() {
           >
             <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">📅</div>
             <div>
-              <p className="font-bold text-lg text-gray-900">カード提出予約</p>
+              <p className="font-bold text-lg text-gray-900">提出予約</p>
               <p className="text-gray-500 text-sm">店頭持込・郵送予定の予約</p>
             </div>
           </Link>

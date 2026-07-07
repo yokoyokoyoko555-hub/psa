@@ -628,7 +628,7 @@ export default function ApplyForm({
       if (!confirmed.success) {
         setError(
           confirmed.error ??
-            "決済は完了しましたが、反映に時間がかかっています。少し待ってからカード提出予約へ進んでください。"
+            "決済は完了しましたが、反映に時間がかかっています。少し待ってから提出予約へ進んでください。"
         );
         return;
       }
@@ -1253,7 +1253,7 @@ export default function ApplyForm({
               <div>
                 <h2 className="font-bold text-gray-900">お支払い</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  カード情報を入力して決済を完了してください。決済後、カード提出予約へ進みます。
+                  カード情報を入力して決済を完了してください。決済後、提出予約へ進みます。
                 </p>
               </div>
               <div className="rounded-lg border border-gray-300 bg-white px-3 py-3 focus-within:ring-2 focus-within:ring-brand-500">

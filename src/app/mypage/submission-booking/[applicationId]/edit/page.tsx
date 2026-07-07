@@ -6,9 +6,14 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import CustomerHeader from "@/components/CustomerHeader";
 import { formatMoney } from "@/lib/currency";
+import { getStoreSettings } from "@/actions/store-settings";
 import BookingForm from "../../BookingForm";
 
-export const metadata = { title: "カード提出予約 | トレカビンクス" };
+function toTimeKey(date: Date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+export const metadata = { title: "提出予約 | トレカビンクス" };
 
 function toDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -38,10 +43,24 @@ export default async function EditBookingPage({
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const calendarDays = await prisma.submissionCalendarDay.findMany({
-    where: { date: { gte: today } },
-    orderBy: { date: "asc" },
-  });
+  const [calendarDays, storeSettings, otherBookings] = await Promise.all([
+    prisma.submissionCalendarDay.findMany({
+      where: { date: { gte: today } },
+      orderBy: { date: "asc" },
+    }),
+    getStoreSettings(),
+    // 店頭持込の満席判定用。自分自身の既存予約は除外する。ADR-0035
+    prisma.submissionBooking.findMany({
+      where: {
+        method: "STORE_DROP_OFF",
+        status: "BOOKED",
+        scheduledAt: { gte: today },
+        applicationId: { not: applicationId },
+      },
+      select: { scheduledAt: true },
+    }),
+  ]);
+  const takenSlots = otherBookings.map((b) => `${toDateKey(b.scheduledAt)}T${toTimeKey(b.scheduledAt)}`);
 
   const booking =
     app.submissionBooking && app.submissionBooking.status === "BOOKED"
@@ -55,7 +74,7 @@ export default async function EditBookingPage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <CustomerHeader title="カード提出予約" />
+      <CustomerHeader title="提出予約" />
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-5">
         <Link href="/mypage/submission-booking" className="text-sm text-gray-500 hover:text-gray-700">
@@ -74,6 +93,17 @@ export default async function EditBookingPage({
           existingBooking={booking}
           closedDates={calendarDays.filter((d) => d.isClosed).map((d) => toDateKey(d.date))}
           shippingDates={calendarDays.filter((d) => d.isShippingDay).map((d) => toDateKey(d.date))}
+          takenSlots={takenSlots}
+          storeAddress={
+            storeSettings
+              ? {
+                  postalCode: storeSettings.postalCode,
+                  address: storeSettings.address,
+                  storeName: storeSettings.storeName,
+                  phone: storeSettings.phone,
+                }
+              : null
+          }
         />
       </main>
     </div>
