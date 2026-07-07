@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createStoreRequest, confirmStorePrepayPayment } from "@/actions/application";
 import { ServiceRegion, ReturnMethod, ItemType } from "@prisma/client";
@@ -10,6 +9,7 @@ import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
 import { formatMoneyIn } from "@/lib/currency";
 import StripeCardPayment from "@/components/StripeCardPayment";
+import PaymentDoneScreen from "@/components/PaymentDoneScreen";
 
 const REGION_LABELS: Record<ServiceRegion, string> = {
   PSA_JP: "PSA 日本",
@@ -60,7 +60,6 @@ function getProfileAddress(profile: CustomerProfile | null) {
 }
 
 export default function StoreRequestForm({ profile, addresses, pricingSettings, stripePublishableKey }: Props) {
-  const router = useRouter();
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
   // 代理入力数（同一カードは1としてカウント）。実際のサービスレベル・鑑定料はカードお預け後にスタッフが確定する。ADR-0026
@@ -175,34 +174,10 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
 
   if (step === "done") {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-8 text-center space-y-4">
-        <div className="text-4xl">✅</div>
-        <h2 className="text-lg font-bold text-gray-900">先払いを受け付けました</h2>
-        <p className="text-sm text-gray-600">
-          次に、カードのお預け方法（店頭持込・郵送）と日時をご予約ください。
-          お預かり後、当社で代理入力を行い、内容に応じた鑑定料を別途メールにてご請求します。
-        </p>
-        <div className="flex flex-col gap-3 pt-1">
-          {createdId && (
-            <button
-              onClick={() => router.push(`/mypage/submission-booking/${createdId}/edit`)}
-              className="bg-brand-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-brand-700 transition"
-            >
-              カード提出の予約へ進む
-            </button>
-          )}
-          <button
-            onClick={() => router.push("/mypage")}
-            className={`font-bold px-6 py-3 rounded-lg transition ${
-              createdId
-                ? "border border-gray-300 text-gray-700 hover:bg-gray-50"
-                : "bg-brand-600 text-white hover:bg-brand-700"
-            }`}
-          >
-            マイページへ
-          </button>
-        </div>
-      </div>
+      <PaymentDoneScreen
+        applicationId={createdId}
+        extraNote="お預かり後、当社で代理入力を行い、内容に応じた鑑定料を別途メールにてご請求します。"
+      />
     );
   }
 

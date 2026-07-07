@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { confirmApplicationPayment, createApplication, previewFees, saveDraft as saveDraftServer } from "@/actions/application";
 import type { FeeBreakdown } from "@/lib/fee-calculator";
 import { formatMoney, formatMoneyIn, formatMoneyInt, currencySymbol } from "@/lib/currency";
+import PaymentDoneScreen from "@/components/PaymentDoneScreen";
 
 export type InitialDraft = {
   draftId: string;
@@ -1245,27 +1246,7 @@ export default function ApplyForm({
         {/* STEP 4: Payment */}
         {step === "payment" && (
           paymentDone ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center space-y-4">
-              <div className="text-4xl">✅</div>
-              <h2 className="text-lg font-bold text-gray-900">お支払いが完了しました</h2>
-              <p className="text-sm text-gray-600">
-                次に、カードのお預け方法（店頭持込・郵送）と日時をご予約ください。
-              </p>
-              <div className="flex flex-col gap-3 pt-1">
-                <button
-                  onClick={() => router.push(`/mypage/submission-booking/${encodeURIComponent(createdApplicationId)}/edit`)}
-                  className="bg-brand-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-brand-700 transition"
-                >
-                  カード提出の予約へ進む
-                </button>
-                <button
-                  onClick={() => router.push("/mypage")}
-                  className="border border-gray-300 text-gray-700 font-bold px-6 py-3 rounded-lg hover:bg-gray-50 transition"
-                >
-                  マイページへ
-                </button>
-              </div>
-            </div>
+            <PaymentDoneScreen applicationId={createdApplicationId || null} />
           ) : (
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
