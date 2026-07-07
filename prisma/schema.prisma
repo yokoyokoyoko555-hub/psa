@@ -363,6 +363,7 @@ model Application {
   // PSA提出グループ（申込単位）。1サブミッションIDに複数申込を紐づける。ADR-0021
   psaSubmissionGroupId String?
   submittedAt    DateTime?
+  receivedAt     DateTime? // 当社が実物を受取完了した日時（管理画面の「受取完了」ボタンで設定）。ADR-0034
   completedAt    DateTime?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
@@ -466,7 +467,9 @@ model PsaSubmissionGroup {
   submittedAt     DateTime?
   psaReceivedAt   DateTime?
   returnedAt      DateTime?
-  status          String    @default("PREPARING") // PREPARING, SUBMITTED, PSA_RECEIVED, RETURNED
+  // PREPARING（提出準備中）/ SUBMITTED（発送完了）は固定。それ以降はPsaProgressStatus.nameから
+  // 自由記述で選び管理画面から一括更新する（PSAの進捗ステージ変化に追従するため）。ADR-0021/0034
+  status          String    @default("PREPARING")
   notes           String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -475,6 +478,19 @@ model PsaSubmissionGroup {
   applications Application[] // 申込単位のグループ割当
 
   @@map("psa_submission_groups")
+}
+
+// 管理画面で自由に追加・編集・削除できるPSA進捗ステータス（「PSA受領済み」以降の可変ステージ名）。
+// PsaSubmissionGroup.statusへ名称をそのまま代入して使う（外部キーではなく選択メニューとしての役割）。ADR-0034
+model PsaProgressStatus {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("psa_progress_statuses")
 }
 
 // ===== PAYMENTS (決済) =====

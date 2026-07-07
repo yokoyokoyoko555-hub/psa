@@ -45,6 +45,26 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
+/**
+ * 顧客向けの簡易ステータス（申込完了→受取完了→発送完了→PSA進捗ステータス）を算出する。
+ * PSA提出グループのstatusがPREPARING/SUBMITTED以外（=管理画面で登録したPSA進捗ステータス名）
+ * の場合はその名称をそのまま表示する。ADR-0034
+ */
+function computeDisplayStatus(app: {
+  receivedAt: Date | null;
+  psaSubmissionGroup: { status: string; submittedAt: Date | null } | null;
+}): string {
+  const group = app.psaSubmissionGroup;
+  if (group && group.status !== "PREPARING" && group.status !== "SUBMITTED") {
+    return group.status;
+  }
+  if (group && (group.status === "SUBMITTED" || group.submittedAt)) {
+    return "発送完了";
+  }
+  if (app.receivedAt) return "受取完了";
+  return "申込完了";
+}
+
 export default async function ApplicationsPage() {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
@@ -69,6 +89,7 @@ export default async function ApplicationsPage() {
       itemType: app.region === "PSA_US" ? (ITEM_TYPE_LABELS[app.itemType] ?? app.itemType) : null,
       createdAt: new Date(app.createdAt).toISOString(),
       status: app.status,
+      displayStatus: app.status === "DRAFT" ? null : computeDisplayStatus(app),
       source: app.source,
       isDraft: app.status === "DRAFT",
     };

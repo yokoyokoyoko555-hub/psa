@@ -7,6 +7,7 @@ import { decrypt } from "@/lib/crypto";
 import CopyButton from "@/components/CopyButton";
 import CardStatusForm from "@/components/CardStatusForm";
 import UpchargeForm from "@/components/UpchargeForm";
+import MarkReceivedButton from "@/components/MarkReceivedButton";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { formatMoney, formatMoneyInt, formatMoneyIn } from "@/lib/currency";
@@ -136,17 +137,28 @@ export default async function AdminApplicationDetailPage({
                   {format(new Date(application.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
                 </p>
               </div>
-              <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  application.status === "COMPLETED"
-                    ? "bg-green-100 text-green-700"
-                    : application.status === "CANCELLED"
-                    ? "bg-gray-100 text-gray-600"
-                    : "bg-brand-100 text-brand-700"
-                }`}
-              >
-                {application.status}
-              </span>
+              <div className="flex items-center gap-3">
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    application.status === "COMPLETED"
+                      ? "bg-green-100 text-green-700"
+                      : application.status === "CANCELLED"
+                      ? "bg-gray-100 text-gray-600"
+                      : "bg-brand-100 text-brand-700"
+                  }`}
+                >
+                  {application.status}
+                </span>
+                {application.status !== "DRAFT" && application.status !== "CANCELLED" && (
+                  application.receivedAt ? (
+                    <span className="text-xs text-gray-500">
+                      受取完了: {format(new Date(application.receivedAt), "yyyy/MM/dd HH:mm")}
+                    </span>
+                  ) : (
+                    <MarkReceivedButton applicationId={application.id} />
+                  )
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">

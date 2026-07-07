@@ -14,13 +14,33 @@ export interface AppRow {
   itemType: string | null; // PSA_USのみ表示用ラベル。PSA_JPはnull
   createdAt: string; // ISO
   status: string;
+  displayStatus: string | null; // 顧客向け簡易ステータス（申込完了/受取完了/発送完了/PSA進捗ステータス名）。ADR-0034
   source: string; // CUSTOMER | STORE
   isDraft: boolean;
+}
+
+const STATUS_BADGE_CLS: Record<string, string> = {
+  申込完了: "bg-blue-50 text-blue-700",
+  受取完了: "bg-amber-50 text-amber-700",
+  発送完了: "bg-purple-50 text-purple-700",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${STATUS_BADGE_CLS[status] ?? "bg-green-50 text-green-700"}`}>
+      {status}
+    </span>
+  );
 }
 
 function fmt(iso: string) {
   const d = new Date(iso);
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function fmtTime(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function SourceBadge({ source }: { source: string }) {
@@ -43,8 +63,9 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
   const [busy, setBusy] = useState(false);
 
   const submitted = rows.filter((a) => !a.isDraft);
+  // 作業中には代理入力(STORE)を含めない（代理入力は先払い後の予約・確認フローで案内済みのため）
   const drafts = rows
-    .filter((a) => a.isDraft)
+    .filter((a) => a.isDraft && a.source !== "STORE")
     .sort((a, b) =>
       order === "asc"
         ? a.createdAt.localeCompare(b.createdAt)
@@ -86,13 +107,16 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
                   <p className="font-medium text-gray-900 flex items-center gap-2">
                     {a.cardCount}枚 / {a.serviceLevel}
                     <SourceBadge source={a.source} />
+                    {a.displayStatus && <StatusBadge status={a.displayStatus} />}
                   </p>
                   <p className="text-xs text-gray-400">
                     {a.region}
                     {a.itemType ? ` / ${a.itemType}` : ""}
                   </p>
                 </div>
-                <span className="text-sm text-gray-500">{fmt(a.createdAt)}</span>
+                <span className="text-sm text-gray-500">
+                  {fmt(a.createdAt)} {fmtTime(a.createdAt)}
+                </span>
               </Link>
             ))}
           </div>

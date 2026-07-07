@@ -869,6 +869,7 @@ export async function getMyApplications() {
         select: { id: true, cardName: true, status: true, psaGrade: true, psaCertNo: true },
       },
       payments: { select: { status: true, amount: true, paidAt: true } },
+      psaSubmissionGroup: { select: { status: true, submittedAt: true } },
     },
     orderBy: { createdAt: "desc" },
   });

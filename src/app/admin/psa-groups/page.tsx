@@ -6,9 +6,10 @@ import { format } from "date-fns";
 import Link from "next/link";
 import CreateGroupForm from "./CreateGroupForm";
 import SubmitGroupForm from "./SubmitGroupForm";
+import AdvanceGroupStatusForm from "./AdvanceGroupStatusForm";
 
 export default async function PsaGroupsPage() {
-  const [groups, ungrouped] = await Promise.all([
+  const [groups, ungrouped, progressStatuses] = await Promise.all([
     prisma.psaSubmissionGroup.findMany({
       include: {
         applications: {
@@ -33,6 +34,7 @@ export default async function PsaGroupsPage() {
       },
       orderBy: { createdAt: "asc" },
     }),
+    prisma.psaProgressStatus.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
   ]);
 
   return (
@@ -93,6 +95,13 @@ export default async function PsaGroupsPage() {
 
             {group.status === "PREPARING" && (
               <SubmitGroupForm groupId={group.id} />
+            )}
+            {group.status !== "PREPARING" && (
+              <AdvanceGroupStatusForm
+                groupId={group.id}
+                currentStatus={group.status}
+                statusOptions={progressStatuses.map((s) => ({ id: s.id, name: s.name }))}
+              />
             )}
           </div>
         ))}

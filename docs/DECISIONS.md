@@ -366,3 +366,17 @@
 - 影響: `prisma/schema.prisma`（`Card.releaseYear`の型変更のみ、db push非破壊）。`application.ts`/`admin.ts`の`cardSchema`/`storeCardSchema`・年範囲バリデーションロジック変更。`ApplyForm.tsx`/`StoreInputForm.tsx`のカード入力UIの大幅な条件分岐追加。既存のトレカ入力フロー・データは一切変更なし（`CARD_FIELD_LABELS.TRADING_CARD`は旧来の見た目のまま）。
 - 未対応: 代理申込の「カード提出予約」レシート画面（`mypage/submission-booking/[applicationId]/page.tsx`）はitemType別のラベル切り替えを行っていない（`cardNumber`が空文字の場合は自然に非表示になるため実害は小さいが、将来的に見出し語を統一する余地がある）。
 
+## ADR-0034: 顧客向け申込一覧にステータス表示を追加（受取完了・PSA進捗の可変ステータス含む）
+
+- 日付: 2026-07-07 / 状態: Accepted（実装済）
+- 背景: 顧客向け「申込一覧」（`/mypage/applications`）にはステータス表示が無く、申込がどこまで進んでいるか（受取済みか、PSAへ発送済みか等）が顧客から分からなかった。既存の`CardStatus`enumはカード単位で細かい段階（受取・検品・PSA提出・鑑定中・返却等）を持つが、PSA側の進捗ラベル自体は将来的にPSAのポータル側の表記変更に合わせて増える可能性があるため、固定enumで先回りして網羅するのではなく、「PSA受領済み」以降の段階だけ管理画面で自由に名前を追加できる可変リストにしたいという要望があった。
+- 決定:
+  - **顧客向けステータスは4段階の考え方**: ①申込完了（既存の`ApplicationStatus`が`DRAFT`でなくなった時点） → ②受取完了（新規`Application.receivedAt`、管理画面の申込詳細ページの「受取完了にする」ボタンで設定） → ③発送完了（既存の`PsaSubmissionGroup.submittedAt`/`status`から導出。ADR-0021のグループ提出時に自動的に成立、新規フィールド不要） → ④PSA進捗ステータス（`PsaSubmissionGroup.status`が`PREPARING`/`SUBMITTED`以外の値になった場合、その文字列をそのまま表示）。
+  - **`Application.receivedAt DateTime?`を追加**。新規サーバーアクション`markApplicationReceived()`（`admin.ts`）が、実行時に配下の全カードを`CardStatus.RECEIVED_BY_STORE`へ一括更新し、`CardStatusHistory`にも記録する。ボタンは申込詳細ページ（`/admin/applications/[id]`）にのみ設置（ユーザーの選択）。
+  - **新モデル`PsaProgressStatus`（id/name/sortOrder/isActive）を追加**。`PricingSetting`同様の「管理画面で自由に追加・編集・削除できる名称マスタ」で、実体は`PsaSubmissionGroup.status`（既存の自由記述String列。ADR-0021時点で既にFK制約のない文字列だったため新たな外部キーは持たせず、選択メニュー用のマスタとして機能する）へ選んだ名前をそのまま書き込むだけの単純な仕組みにした。管理画面設定ページに管理UI（`PsaProgressStatusForm.tsx`）、PSA提出グループ管理ページ（`/admin/psa-groups`）に「発送完了後のグループに対し選択→一括反映」フォーム（`AdvanceGroupStatusForm.tsx`）を追加。**ユーザーの確認により、この可変ステータスはPSA提出グループ単位（＝グループに属する全申込へ一括反映）とし、申込ごとの個別設定は行わない**仕様とした。
+  - **顧客向け一覧（`ApplicationCenter.tsx`）に「提出済み」セクションのステータスバッジを追加**。`getMyApplications()`に`psaSubmissionGroup`のselectを追加し、`mypage/applications/page.tsx`の`computeDisplayStatus()`で上記4段階のいずれかを算出して表示する。
+  - **「作業中」セクションから代理入力(`source=STORE`)を除外**（先払い後は予約・確認フローで既に案内されているため、重複表示を避ける）。
+  - **「提出済み」セクションの日時表示に時刻を追加**（`fmtTime()`）。
+- 影響: `prisma/schema.prisma`に`Application.receivedAt`・新モデル`PsaProgressStatus`を追加（db push、非破壊）。`admin.ts`に`markApplicationReceived`/`advanceGroupStatus`、新規`src/actions/psa-progress.ts`にCRUDアクションを追加。
+- 未対応: PSA進捗ステータスの遷移順序・逆戻り防止のバリデーションは行っていない（管理画面操作者の裁量に委ねる）。カード単位での個別ステータスの可視化（顧客向け）は引き続き申込詳細ページ側のみ。
+

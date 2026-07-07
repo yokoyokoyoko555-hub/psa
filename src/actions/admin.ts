@@ -14,6 +14,7 @@ import { CardStatus } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 
 async function requireAdmin() {
   const session = await auth();
@@ -115,6 +116,50 @@ export async function updateCardStatus(
   });
 }
 
+/**
+ * 申込単位で「受取完了」を記録する（スタッフが実物を受け取った際に申込詳細ページで押す）。
+ * Application.receivedAtを設定し、配下カードを一括でRECEIVED_BY_STOREへ進める。ADR-0034
+ */
+export async function markApplicationReceived(applicationId: string) {
+  const user = await requireAdminOrStaff();
+
+  const app = await prisma.application.findUniqueOrThrow({
+    where: { id: applicationId },
+    include: { cards: true },
+  });
+  if (app.receivedAt) return { success: true }; // 既に受取済みなら何もしない（二重押下対策）
+
+  await prisma.$transaction(async (tx) => {
+    await tx.application.update({
+      where: { id: applicationId },
+      data: { receivedAt: new Date() },
+    });
+    for (const card of app.cards) {
+      await tx.card.update({
+        where: { id: card.id },
+        data: { status: "RECEIVED_BY_STORE" },
+      });
+      await tx.cardStatusHistory.create({
+        data: { cardId: card.id, status: "RECEIVED_BY_STORE", changedBy: user.id },
+      });
+    }
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    userId: user.id,
+    ipAddress: (hdrs as unknown as Headers).get?.("x-forwarded-for") ?? "unknown",
+    action: "APPLICATION_RECEIVED",
+    targetType: "applications",
+    targetId: applicationId,
+    after: { receivedAt: new Date() },
+  });
+
+  revalidatePath(`/admin/applications/${applicationId}`);
+  revalidatePath("/mypage/applications");
+  return { success: true };
+}
+
 /** 申込単位でPSA提出グループを作成し、選択した申込を割り当てる。ADR-0021 */
 export async function createPsaSubmissionGroup(applicationIds: string[]) {
   await requireAdminOrStaff();
@@ -151,6 +196,32 @@ export async function submitPsaGroup(
   });
 
   return group;
+}
+
+/**
+ * PSA提出グループのステータスを、管理画面で登録済みのPSA進捗ステータス名へ一括更新する。
+ * PREPARING（提出準備中）のグループには使えない（先にsubmitPsaGroupで発送完了にする必要がある）。ADR-0034
+ */
+export async function advanceGroupStatus(
+  groupId: string,
+  statusName: string
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdminOrStaff();
+  if (!statusName.trim()) return { success: false, error: "ステータスを選択してください" };
+
+  const group = await prisma.psaSubmissionGroup.findUnique({ where: { id: groupId } });
+  if (!group) return { success: false, error: "グループが見つかりません" };
+  if (group.status === "PREPARING") {
+    return { success: false, error: "先に発送完了（提出）を行ってください" };
+  }
+
+  await prisma.psaSubmissionGroup.update({
+    where: { id: groupId },
+    data: { status: statusName },
+  });
+
+  revalidatePath("/admin/psa-groups");
+  return { success: true };
 }
 
 const upchargeSchema = z.object({
