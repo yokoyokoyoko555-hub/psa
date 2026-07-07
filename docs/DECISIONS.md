@@ -456,3 +456,13 @@
 - 影響: `src/app/mypage/submission-booking/[applicationId]/page.tsx`のみ変更（スキーマ変更なし）。郵送(`SHIPPING`)の受付フローは変更なし（到着後にスタッフが受け付ける旨の案内のまま）。
 - 未対応: 店頭受付時の本人確認自体（免許証等の目視確認）はスタッフの手作業運用のままで、システム上の記録・ログは取らない。カードの内容確認（枚数・現物一致）は受付後にスタッフが行う前提だが、その具体的な手順（いつ・どの画面で）は本ADRのスコープ外。
 
+## ADR-0041: `generateCardNo()`のトランザクション未対応バグを修正（2枚以上のカード申込が保存失敗する不具合）
+
+- 日付: 2026-07-07 / 状態: Accepted（実装済）
+- 背景: 代理申込の明細確定（`completeStoreApplication`）で、カードを2枚以上入力すると「申込データの保存に失敗しました」というエラーで保存できない不具合が発生した。原因は`lib/number-generator.ts`の`generateCardNo()`が、採番のための`prisma.card.count()`をグローバルな`prisma`クライアントで実行していたこと。`completeStoreApplication`・`createApplication`はいずれもカード作成を`prisma.$transaction(async (tx) => {...})`内のループで行うが、ループ内で呼ぶ`generateCardNo()`はグローバルクライアント（トランザクション外の別コネクション）でカウントするため、同一トランザクション内でまだコミットされていない直前のカード作成が見えない。その結果、2枚目以降のカードが1枚目と同じ`cardNo`を算出してしまい、`Card.cardNo`の一意制約違反（P2002）で例外が発生し、トランザクション全体が失敗していた。1枚のみの申込では再現しないため見過ごされていた。
+- 決定:
+  - **`generateApplicationNo`/`generateCardNo`/`generateMemberNo`/`generateGroupNo`（`lib/number-generator.ts`）に、採番に使うPrismaクライアントを渡せる`db`引数を追加**（既定値=グローバル`prisma`、型は`Pick<PrismaClient, "application" | "card" | "customer" | "psaSubmissionGroup">`）。
+  - **`admin.ts`の`completeStoreApplication`・`application.ts`の`createApplication`のループ内呼び出しを`generateCardNo(tx)`に変更**し、同一トランザクション内の直前の作成分を正しくカウントできるようにした。
+- 影響: `lib/number-generator.ts`の4関数のシグネチャ変更（既定値ありの追加引数のため既存の呼び出し元は変更不要。ループ内の2箇所のみ`tx`を明示的に渡すよう修正）。スキーマ変更なし。
+- 未対応: `generateApplicationNo`/`generateGroupNo`/`generateMemberNo`はループ内で呼ばれておらず今回のバグの直接原因ではないため動作確認のみ（呼び出し元の変更は行っていない）。複数リクエストが同時に同じ日付の採番を行った場合の競合（トランザクション跨ぎの重複）は本修正のスコープ外（従来からの既知の制約）。
+

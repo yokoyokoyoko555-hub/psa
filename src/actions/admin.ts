@@ -592,7 +592,7 @@ export async function completeStoreApplication(
       for (const c of cardsInput) {
         const price = priceMap.get(c.customServiceLevelId)!;
         const isDualService = price.category === "AUTOGRAPH";
-        const cardNo = await generateCardNo();
+        const cardNo = await generateCardNo(tx);
         const psaFee = price.pricePerCard * c.quantity;
         const perCardCost = price.cost > 0 ? price.cost : roundMoney(price.pricePerCard * 0.8, app.region);
         const psaCost = perCardCost * c.quantity;
