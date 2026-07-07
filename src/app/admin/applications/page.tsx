@@ -5,31 +5,38 @@ import { decrypt } from "@/lib/crypto";
 import { format } from "date-fns";
 import Link from "next/link";
 import { formatMoneyIn } from "@/lib/currency";
+import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel, computeDisplayStatus } from "@/lib/application-status";
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
-  SUBMITTED: { label: "申込済", color: "bg-brand-100 text-brand-700" },
-  IN_PROGRESS: { label: "処理中", color: "bg-yellow-100 text-yellow-700" },
-  COMPLETED: { label: "完了", color: "bg-green-100 text-green-700" },
-  CANCELLED: { label: "キャンセル", color: "bg-red-100 text-red-700" },
+const STATUS_BADGE_CLS: Record<string, string> = {
+  申込完了: "bg-blue-50 text-blue-700",
+  受取完了: "bg-amber-50 text-amber-700",
+  発送完了: "bg-purple-50 text-purple-700",
+  キャンセル: "bg-gray-100 text-gray-500",
 };
+
+const SORTABLE_COLUMNS = ["region", "itemType", "serviceLevel", "status"] as const;
+type SortColumn = (typeof SORTABLE_COLUMNS)[number];
 
 export default async function AdminApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string }>;
+  searchParams: Promise<{ status?: string; page?: string; sort?: string; dir?: string }>;
 }) {
   const sp = await searchParams;
   const page = sp.page ? parseInt(sp.page) : 1;
   const limit = 50;
+  const sortCol = SORTABLE_COLUMNS.includes(sp.sort as SortColumn) ? (sp.sort as SortColumn) : null;
+  const sortDir = sp.dir === "desc" ? "desc" : "asc";
 
-  // 申込管理は自己入力(CUSTOMER)のみ。代理入力(STORE)は「代理申込」画面で扱う。
+  // 申込管理は自己入力(CUSTOMER)のみ。代理入力(STORE)は「代理申込」画面で扱う。下書き(DRAFT)は表示しない。
   const where = {
     source: "CUSTOMER" as const,
-    ...(sp.status ? { status: sp.status as "DRAFT" | "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" } : {}),
+    status: sp.status
+      ? (sp.status as "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED")
+      : { not: "DRAFT" as const },
   };
 
-  const [applications, total] = await Promise.all([
+  const [applicationsRaw, total] = await Promise.all([
     prisma.application.findMany({
       where,
       skip: (page - 1) * limit,
@@ -38,11 +45,44 @@ export default async function AdminApplicationsPage({
         customer: { select: { nameEncrypted: true, email: true } },
         _count: { select: { cards: true } },
         payments: { select: { status: true } },
+        psaSubmissionGroup: { select: { status: true, submittedAt: true } },
+        submissionBooking: { select: { status: true, method: true, scheduledAt: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
     prisma.application.count({ where }),
   ]);
+
+  // 表示用の値を先に算出してからソートする（提出先・アイテム種別・サービスレベル・ステータスは
+  // ラベル変換や複数フィールドの組み合わせで決まるため、DBのorderByだけでは表現できない）。ADR-0036
+  const applications = applicationsRaw
+    .map((app) => ({
+      app,
+      regionLabel: REGION_LABELS[app.region] ?? app.region,
+      itemTypeLabel: app.region === "PSA_US" ? (ITEM_TYPE_LABELS[app.itemType] ?? app.itemType) : "-",
+      serviceLevelLabel: resolveServiceLevel(app),
+      statusLabel: app.status === "CANCELLED" ? "キャンセル" : computeDisplayStatus(app),
+    }))
+    .sort((a, b) => {
+      if (!sortCol) return 0;
+      const key = sortCol === "region" ? "regionLabel" : sortCol === "itemType" ? "itemTypeLabel" : sortCol === "serviceLevel" ? "serviceLevelLabel" : "statusLabel";
+      const cmp = a[key].localeCompare(b[key], "ja");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+  function sortLink(col: SortColumn, label: string) {
+    const nextDir = sortCol === col && sortDir === "asc" ? "desc" : "asc";
+    const params = new URLSearchParams();
+    if (sp.status) params.set("status", sp.status);
+    params.set("sort", col);
+    params.set("dir", nextDir);
+    return (
+      <Link href={`?${params.toString()}`} className="inline-flex items-center gap-1 hover:text-gray-900">
+        {label}
+        {sortCol === col && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
+      </Link>
+    );
+  }
 
   return (
     <div className="p-8">
@@ -79,17 +119,21 @@ export default async function AdminApplicationsPage({
             <tr>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">申込番号</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">顧客</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("region", "提出先")}</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("itemType", "アイテム種別")}</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("serviceLevel", "サービスレベル")}</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">枚数</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">金額</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">決済</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">ステータス</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">提出予約</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("status", "ステータス")}</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">日時</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {applications.map((app) => {
-              const statusInfo = STATUS_LABELS[app.status] ?? { label: app.status, color: "bg-gray-100 text-gray-600" };
+            {applications.map(({ app, regionLabel, itemTypeLabel, serviceLevelLabel, statusLabel }) => {
               const paid = app.payments.some((p) => p.status === "SUCCEEDED");
+              const booking = app.submissionBooking;
               return (
                 <tr key={app.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs">
@@ -98,9 +142,14 @@ export default async function AdminApplicationsPage({
                     </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-gray-900">{decrypt(app.customer.nameEncrypted)}</p>
+                    <Link href={`/admin/customers/${app.customerId}`} className="text-gray-900 hover:text-brand-600 hover:underline">
+                      {decrypt(app.customer.nameEncrypted)}
+                    </Link>
                     <p className="text-xs text-gray-400">{app.customer.email}</p>
                   </td>
+                  <td className="px-4 py-3 text-gray-700">{regionLabel}</td>
+                  <td className="px-4 py-3 text-gray-700">{itemTypeLabel}</td>
+                  <td className="px-4 py-3 text-gray-700">{serviceLevelLabel}</td>
                   <td className="px-4 py-3 text-gray-700">{app._count.cards}枚</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{formatMoneyIn(app.totalAmount, "JPY")}</td>
                   <td className="px-4 py-3">
@@ -108,9 +157,22 @@ export default async function AdminApplicationsPage({
                       {paid ? "支払済" : "未払い"}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-xs text-gray-600">
+                    {booking?.status === "BOOKED" ? (
+                      <>
+                        <span className="font-medium">
+                          {booking.method === "STORE_DROP_OFF" ? "店頭" : "郵送"}
+                        </span>
+                        <br />
+                        {format(new Date(booking.scheduledAt), "MM/dd HH:mm")}
+                      </>
+                    ) : (
+                      <span className="text-gray-400">未予約</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                      {statusInfo.label}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_BADGE_CLS[statusLabel] ?? "bg-green-50 text-green-700"}`}>
+                      {statusLabel}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">

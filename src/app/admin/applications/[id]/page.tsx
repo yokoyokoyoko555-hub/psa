@@ -5,32 +5,12 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import CopyButton from "@/components/CopyButton";
-import CardStatusForm from "@/components/CardStatusForm";
 import UpchargeForm from "@/components/UpchargeForm";
 import MarkReceivedButton from "@/components/MarkReceivedButton";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { formatMoney, formatMoneyInt, formatMoneyIn } from "@/lib/currency";
-
-const CARD_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "下書き",
-  SUBMITTED_BY_CUSTOMER: "申込済",
-  RECEIVED_BY_STORE: "店舗受取済",
-  INSPECTION_PENDING: "検品待ち",
-  INSPECTED: "検品済",
-  READY_FOR_PSA: "PSA提出準備中",
-  SUBMITTED_TO_PSA: "PSA提出済",
-  PSA_RECEIVED: "PSA受付済",
-  GRADING: "鑑定中",
-  GRADE_AVAILABLE: "グレード確定",
-  RETURNED_TO_STORE: "店舗返却済",
-  READY_FOR_CUSTOMER_RETURN: "返却準備中",
-  RETURNED_TO_CUSTOMER: "返却完了",
-  UPCHARGE_UNPAID: "Upcharge未払い",
-  UPCHARGE_PAID: "Upcharge支払済",
-  PROBLEM: "問題発生",
-  CANCELLED: "キャンセル",
-};
+import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel } from "@/lib/application-status";
 
 // PSA提出フォームは英語1行のため、言語は英語表記でコピーする。
 // 自由記述化（ADR-0023）後は代表的な入力のみ変換し、それ以外はそのまま出力する。
@@ -48,12 +28,6 @@ const LANGUAGE_PSA: Record<string, string> = {
   OTHER: "Other",
 };
 
-const ITEM_TYPE_LABELS: Record<string, string> = {
-  TRADING_CARD: "トレーディングカード",
-  UNOPENED_PACK: "未開封パック",
-  COMIC_MAGAZINE: "コミック・マガジン",
-};
-
 // アイテム種別ごとの表示ラベル切替（入力フォームと同じ考え方の表示専用版）。ADR-0033
 const CARD_DISPLAY_LABELS: Record<string, { entryLabel: string; secondaryLabel: string; quantityUnit: string }> = {
   TRADING_CARD: { entryLabel: "カード", secondaryLabel: "言語", quantityUnit: "枚" },
@@ -61,24 +35,10 @@ const CARD_DISPLAY_LABELS: Record<string, { entryLabel: string; secondaryLabel: 
   COMIC_MAGAZINE: { entryLabel: "コミック／マガジン", secondaryLabel: "出版社", quantityUnit: "冊" },
 };
 
-const STATUS_BADGE: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-600",
-  SUBMITTED_BY_CUSTOMER: "bg-brand-100 text-brand-700",
-  RECEIVED_BY_STORE: "bg-brand-100 text-brand-700",
-  INSPECTION_PENDING: "bg-yellow-100 text-yellow-700",
-  INSPECTED: "bg-yellow-100 text-yellow-700",
-  READY_FOR_PSA: "bg-purple-100 text-purple-700",
-  SUBMITTED_TO_PSA: "bg-purple-100 text-purple-700",
-  PSA_RECEIVED: "bg-purple-100 text-purple-700",
-  GRADING: "bg-brand-100 text-brand-700",
-  GRADE_AVAILABLE: "bg-green-100 text-green-700",
-  RETURNED_TO_STORE: "bg-green-100 text-green-700",
-  READY_FOR_CUSTOMER_RETURN: "bg-green-100 text-green-700",
-  RETURNED_TO_CUSTOMER: "bg-gray-100 text-gray-600",
-  UPCHARGE_UNPAID: "bg-red-100 text-red-700",
-  UPCHARGE_PAID: "bg-green-100 text-green-700",
-  PROBLEM: "bg-red-100 text-red-700",
-  CANCELLED: "bg-gray-100 text-gray-600",
+const UPCHARGE_STATUS_LABELS: Record<string, string> = {
+  PENDING: "請求中",
+  PAID: "支払済",
+  FAILED: "失敗",
 };
 
 export default async function AdminApplicationDetailPage({
@@ -112,6 +72,23 @@ export default async function AdminApplicationDetailPage({
     ? decrypt(application.shippingPhoneEncrypted)
     : customerPhone;
   const customerEmail = application.customer.email;
+
+  // 返却先住所（配送時のみ表示）。申込時に個別指定が無ければ顧客の登録住所を使用する。
+  const shippingAddress = application.shippingAddressEncrypted
+    ? (JSON.parse(decrypt(application.shippingAddressEncrypted)) as {
+        name?: string;
+        postalCode: string;
+        prefecture: string;
+        address: string;
+        address2?: string;
+      })
+    : {
+        name: customerName,
+        postalCode: application.customer.postalCode,
+        prefecture: decrypt(application.customer.prefectureEncrypted),
+        address: decrypt(application.customer.addressEncrypted),
+        address2: application.customer.address2Encrypted ? decrypt(application.customer.address2Encrypted) : undefined,
+      };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -163,8 +140,8 @@ export default async function AdminApplicationDetailPage({
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
-                <p className="text-gray-500">サービス</p>
-                <p className="font-medium text-gray-900">{application.serviceLevel}</p>
+                <p className="text-gray-500">提出先</p>
+                <p className="font-medium text-gray-900">{REGION_LABELS[application.region] ?? application.region}</p>
               </div>
               {application.region === "PSA_US" && (
                 <div>
@@ -172,6 +149,10 @@ export default async function AdminApplicationDetailPage({
                   <p className="font-medium text-gray-900">{ITEM_TYPE_LABELS[application.itemType] ?? application.itemType}</p>
                 </div>
               )}
+              <div>
+                <p className="text-gray-500">サービス</p>
+                <p className="font-medium text-gray-900">{resolveServiceLevel(application)}</p>
+              </div>
               <div>
                 <p className="text-gray-500">返却方法</p>
                 <p className="font-medium text-gray-900">
@@ -276,53 +257,44 @@ export default async function AdminApplicationDetailPage({
                         <span>{card.quantity}{displayLabels.quantityUnit}</span>
                       </p>
                     </div>
-                    <span
-                      className={`shrink-0 text-xs px-2 py-1 rounded-full font-medium ${
-                        STATUS_BADGE[card.status] ?? "bg-gray-100 text-gray-600"
-                      }`}
+                    <a
+                      href={`/api/qrcode?cardId=${card.id}`}
+                      target="_blank"
+                      className="shrink-0 text-xs text-brand-600 hover:underline"
                     >
-                      {CARD_STATUS_LABELS[card.status] ?? card.status}
-                    </span>
-                  </div>
-
-                  {/* Upcharge履歴 */}
-                  {card.upcharges.length > 0 && (
-                    <div className="mt-3 space-y-1">
-                      {card.upcharges.map((u) => (
-                        <div key={u.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
-                          <span className="text-gray-600">Upcharge {formatMoneyIn(u.upchargeAmount, "JPY")}（{u.reason}）</span>
-                          <span className={`px-2 py-0.5 rounded-full font-medium ${
-                            u.status === "PAID" ? "bg-green-100 text-green-700" :
-                            u.status === "FAILED" ? "bg-red-100 text-red-700" :
-                            "bg-yellow-100 text-yellow-700"
-                          }`}>{u.status}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 操作: ステータス更新 / Upcharge / QR */}
-                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-gray-100">
-                    <div>
-                      <p className="text-xs font-bold text-gray-500 mb-1">ステータス更新</p>
-                      <CardStatusForm cardId={card.id} currentStatus={card.status} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-gray-500 mb-1">Upcharge登録・請求</p>
-                      <UpchargeForm cardId={card.id} />
-                      <a
-                        href={`/api/qrcode?cardId=${card.id}`}
-                        target="_blank"
-                        className="mt-2 inline-block text-xs text-brand-600 hover:underline"
-                      >
-                        📱 QRコードを印刷
-                      </a>
-                    </div>
+                      📱 QR印刷
+                    </a>
                   </div>
                 </div>
                 );
               })}
             </div>
+          </div>
+
+          {/* Upcharge（申込単位で管理） */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="font-bold text-gray-900 mb-4">Upcharge</h2>
+            {application.cards.some((c) => c.upcharges.length > 0) && (
+              <div className="space-y-1 mb-4">
+                {application.cards.flatMap((card) =>
+                  card.upcharges.map((u) => (
+                    <div key={u.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-3 py-2">
+                      <span className="text-gray-700">
+                        {card.cardName} ・ {formatMoneyIn(u.upchargeAmount, "JPY")}（{u.reason}）
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full font-medium ${
+                        u.status === "PAID" ? "bg-green-100 text-green-700" :
+                        u.status === "FAILED" ? "bg-red-100 text-red-700" :
+                        "bg-yellow-100 text-yellow-700"
+                      }`}>{UPCHARGE_STATUS_LABELS[u.status] ?? u.status}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            <UpchargeForm
+              cards={application.cards.map((c) => ({ id: c.id, label: c.cardName }))}
+            />
           </div>
 
           {/* Payments */}
@@ -436,6 +408,33 @@ export default async function AdminApplicationDetailPage({
               予約カレンダーを見る →
             </Link>
           </div>
+
+          {application.returnMethod === "SHIPPING" && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="font-bold text-gray-900 mb-3">配送先住所</h2>
+              <dl className="space-y-2 text-sm">
+                {shippingAddress.name && (
+                  <div>
+                    <dt className="text-gray-500 text-xs">宛名</dt>
+                    <dd className="font-medium text-gray-900">{shippingAddress.name}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-gray-500 text-xs">住所</dt>
+                  <dd className="text-gray-900">
+                    〒{shippingAddress.postalCode}
+                    <br />
+                    {shippingAddress.prefecture}{shippingAddress.address}
+                    {shippingAddress.address2 ? ` ${shippingAddress.address2}` : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 text-xs">電話番号</dt>
+                  <dd className="font-medium text-gray-900">{shippingPhone}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
 
           {application.agreement && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">

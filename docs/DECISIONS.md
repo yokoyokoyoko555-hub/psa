@@ -392,3 +392,16 @@
 - 影響: `prisma/schema.prisma`に`StoreSettings`モデルを追加（db push、非破壊）。`BookingForm.tsx`のprops追加（`takenSlots`・`storeAddress`）に伴い、呼び出し元`mypage/submission-booking/[applicationId]/edit/page.tsx`で予約集計クエリと店舗設定取得を追加。
 - 未対応: 満席判定は「1日時=1件まで」固定の前提（複数人受け入れ可能な時間帯を将来的に設定したい場合は容量（capacity）概念の追加が必要）。郵送先住所が未設定（`StoreSettings`が空）の場合は住所ブロックを表示しないだけで、エラーにはしていない。
 
+## ADR-0036: 管理画面の申込管理を改修（一覧の列・ソート・ステータス同期、詳細ページのUpcharge申込単位化）
+
+- 日付: 2026-07-07 / 状態: Accepted（実装済）
+- 背景: 管理画面の申込一覧は顧客・PSA提出先・アイテム種別・サービスレベルが分からず、提出予約の有無も確認できなかった。また一覧のステータス列は`ApplicationStatus`（DRAFT/SUBMITTED/IN_PROGRESS/COMPLETED/CANCELLED）の生値を表示しており、顧客向け一覧（ADR-0034で導入した「申込完了/受取完了/発送完了/PSA進捗ステータス」）と食い違っていた。申込詳細ページでは「サービス」表示が`Application.serviceLevel`（ADR-0026以降常に`"CUSTOM"`）の生値のままでバグっており、配送先住所も表示されていなかった。カード単位のステータス変更・Upcharge登録UIも、実運用では受取完了・PSA提出はADR-0034で申込/グループ単位の一括操作に統一されており、カードごとの個別操作は冗長になっていた。
+- 決定:
+  - **共有ユーティリティ`src/lib/application-status.ts`を新設**（`REGION_LABELS`/`ITEM_TYPE_LABELS`/`SERVICE_LABELS`/`resolveServiceLevel()`/`computeDisplayStatus()`）。顧客向け一覧（`mypage/applications/page.tsx`）で使っていたロジックをここに切り出し、管理画面の一覧・詳細ページからも同じ関数を呼ぶことで「ステータス表示のズレ」を構造的に防ぐ。
+  - **管理画面の申込一覧（`admin/applications/page.tsx`）**: 提出先・アイテム種別・サービスレベル・提出予約状況（未予約／店頭持込／郵送＋予約日時）・ステータス（顧客向けと同じ算出ロジック、`CANCELLED`のみ例外的に「キャンセル」表示）の列を追加。提出先・アイテム種別・サービスレベル・ステータスは列見出しのリンクでソート可能（`?sort=`/`?dir=`のクエリパラメータ、同一カラム再クリックで昇順⇄降順）。**ソートは表示ラベルに対する算出後のJS内ソートのため、現在ページ内（50件）でのみ有効**（DBの生カラムだけでは提出先ラベルやPSA進捗ステータス名を正しく順序付けできないための割り切り）。下書き(`status=DRAFT`)は常に一覧から除外。顧客名をクリックすると顧客詳細ページへ遷移する。
+  - **申込詳細ページ（`admin/applications/[id]/page.tsx`）**: サマリーに「提出先」を追加、「サービス」表示を`resolveServiceLevel()`に修正（従来の生値表示バグを修正）。返却方法が配送(`SHIPPING`)の場合のみ「配送先住所」セクションを追加（`Application.shippingAddressEncrypted`があればそれを復号、無ければ顧客の登録住所にフォールバック）。
+  - **カード一覧からステータスバッジ・Upcharge表示・個別操作フォーム（`CardStatusForm`/`UpchargeForm`の埋め込み）を削除**。`CardStatusForm.tsx`は他に利用箇所が無いため削除（他画面で個別カードステータス変更が必要になった場合は別途復活を検討）。QRコード印刷リンクのみ各カード行に残置。
+  - **Upchargeを申込単位で管理**: `UpchargeForm`を「対象カードを選択するセレクトボックス付き」に変更（`cardId`直接指定 → `cards: {id, label}[]`を受け取り選択式に）。申込詳細ページのカード一覧の下（Payments履歴の上）に、その申込に属する全カードのUpcharge一覧＋登録フォームをまとめた新しい「Upcharge」セクションを追加。`Upcharge`モデル自体（`cardId`必須）は変更していない。
+- 影響: `prisma/schema.prisma`の変更なし。`src/components/CardStatusForm.tsx`を削除。`src/components/UpchargeForm.tsx`のprops変更（呼び出し元は`admin/applications/[id]/page.tsx`のみ）。
+- 未対応: カード単位の個別ステータス変更手段が管理画面から無くなった（受取完了・PSA提出はADR-0034の一括操作で代替、それ以外の個別ステータス変更が必要になった場合は別途UIの復活を検討）。一覧のソートは現在ページ内のみで全件横断ソートではない。
+
