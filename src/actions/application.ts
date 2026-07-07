@@ -482,6 +482,8 @@ const storeRequestSchema = z.object({
   // 代理入力数（同一カードは1としてカウント）。実際のサービスレベル・鑑定料は
   // カードお預け後にスタッフが明細を確定し、別途メールで請求する（このステップでは選択しない）。ADR-0026
   agencyQuantity: z.number().int().min(1).max(500),
+  // 申込総数（あくまで当社の総量把握のための参考値。料金計算には使わない）。ADR-0037
+  estimatedTotalCount: z.number().int().min(1).max(5000),
   returnMethod: z.nativeEnum(ReturnMethod),
   returnAddress: returnAddressSchema,
   shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/),
@@ -540,7 +542,7 @@ export async function createStoreRequest(
         shippingAddressEncrypted: encrypt(JSON.stringify(parsed.data.returnAddress)),
         shippingPhoneEncrypted: encrypt(parsed.data.shippingPhone),
         status: "DRAFT",
-        estimatedCardCount: parsed.data.agencyQuantity,
+        estimatedCardCount: parsed.data.estimatedTotalCount,
         agencyFeeTotal,
         prepaidAmount,
         totalAmount: prepaidAmount,

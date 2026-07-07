@@ -24,7 +24,7 @@ const ITEM_TYPE_LABELS: Record<ItemType, string> = {
 
 const AGREEMENT_TEXT = `PSA鑑定受付代行サービス（代理入力・先払い）利用規約
 
-1. 代理入力では、お客様に入力いただくのは代理入力する枚数・返送先・電話番号・クレジットカード情報のみです。
+1. 代理入力では、お客様に入力いただくのは代理入力する枚数・申込総数・返送先・電話番号・クレジットカード情報のみです。
 2. お申込み時には、代理入力する枚数×代理入力費用（消費税込み）を先にお支払いいただきます。事務手数料は、実際のサービスが確定した際に別途ご請求します。
 3. お支払い後、カードのお預け（店頭持込・郵送）をご予約ください。
 4. 当社で代理入力が完了次第、ご提出いただいたカードの内容に応じた鑑定料を別途メールにてご請求いたします。
@@ -64,6 +64,8 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
   const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
   // 代理入力数（同一カードは1としてカウント）。実際のサービスレベル・鑑定料はカードお預け後にスタッフが確定する。ADR-0026
   const [agencyQuantity, setAgencyQuantity] = useState<number>(0);
+  // 申込総数（あくまで当社の総量把握のための参考値。料金計算には使わない）。ADR-0037
+  const [estimatedTotalCount, setEstimatedTotalCount] = useState<number>(0);
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
   const addressOptions = [
     ...(getProfileAddress(profile) ? [getProfileAddress(profile)!] : []),
@@ -104,6 +106,10 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
       setError("代理入力数を入力してください");
       return;
     }
+    if (estimatedTotalCount < 1) {
+      setError("申込総数を入力してください");
+      return;
+    }
     if (!agreed) {
       setError("利用規約に同意してください");
       return;
@@ -123,6 +129,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         region,
         itemType,
         agencyQuantity,
+        estimatedTotalCount,
         returnMethod,
         returnAddress: {
           name: selectedAddress.name,
@@ -222,7 +229,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900">代理入力の依頼（当社がカードを入力します）</h2>
       <p className="text-sm text-gray-600">
-        代理入力では、お客様に入力いただくのは代理入力する枚数・返送先・電話番号・クレジットカード情報のみです。
+        代理入力では、お客様に入力いただくのは代理入力する枚数・申込総数・返送先・電話番号・クレジットカード情報のみです。
         代理入力する枚数×代理入力費用のみ、先にお支払いいただきます。
         当社で代理入力完了後、ご提出いただいたカードに応じた鑑定料を別途メールにてご請求させていただきます。
       </p>
@@ -253,9 +260,9 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         </div>
       </div>
 
-      {region === "PSA_US" && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h3 className="font-bold text-gray-800">アイテム種別</h3>
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h3 className="font-bold text-gray-800">アイテム種別</h3>
+        {region === "PSA_US" ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).map((it) => (
               <button
@@ -271,13 +278,17 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
               </button>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="border-2 border-brand-500 bg-brand-50 text-brand-700 rounded-xl p-4 text-center font-bold">
+            {ITEM_TYPE_LABELS.TRADING_CARD}
+          </div>
+        )}
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h3 className="font-bold text-gray-800">代理入力数</h3>
+        <h3 className="font-bold text-gray-800">代理入力数・申込総数</h3>
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-gray-500">同一カードは1としてカウントしてください。</p>
+          <label className="text-sm font-bold text-gray-700">代理入力数</label>
           <input
             type="number"
             min={1}
@@ -288,6 +299,23 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
             className="w-32 shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
           />
         </div>
+        <p className="text-xs text-gray-500">同一カードは1としてカウントしてください。</p>
+
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
+          <label className="text-sm font-bold text-gray-700">申込総数</label>
+          <input
+            type="number"
+            min={1}
+            max={5000}
+            placeholder="例: 20"
+            value={estimatedTotalCount || ""}
+            onChange={(e) => setEstimatedTotalCount(Math.max(0, Math.floor(Number(e.target.value)) || 0))}
+            className="w-32 shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm text-right focus:border-brand-500 focus:outline-none"
+          />
+        </div>
+        <p className="text-xs text-gray-500">
+          お預けいただく総数の目安です。当社の受入準備のための参考情報で、料金には影響しません。
+        </p>
 
         {agencyQuantity > 0 && (
           <div className="rounded-lg bg-gray-50 p-4 space-y-1 text-sm">
