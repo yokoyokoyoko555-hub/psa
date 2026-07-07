@@ -505,3 +505,17 @@
 - 影響: `getStoreRequests()`の返り値に`awaitingPayment`フィールドを追加（呼び出し元は`admin/store-requests/page.tsx`のみ）。スキーマ変更なし。
 - 未対応: `admin/store-requests/[id]/page.tsx`（明細入力画面）自体は変更していない。未払い状態のアプリをこのURLに直接アクセスした場合、既存の`alreadyDone`分岐により「この代理申込は対応済みです」という簡易メッセージが表示される（支払い状況の詳細は表示しない）。
 
+## ADR-0045: 顧客向け簡易ステータスの段階を拡張（自己入力／代理入力で別系統に）
+
+- 日付: 2026-07-08 / 状態: Accepted（実装済）
+- 背景: 従来の`computeDisplayStatus()`は「申込完了→受取完了→発送完了→カスタムのPSA進捗ステータス」の4段階のみで、(a) PSA提出グループを作成したがまだ提出（発送）していない状態、(b) 鑑定完了後にカードを顧客へ返送する準備・完了の状態、が区別できなかった。また代理入力（STORE）は「受取」という概念が明細入力（お預かり時点）に事実上含まれるため、自己入力と同じ「受取完了」を出すのは実態に合わず、代わりに「入力完了」「支払完了」（確定分請求の支払い状況）を出したいという要望があった。
+- 決定:
+  - **`computeDisplayStatus()`の段階を拡張**。共通の後半部分（最も進んだ状態から判定）: 返送完了 → 返送準備中 → カスタムのPSA進捗ステータス → 発送完了 → 発送準備中（PSA提出グループ作成済み・未提出）。ここまでで該当しなければ、`source`に応じて前半部分を分岐:
+    - 自己入力(CUSTOMER): 受取完了（`receivedAt`あり）→ 申込完了
+    - 代理入力(STORE): 支払完了（確定分請求のPENDINGな`Payment`が無い＝差額なし or 支払済み）→ 入力完了（この関数はstatusがDRAFTでない前提で呼ばれるため、代理入力は必ず「入力完了」以上になる。「受取完了」は出さない）
+  - **返送準備中／返送完了は、そのカード群の`Card.status`が全て`READY_FOR_CUSTOMER_RETURN`／`RETURNED_TO_CUSTOMER`の場合のみ**判定する（一部のカードのみ進んでいる混在時は、より手前の判定にフォールバックする）。
+  - 関数のシグネチャに`source`・`payments`（`status`のみ）・`cards`（`status`のみ）を追加。呼び出し元（`mypage/applications/page.tsx`の`getMyApplications()`は既にこれらのフィールドを取得済みのためクエリ変更不要。`admin/applications/page.tsx`は`cards`・`payments`のselectを追加）。
+  - 両呼び出し元のステータスバッジ色マップ（`STATUS_BADGE_CLS`）に新しい段階名を追加（入力完了=インディゴ、支払完了=シアン、発送準備中=オレンジ、返送準備中=ティール、返送完了=グリーン）。
+- 影響: `lib/application-status.ts`の`computeDisplayStatus()`のシグネチャ変更（破壊的）。呼び出し元は2箇所のみ（`mypage/applications/page.tsx`・`admin/applications/page.tsx`）で、いずれも対応済み。スキーマ変更なし。
+- 未対応: 1申込内でカードの返送進捗が混在するケース（一部のみ返送準備中など）の個別表示は行わない（全カードが揃った時点でのみ段階が進む）。
+

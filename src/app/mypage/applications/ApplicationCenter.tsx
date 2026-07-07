@@ -21,8 +21,13 @@ export interface AppRow {
 
 const STATUS_BADGE_CLS: Record<string, string> = {
   申込完了: "bg-blue-50 text-blue-700",
+  入力完了: "bg-indigo-50 text-indigo-700",
+  支払完了: "bg-cyan-50 text-cyan-700",
   受取完了: "bg-amber-50 text-amber-700",
+  発送準備中: "bg-orange-50 text-orange-700",
   発送完了: "bg-purple-50 text-purple-700",
+  返送準備中: "bg-teal-50 text-teal-700",
+  返送完了: "bg-green-50 text-green-700",
 };
 
 function StatusBadge({ status }: { status: string }) {
