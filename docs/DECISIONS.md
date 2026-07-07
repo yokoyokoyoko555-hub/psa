@@ -438,8 +438,21 @@
 - 決定:
   - **`UpchargeForm.tsx`から`psaDeclaredValue`/`psaFinalValue`の入力欄を削除**し、対象カード（`cardId`）・理由（`reason`）・Upcharge額（`upchargeAmount`）の3項目のみに簡略化。各欄にラベルを追加して用途を明示。
   - **`Upcharge.psaDeclaredValue`/`psaFinalValue`を`Int?`に変更**（非破壊のnullable化。過去データは保持したまま、以後の入力を必須から除外）。`createUpcharge()`の`upchargeSchema`・`prisma.upcharge.create()`からもこの2項目を削除。
-  - **対象カード選択の表示ラベルを`card.cardNo` + `card.cardName` + `card.tcgTitle` + 申告額に拡張**（`admin/applications/[id]/page.tsx`）。同一申込内の複数カードを一意に識別できるようにした。
+  - **対象カード選択の表示ラベルを`card.cardName` + `card.tcgTitle` + 申告額に拡張**（`admin/applications/[id]/page.tsx`）。同一申込内の複数カードを一意に識別できるようにした（当初`card.cardNo`も含めていたが、カードIDは不要とのフィードバックを受け除外）。
   - **複数カードへのUpchargeは、1件＝1カードとして「続けて登録」ボタンでカードごとに繰り返し登録する運用のまま**とした（`Upcharge`モデルは元々1レコード=1カード固定であり、金額按分や複数カード同時請求は実務上ケースバイケースで異なるため、スキーマ変更は行わず案内文をフォームに追記するに留めた）。
+  - **`createUpcharge()`内の顧客通知メール送信(`sendMail`)をtry/catchで囲み、送信失敗が登録処理全体の失敗として扱われないように修正**。従来はメール送信の例外が捕捉されておらず、Upcharge自体はDB登録済みなのにクライアントには「登録に失敗しました」と表示される不整合があった（`customer.ts`の既存パターンに合わせた）。
 - 影響: `prisma/schema.prisma`の`Upcharge.psaDeclaredValue`/`psaFinalValue`を`Int`→`Int?`に変更（`db push --accept-data-loss`で反映、既存データは変更なし）。`UpchargeForm.tsx`・`createUpcharge()`の引数から2項目を削除（呼び出し元はこのフォームのみのため影響範囲は限定的）。
 - 未対応: 複数カードへの一括Upcharge登録UI（1回の操作で複数カードに同時登録）は用意していない。将来的にニーズが増えた場合は、カード複数選択+共通理由/金額での一括作成アクションを別途検討する。
+
+## ADR-0040: 店頭受付を「受付番号提示＋本人確認のみ」に簡略化（現物照合レシートを廃止）
+
+- 日付: 2026-07-07 / 状態: Accepted（実装済）
+- 背景: [SUBMISSION_BOOKING.md](SUBMISSION_BOOKING.md)の設計に基づき、提出予約詳細ページ（`/mypage/submission-booking/[applicationId]`）は「店員と顧客が現物カードとカード明細リストを面前で1点ずつ突合する」ための店頭提示レシートとして実装済みだった（申込番号・予約日時・提出方法・顧客名に加え、カード名・言語・申告額等を含むカード明細一覧を表示）。今回、運用上はそこまでの現物照合を店頭受付時に行う必要はなく、**受付番号（申込番号）の提示と本人確認書類によるご本人確認のみ**で受付を完了させたいという方針転換があった。また併せて、TASKS.mdに残っていた「カード提出予約のリファイン（店頭提示レシート）」「ACCOUNTINGロールの権限設計」の2項目は不要と判断された。
+- 決定:
+  - **`/mypage/submission-booking/[applicationId]`からカード明細リスト（現物照合用）を削除**。ページは申込番号（=受付番号として表示）・予約日時・提出方法・顧客名のみを表示し、案内文を「受付番号の画面提示と本人確認書類でのご本人確認のみで受付する」内容に変更。カードの内容確認は受付後にスタッフが別途行う運用とする。
+  - 上記に伴い、ページで使っていた`SERVICE_LABELS`/`LANG_LABELS`定数・`formatMoneyInt`・`cards`のPrisma include（未使用化）を削除。
+  - [SUBMISSION_BOOKING.md](SUBMISSION_BOOKING.md) §5を「店頭提示レシート」から「受付番号ページ」に改訂し、現物照合要件を取り消し線で明示。
+  - `docs/TASKS.md`から「カード提出予約のリファイン（店頭提示レシート）」「ACCOUNTINGロールの権限設計」の2項目を削除（不要と判断されたため）。
+- 影響: `src/app/mypage/submission-booking/[applicationId]/page.tsx`のみ変更（スキーマ変更なし）。郵送(`SHIPPING`)の受付フローは変更なし（到着後にスタッフが受け付ける旨の案内のまま）。
+- 未対応: 店頭受付時の本人確認自体（免許証等の目視確認）はスタッフの手作業運用のままで、システム上の記録・ログは取らない。カードの内容確認（枚数・現物一致）は受付後にスタッフが行う前提だが、その具体的な手順（いつ・どの画面で）は本ADRのスコープ外。
 

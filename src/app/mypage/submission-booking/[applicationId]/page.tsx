@@ -6,7 +6,6 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import CustomerHeader from "@/components/CustomerHeader";
-import { formatMoneyInt } from "@/lib/currency";
 import CancelBookingButton from "../CancelBookingButton";
 import { format } from "date-fns";
 
@@ -15,25 +14,6 @@ export const metadata = { title: "提出予約の詳細 | トレカビンクス"
 const METHOD_LABELS: Record<string, string> = {
   STORE_DROP_OFF: "店頭持込",
   SHIPPING: "郵送",
-};
-const LANG_LABELS: Record<string, string> = {
-  JAPANESE: "日本語",
-  ENGLISH: "英語",
-};
-const SERVICE_LABELS: Record<string, string> = {
-  VALUE: "バリュー",
-  VALUE_BULK: "バリューバルク",
-  VALUE_PLUS: "バリュープラス",
-  VALUE_MAX: "バリューマックス",
-  REGULAR: "レギュラー",
-  EXPRESS: "エクスプレス",
-  SUPER_EXPRESS: "スーパー・エクスプレス",
-  WALK_THROUGH: "ウォーク・スルー",
-  PREMIUM_1: "プレミアム 1",
-  PREMIUM_2: "プレミアム 2",
-  PREMIUM_3: "プレミアム 3",
-  PREMIUM_5: "プレミアム 5",
-  PREMIUM_10: "プレミアム 10",
 };
 
 export default async function BookingDetailPage({
@@ -47,10 +27,7 @@ export default async function BookingDetailPage({
   const { applicationId } = await params;
   const app = await prisma.application.findFirst({
     where: { id: applicationId, customerId: customer.id },
-    include: {
-      submissionBooking: true,
-      cards: { orderBy: { createdAt: "asc" } },
-    },
+    include: { submissionBooking: true },
   });
   if (!app) redirect("/mypage/submission-booking");
 
@@ -59,7 +36,6 @@ export default async function BookingDetailPage({
   if (!booking) redirect(`/mypage/submission-booking/${app.id}/edit`);
 
   const name = decrypt(customer.nameEncrypted);
-  const totalQty = app.cards.reduce((sum, c) => sum + c.quantity, 0);
   const isStore = booking.method === "STORE_DROP_OFF";
 
   return (
@@ -72,17 +48,17 @@ export default async function BookingDetailPage({
         </Link>
 
         <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 text-sm">
-          提出予約を受け付けました。{isStore ? "店頭で" : "到着後に"}スタッフがこのリストと現物を照合します。
+          提出予約を受け付けました。{isStore ? "店頭ではこの受付番号のご提示とご本人確認のみで受付します。" : "到着後、スタッフが受け付けます。"}
         </div>
 
-        {/* レシート本体 */}
+        {/* 受付番号カード */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="bg-brand-600 text-white px-6 py-4">
-            <p className="text-sm text-white/80">カード提出リスト</p>
+            <p className="text-sm text-white/80">受付番号</p>
             <p className="text-2xl font-bold tracking-wide">{app.applicationNo}</p>
           </div>
 
-          <div className="px-6 py-4 grid grid-cols-2 gap-y-3 gap-x-4 text-sm border-b border-gray-100">
+          <div className="px-6 py-4 grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
             <div>
               <p className="text-gray-400">予約日時</p>
               <p className="font-bold text-gray-900">{format(new Date(booking.scheduledAt), "yyyy/MM/dd HH:mm")}</p>
@@ -95,49 +71,12 @@ export default async function BookingDetailPage({
               <p className="text-gray-400">お名前</p>
               <p className="font-bold text-gray-900">{name} 様</p>
             </div>
-            <div>
-              <p className="text-gray-400">サービス</p>
-              <p className="font-bold text-gray-900">{SERVICE_LABELS[app.serviceLevel] ?? app.serviceLevel}</p>
-            </div>
-          </div>
-
-          {/* カード明細（現物照合用） */}
-          <div className="px-6 py-4">
-            <p className="text-sm font-bold text-gray-900 mb-2">
-              カード明細（{app.cards.length}種・計{totalQty}枚）
-            </p>
-            {app.cards.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
-                代理入力のため、明細はカードお預け後にスタッフが入力します。当日は現物をお持ちください。
-              </div>
-            ) : (
-            <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
-              {app.cards.map((card, i) => (
-                <div key={card.id} className="flex items-start gap-3 px-3 py-2.5">
-                  <span className="shrink-0 w-6 h-6 rounded-full border border-gray-300 text-xs font-bold text-gray-500 flex items-center justify-center">
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold text-gray-900 leading-snug">{card.cardName}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {card.tcgTitle}
-                      {card.cardNumber ? ` ・ ${card.cardNumber}` : ""} ・ {LANG_LABELS[card.language] ?? card.language}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-bold text-gray-900">×{card.quantity}</p>
-                    <p className="text-xs text-gray-400">{formatMoneyInt(card.declaredValue, app.region)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            )}
           </div>
 
           <div className="px-6 py-4 bg-gray-50 text-xs text-gray-600 leading-relaxed">
             {isStore
-              ? "店頭にお持ち込みください。スタッフがこのリストと現物（枚数・カード名）を1点ずつ照合します。"
-              : "郵送でお送りください。到着後、スタッフがこのリストと現物を照合します。"}
+              ? "店頭では、この受付番号の画面提示と本人確認書類（運転免許証等）でのご本人確認のみを行います。カードの内容確認は後日スタッフが行います。"
+              : "郵送でお送りください。到着後、スタッフが受け付けます。"}
             <br />
             ※ 提出方法・日時の変更は下のボタンから行えます。
           </div>
