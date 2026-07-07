@@ -368,15 +368,21 @@ export async function getAdminCustomers(params: {
 
 // ===== 代理申込（当社入力 / source=STORE） =====
 
-/** 要対応の代理申込（顧客が依頼し、店舗の入力待ち）一覧 */
+/**
+ * 要対応の代理申込一覧。以下の2状態を含む。
+ * - 入力待ち（status=DRAFT）: 顧客が先払い済みで、店舗の明細入力待ち
+ * - 未払い（status=SUBMITTED かつ 確定分請求がPENDING）: 明細入力・確定済みだが、
+ *   顧客がマイページでまだ支払っていない（自動課金はしない。ADR-0042）
+ * 顧客の支払いが完了（PENDING→SUCCEEDED）すると一覧から外れる。ADR-0044
+ */
 export async function getStoreRequests() {
   await requireAdminOrStaff();
-  // 先払い（SUCCEEDED）済みの STORE 申込のみ「要対応」に表示。決済前の申込は含めない。ADR-0020/0021
+  // 先払い（SUCCEEDED）済みのSTORE申込のみ対象。決済前の申込は含めない。ADR-0020/0021
   const apps = await prisma.application.findMany({
     where: {
       source: "STORE",
-      status: "DRAFT",
       payments: { some: { status: "SUCCEEDED" } },
+      OR: [{ status: "DRAFT" }, { status: "SUBMITTED", payments: { some: { status: "PENDING" } } }],
     },
     include: { customer: { select: { email: true, nameEncrypted: true } }, agreement: true },
     orderBy: { createdAt: "asc" },
@@ -391,6 +397,7 @@ export async function getStoreRequests() {
     customerName: decrypt(a.customer.nameEncrypted),
     agencyQuantity: a.agencyQuantity, // 代理入力数（顧客申告）。ADR-0038
     estimatedCardCount: a.estimatedCardCount, // 申込総数（顧客申告・参考値）。ADR-0037
+    awaitingPayment: a.status === "SUBMITTED", // true=入力・確定済みで顧客の支払い待ち。ADR-0044
   }));
 }
 

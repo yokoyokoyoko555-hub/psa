@@ -37,6 +37,7 @@ export default async function StoreRequestsPage() {
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">総枚数</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">返却</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">依頼日</th>
+                <th className="text-left px-4 py-3 text-gray-600 font-medium">状態</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">操作</th>
               </tr>
             </thead>
@@ -58,12 +59,32 @@ export default async function StoreRequestsPage() {
                     {format(new Date(r.createdAt), "yyyy/MM/dd HH:mm")}
                   </td>
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/store-requests/${r.id}`}
-                      className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-brand-700 transition"
-                    >
-                      入力する
-                    </Link>
+                    {r.awaitingPayment ? (
+                      <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                        未払い
+                      </span>
+                    ) : (
+                      <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                        入力待ち
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {r.awaitingPayment ? (
+                      <Link
+                        href={`/admin/applications/${r.id}`}
+                        className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition"
+                      >
+                        確認する
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/admin/store-requests/${r.id}`}
+                        className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-brand-700 transition"
+                      >
+                        入力する
+                      </Link>
+                    )}
                   </td>
                 </tr>
               ))}

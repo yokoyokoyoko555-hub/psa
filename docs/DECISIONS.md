@@ -494,3 +494,14 @@
 - 影響: `prisma/schema.prisma`の`ItemType` enumに`AUTOGRAPH`を追加（db push、非破壊の追加）。`calculateFees()`の内部ロジック変更のみでシグネチャは変更なし。
 - 未対応: 1申込内でオートグラフと通常のトレーディングカードが混在するケースの按分は未対応（想定外のため）。混在が発生した場合の実際の挙動は、その申込に含まれるいずれかのタイアが`AUTOGRAPH`であれば申込全体をオートグラフ専用設定で計算する（`isAutographSelected`が一度でも`true`になれば以降falseに戻らない実装のため）。
 
+## ADR-0044: 「代理申込（要対応）」一覧に、顧客の支払い完了までは未払いの申込を残す
+
+- 日付: 2026-07-08 / 状態: Accepted（実装済）
+- 背景: ADR-0042で確定分請求の自動課金を廃止し、顧客がマイページで能動的に支払う方式に変更した結果、`getStoreRequests()`（「代理申込（要対応）」一覧のデータ取得）が`status: "DRAFT"`のみを対象としていたため、スタッフが明細入力・確定した時点（`status`が`SUBMITTED`に変わる）で一覧から消えてしまい、顧客の支払いが完了していない申込を追跡できなくなっていた。
+- 決定:
+  - **`getStoreRequests()`の`where`条件を、`status: "DRAFT"`（入力待ち）または`status: "SUBMITTED"`かつ確定分請求の`Payment`が`PENDING`（未払い）のいずれかに一致するよう変更**。顧客の支払いが完了（`Payment.status`が`SUCCEEDED`）すると、どちらの条件にも一致しなくなり一覧から自然に外れる。
+  - 返り値に`awaitingPayment: boolean`（`status === "SUBMITTED"`）を追加。
+  - **`admin/store-requests/page.tsx`に「状態」列を追加**し、`awaitingPayment`に応じて「未払い」（赤）／「入力待ち」（黄）のバッジを表示。操作列も、未払いの場合は`/admin/applications/[id]`（申込詳細で内容確認）への「確認する」リンクに、入力待ちの場合は従来通り`/admin/store-requests/[id]`への「入力する」リンクに切り替える。
+- 影響: `getStoreRequests()`の返り値に`awaitingPayment`フィールドを追加（呼び出し元は`admin/store-requests/page.tsx`のみ）。スキーマ変更なし。
+- 未対応: `admin/store-requests/[id]/page.tsx`（明細入力画面）自体は変更していない。未払い状態のアプリをこのURLに直接アクセスした場合、既存の`alreadyDone`分岐により「この代理申込は対応済みです」という簡易メッセージが表示される（支払い状況の詳細は表示しない）。
+
