@@ -257,23 +257,27 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
     data: { status: "UPCHARGE_UNPAID" },
   });
 
-  // 顧客へメール通知
-  await sendMail({
-    to: card.customer.email,
-    subject: "【トレカビンクス】Upcharge（追加請求）のお知らせ",
-    html: upchargeNotificationHtml({
-      customerName,
-      cardName: card.cardName,
-      reason: parsed.reason,
-      amount: parsed.upchargeAmount,
-      appUrl: process.env.APP_URL!,
-    }),
-  });
+  // 顧客へメール通知（送信失敗でUpcharge自体の登録は止めない）
+  try {
+    await sendMail({
+      to: card.customer.email,
+      subject: "【トレカビンクス】Upcharge（追加請求）のお知らせ",
+      html: upchargeNotificationHtml({
+        customerName,
+        cardName: card.cardName,
+        reason: parsed.reason,
+        amount: parsed.upchargeAmount,
+        appUrl: process.env.APP_URL!,
+      }),
+    });
 
-  await prisma.upcharge.update({
-    where: { id: upcharge.id },
-    data: { notifiedAt: new Date() },
-  });
+    await prisma.upcharge.update({
+      where: { id: upcharge.id },
+      data: { notifiedAt: new Date() },
+    });
+  } catch {
+    // 通知メール失敗は握りつぶし、自動請求へ進む
+  }
 
   // Stripe自動請求
   const savedMethod = await prisma.savedPaymentMethod.findFirst({
