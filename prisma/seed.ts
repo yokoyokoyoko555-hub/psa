@@ -148,8 +148,9 @@ async function main() {
       create: { id: r, region: r, itemType: "TRADING_CARD", handlingFee: 0, proxyFee: 0 },
     });
   }
-  // 新アイテム種別分（PSA_USのみ）。新規idを採番。
-  for (const itemType of ["UNOPENED_PACK", "COMIC_MAGAZINE"] as const) {
+  // 新アイテム種別分（PSA_USのみ）。新規idを採番。AUTOGRAPHはトレーディングカードのデュアルサービス
+  // 選択時に専用の代理入力料金・事務手数料・送料保険料を設定できるようにするための行。ADR-0043
+  for (const itemType of ["UNOPENED_PACK", "COMIC_MAGAZINE", "AUTOGRAPH"] as const) {
     const id = `PSA_US_${itemType}`;
     await prisma.pricingSetting.upsert({
       where: { id },

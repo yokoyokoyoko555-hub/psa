@@ -16,10 +16,13 @@ const REGION_LABELS: Record<ServiceRegion, string> = {
   PSA_US: "PSA US",
 };
 
+// AUTOGRAPHはitemTypeとして選択されない（TRADING_CARD内のデュアルサービス）ため未使用。
+// Record<ItemType,...>の網羅性を満たすためのプレースホルダー。ADR-0043
 const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   TRADING_CARD: "トレーディングカード",
   UNOPENED_PACK: "未開封パック",
   COMIC_MAGAZINE: "コミック・マガジン",
+  AUTOGRAPH: "オートグラフ",
 };
 
 const AGREEMENT_TEXT = `PSA鑑定受付代行サービス（代理入力・先払い）利用規約

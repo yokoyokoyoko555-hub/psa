@@ -16,6 +16,7 @@ const subCls = "border border-gray-100 rounded-lg p-4";
 
 const ITEM_TYPE_LABELS: Record<string, string> = {
   TRADING_CARD: "トレーディングカード",
+  AUTOGRAPH: "オートグラフ（デュアルサービス）",
   UNOPENED_PACK: "未開封パック",
   COMIC_MAGAZINE: "コミック・マガジン",
 };
@@ -35,16 +36,20 @@ export default async function SettingsPage() {
 
   // region/itemTypeカラムでの照合は既存行のカラム不整合により一致しないことがあるため、idで照合する。
   // lib/pricing-setting-id.ts参照（ADR-0023追記の教訓）。
-  const settingFor = (region: "PSA_JP" | "PSA_US", itemType: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE") =>
-    settings.find((s) => s.id === pricingSettingId(region, itemType));
+  const settingFor = (
+    region: "PSA_JP" | "PSA_US",
+    itemType: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE" | "AUTOGRAPH"
+  ) => settings.find((s) => s.id === pricingSettingId(region, itemType));
 
   // PSA日本はトレーディングカードのみ（アイテム種別のネストなし＝従来通り）。PSA USのみ複数アイテム種別。
+  // オートグラフ（デュアルサービス）はトレーディングカードの直後に、専用の代理入力料金・事務手数料・
+  // 送料保険料を設定できるセクションとして配置する。ADR-0043
   const regions = [
     { region: "PSA_JP" as const, title: "PSA 日本（円）", itemTypes: ["TRADING_CARD"] as const },
     {
       region: "PSA_US" as const,
       title: "PSA US（USD）",
-      itemTypes: ["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as const,
+      itemTypes: ["TRADING_CARD", "AUTOGRAPH", "UNOPENED_PACK", "COMIC_MAGAZINE"] as const,
     },
   ];
 
@@ -109,16 +114,6 @@ export default async function SettingsPage() {
           </div>
         </details>
       ))}
-
-      {/* オートグラフ（デュアルサービス）料金 — PSA US トレーディングカード専用 */}
-      <details className={groupCls}>
-        <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">
-          オートグラフ（デュアルサービス）料金 — PSA US
-        </summary>
-        <div className="mt-4">
-          <CustomServicePriceForm items={customServicePrices} category="AUTOGRAPH" region="PSA_US" />
-        </div>
-      </details>
 
       {/* キャンペーン割引（全リージョン共通の管理） */}
       <details className={groupCls}>

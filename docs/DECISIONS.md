@@ -480,3 +480,17 @@
 - 影響: `completeStoreApplication`のAPIシグネチャ自体は変更なし（`feeOverrides`等の編集用パラメータは追加していない）。`chargeOffSession`は他の呼び出し元（`createUpcharge`）で引き続き使用するため`lib/stripe.ts`からは削除していない。スキーマ変更なし。
 - 未対応: 先払い額超過（返金が必要なケース）は上記の理由により未実装。もし将来、代理入力手数料以外の要素も含めて先払い額を引き上げる仕様変更を行う場合は、返金ロジックの要否を再検討すること。
 
+## ADR-0043: オートグラフ（デュアルサービス）に専用の代理入力料金・事務手数料・送料保険料を追加
+
+- 日付: 2026-07-08 / 状態: Accepted（実装済）
+- 背景: 管理画面の料金設定で、PSA US配下のオートグラフ（デュアルサービス）セクションは、鑑定料タイア（`CustomServicePrice` category=AUTOGRAPH）の設定のみを持ち、代理入力料金・事務手数料・送料保険料は通常のトレーディングカード（`itemType=TRADING_CARD`）の設定がそのまま適用されていた。オートグラフは署名付きカードのため、通常のトレーディングカードとは異なる代理入力料金・事務手数料・送料保険料を設定したいという要望があった。1申込内でオートグラフと通常のトレーディングカードが混在することは実務上想定しない（ユーザー確認済み）ため、混在時の按分ロジックは設けていない。
+- 決定:
+  - **`ItemType` enumに`AUTOGRAPH`を追加**。`Application.itemType`/`Card`関連のitemType選択には引き続き使わない（選択肢は固定3値配列のまま）が、`PricingSetting.itemType`/`ShippingInsuranceRate.itemType`にオートグラフ専用の行を持てるようにするための追加。
+  - **`fee-calculator.ts`の`calculateFees()`に、選択されたサービスタイアの`category`が`AUTOGRAPH`かどうかを判定するロジックを追加**（`cardServiceLevels`指定時は各行、単一`customServiceLevelId`指定時はそのタイア）。判定結果に応じて`flatFeeItemType`（`AUTOGRAPH` or 元の`itemType`）を決定し、`PricingSetting`・送料保険マトリクス/レガシー計算のlookupキーとして使う。これにより代理入力料金・事務手数料・送料保険料（無料化しきい値含む）がオートグラフ専用設定に切り替わる。
+  - **管理画面の料金設定ページで、オートグラフのセクションをPSA US配下の「トレーディングカード」と「未開封パック」の間に配置**し、他のアイテム種別と同じ3部構成（サービス料金・代理入力料金＋事務手数料・送料保険料）で表示。従来の独立した「オートグラフ（デュアルサービス）料金」セクションは廃止し、この中に統合した。
+  - **`pricing.ts`の`itemTypeEnum`・`HandlingFeeForm`/`ShippingInsuranceForm`の`itemType`プロパティ型に`AUTOGRAPH`を追加**し、既存のフォームコンポーネントをそのまま再利用。
+  - **`seed.ts`に`PricingSetting`の`PSA_US_AUTOGRAPH`行を追加**（`PSA_US_UNOPENED_PACK`等と同じプレースホルダーパターン）。
+  - `ApplyForm.tsx`/`StoreRequestForm.tsx`の`Record<ItemType, ...>`型のラベルマップ（網羅性が必要）に、表示には使わないプレースホルダーとして`AUTOGRAPH`エントリを追加。
+- 影響: `prisma/schema.prisma`の`ItemType` enumに`AUTOGRAPH`を追加（db push、非破壊の追加）。`calculateFees()`の内部ロジック変更のみでシグネチャは変更なし。
+- 未対応: 1申込内でオートグラフと通常のトレーディングカードが混在するケースの按分は未対応（想定外のため）。混在が発生した場合の実際の挙動は、その申込に含まれるいずれかのタイアが`AUTOGRAPH`であれば申込全体をオートグラフ専用設定で計算する（`isAutographSelected`が一度でも`true`になれば以降falseに戻らない実装のため）。
+

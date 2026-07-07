@@ -47,10 +47,13 @@ const REGION_LABELS: Record<ServiceRegion, string> = {
   PSA_US: "PSA US",
 };
 
+// AUTOGRAPHはitemType選択ボタンには出ない（選択肢は固定3値の配列）が、
+// Record<ItemType,...>の網羅性を満たすためのプレースホルダー。ADR-0043
 const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   TRADING_CARD: "トレーディングカード",
   UNOPENED_PACK: "未開封パック",
   COMIC_MAGAZINE: "コミック・マガジン",
+  AUTOGRAPH: "オートグラフ",
 };
 
 // アイテム種別ごとの入力欄ラベル・単位・表示切替。ADR-0033
@@ -104,6 +107,20 @@ const CARD_FIELD_LABELS: Record<
     quantityLabel: "冊数",
     quantityUnit: "冊",
     showCardNumberRarity: false,
+  },
+  // AUTOGRAPHはitemTypeとしては選択されない（TRADING_CARD内のデュアルサービス）ため未使用。
+  // Record<ItemType,...>の網羅性を満たすためのプレースホルダー。ADR-0043
+  AUTOGRAPH: {
+    entryLabel: "カード",
+    releaseYearLabel: "発行年",
+    releaseYearPlaceholder: "例: 2022",
+    secondaryLabel: "言語",
+    secondaryPlaceholder: "例: 日本語",
+    nameLabel: "カード名",
+    namePlaceholder: "例: モンキー・D・ルフィ",
+    quantityLabel: "枚数",
+    quantityUnit: "枚",
+    showCardNumberRarity: true,
   },
 };
 

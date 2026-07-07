@@ -46,7 +46,7 @@ export default function ShippingInsuranceForm({
 }: {
   rates: ShippingInsuranceRate[];
   region: "PSA_JP" | "PSA_US";
-  itemType?: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE";
+  itemType?: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE" | "AUTOGRAPH";
   unit: string;
 }) {
   const router = useRouter();

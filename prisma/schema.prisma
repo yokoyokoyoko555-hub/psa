@@ -87,10 +87,15 @@ enum ServiceRegion {
 }
 
 // 鑑定対象アイテム種別（PSA_USのみ複数。PSA_JPは常にTRADING_CARD）。ADR-0023
+// AUTOGRAPHはApplication/Cardのitemtype値としては使わない（申込単位の入力欄選択は常に
+// TRADING_CARD/UNOPENED_PACK/COMIC_MAGAZINEの3値の固定配列で行うため混入しない）。
+// PricingSetting/ShippingInsuranceRateの代理入力料金・事務手数料・送料保険料を、オートグラフ
+// （デュアルサービス）専用に設定できるようにするための追加。ADR-0043
 enum ItemType {
   TRADING_CARD
   UNOPENED_PACK
   COMIC_MAGAZINE // コミックとマガジンは1区分に統合
+  AUTOGRAPH
 }
 
 // 動的サービスタイア（管理画面でCRUD可能）のカテゴリ。ADR-0025

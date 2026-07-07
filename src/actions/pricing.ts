@@ -22,7 +22,7 @@ const bandSchema = z.object({
   surcharge: z.number().int().min(0), // 26枚以上の加算単価（円/枚）
 });
 const regionEnum = z.enum(["PSA_JP", "PSA_US"]);
-const itemTypeEnum = z.enum(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"]);
+const itemTypeEnum = z.enum(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE", "AUTOGRAPH"]);
 const saveSchema = z.object({ region: regionEnum, itemType: itemTypeEnum.default("TRADING_CARD"), bands: z.array(bandSchema) });
 
 /**
@@ -55,7 +55,7 @@ export async function saveShippingInsuranceRates(
 /** 代理入力料金・事務手数料・送料保険無料化枚数（リージョン×アイテム種別の一律）を保存 */
 export async function saveUniformFees(input: {
   region: "PSA_JP" | "PSA_US";
-  itemType?: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE";
+  itemType?: "TRADING_CARD" | "UNOPENED_PACK" | "COMIC_MAGAZINE" | "AUTOGRAPH";
   proxyFee: number;
   handlingFee: number;
   freeShipInsQty: number;

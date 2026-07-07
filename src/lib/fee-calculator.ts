@@ -149,6 +149,9 @@ export async function calculateFees(params: {
 
   let psaFeeTotal: number;
   let psaCostTotal: number;
+  // オートグラフ（デュアルサービス）タイアが選ばれたか。代理入力料金・事務手数料・送料保険料を
+  // 専用設定に切り替えるために使う。1申込内での通常/オートグラフ混在は想定しない。ADR-0043
+  let isAutographSelected = false;
 
   if (params.cardServiceLevels && params.cardServiceLevels.length > 0) {
     // カード別サービスレベル（代理入力の明細確定時）。ADR-0038
@@ -162,6 +165,7 @@ export async function calculateFees(params: {
     for (const row of params.cardServiceLevels) {
       const price = priceMap.get(row.customServiceLevelId);
       if (!price) throw new Error("Custom service price not found");
+      if (price.category === "AUTOGRAPH") isAutographSelected = true;
       const cost = price.cost > 0 ? price.cost : roundMoney(price.pricePerCard * PSA_COST_RATE, params.region);
       psaFeeTotal += price.pricePerCard * row.quantity;
       psaCostTotal += cost * row.quantity;
@@ -177,6 +181,7 @@ export async function calculateFees(params: {
       },
     });
     if (!customPrice) throw new Error("Custom service price not found");
+    isAutographSelected = customPrice.category === "AUTOGRAPH";
     const pricePerCard = customPrice.pricePerCard;
     // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替
     const perCardCost =
@@ -185,8 +190,10 @@ export async function calculateFees(params: {
     psaCostTotal = perCardCost * params.cardCount;
   }
 
+  // 代理入力料金・事務手数料・送料保険料は、オートグラフ選択時は専用設定(itemType="AUTOGRAPH")を使う。ADR-0043
+  const flatFeeItemType: ItemType = isAutographSelected ? "AUTOGRAPH" : params.itemType;
   const setting = await prisma.pricingSetting.findUnique({
-    where: { id: pricingSettingId(params.region, params.itemType) },
+    where: { id: pricingSettingId(params.region, flatFeeItemType) },
   });
 
   // デュアルサービスは通常サービスの代わりに選ぶ形式のため、追加料金は発生しない（常に0）。ADR-0029
@@ -201,12 +208,12 @@ export async function calculateFees(params: {
   const handlingFee = setting?.handlingFee ?? 0;
 
   // 送料・保険: リージョン別の合算マトリクス（未投入時は従来ロジックにフォールバック）
-  const matrix = await calcShippingInsuranceMatrix(params.region, params.itemType, params.totalDeclaredValue, params.cardCount);
+  const matrix = await calcShippingInsuranceMatrix(params.region, flatFeeItemType, params.totalDeclaredValue, params.cardCount);
   let shippingInsurance =
     matrix ??
     (await calcShippingInsuranceLegacy({
       returnMethod: params.returnMethod,
-      itemType: params.itemType,
+      itemType: flatFeeItemType,
       totalDeclaredValue: params.totalDeclaredValue,
     }));
   // N枚以上で送料・保険を無料化（リージョン別しきい値・0=無効）
