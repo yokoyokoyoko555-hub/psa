@@ -511,6 +511,7 @@ export default function ApplyForm({
     const idx = STEPS.findIndex((s) => s.key === key);
     setMaxStep((m) => Math.max(m, idx));
     setStep(key);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleSubmit() {
@@ -579,6 +580,7 @@ export default function ApplyForm({
         setCreatedApplicationId(result.applicationId ?? "");
         setMaxStep(4);
         setStep("payment");
+        window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         setError(result.error ?? "エラーが発生しました");
       }
