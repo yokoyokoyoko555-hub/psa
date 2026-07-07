@@ -5,7 +5,7 @@ import { decrypt } from "@/lib/crypto";
 import { format } from "date-fns";
 import Link from "next/link";
 import { formatMoneyIn } from "@/lib/currency";
-import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel, computeDisplayStatus } from "@/lib/application-status";
+import { ITEM_TYPE_LABELS, resolveServiceLevel, computeDisplayStatus } from "@/lib/application-status";
 
 const STATUS_BADGE_CLS: Record<string, string> = {
   申込完了: "bg-blue-50 text-blue-700",
@@ -14,21 +14,11 @@ const STATUS_BADGE_CLS: Record<string, string> = {
   キャンセル: "bg-gray-100 text-gray-500",
 };
 
+// 種別（自己入力/代理入力）は申込番号の接頭辞（APP-/DAI-）で判別できるため列としては持たない
+const REGION_SHORT_LABELS: Record<string, string> = { PSA_JP: "日本", PSA_US: "US" };
+
 const SORTABLE_COLUMNS = ["region", "itemType", "serviceLevel", "status"] as const;
 type SortColumn = (typeof SORTABLE_COLUMNS)[number];
-
-function SourceBadge({ source }: { source: string }) {
-  const isStore = source === "STORE";
-  return (
-    <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
-        isStore ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"
-      }`}
-    >
-      {isStore ? "代理入力" : "自己入力"}
-    </span>
-  );
-}
 
 export default async function AdminApplicationsPage({
   searchParams,
@@ -57,7 +47,6 @@ export default async function AdminApplicationsPage({
       include: {
         customer: { select: { nameEncrypted: true, email: true } },
         _count: { select: { cards: true } },
-        payments: { select: { status: true } },
         psaSubmissionGroup: { select: { status: true, submittedAt: true } },
         submissionBooking: { select: { status: true, method: true, scheduledAt: true } },
       },
@@ -71,7 +60,7 @@ export default async function AdminApplicationsPage({
   const applications = applicationsRaw
     .map((app) => ({
       app,
-      regionLabel: REGION_LABELS[app.region] ?? app.region,
+      regionLabel: REGION_SHORT_LABELS[app.region] ?? app.region,
       itemTypeLabel: app.region === "PSA_US" ? (ITEM_TYPE_LABELS[app.itemType] ?? app.itemType) : "-",
       serviceLevelLabel: resolveServiceLevel(app),
       statusLabel: app.status === "CANCELLED" ? "キャンセル" : computeDisplayStatus(app),
@@ -132,22 +121,19 @@ export default async function AdminApplicationsPage({
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">申込番号</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">種別</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">顧客</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("region", "提出先")}</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("itemType", "アイテム種別")}</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("serviceLevel", "サービスレベル")}</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">枚数</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">金額</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">決済</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">提出予約</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("status", "ステータス")}</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">日時</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium">申込日時</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {applications.map(({ app, regionLabel, itemTypeLabel, serviceLevelLabel, statusLabel }) => {
-              const paid = app.payments.some((p) => p.status === "SUCCEEDED");
               const booking = app.submissionBooking;
               return (
                 <tr key={app.id} className="hover:bg-gray-50">
@@ -155,9 +141,6 @@ export default async function AdminApplicationsPage({
                     <Link href={`/admin/applications/${app.id}`} className="text-brand-600 hover:underline">
                       {app.applicationNo}
                     </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <SourceBadge source={app.source} />
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/admin/customers/${app.customerId}`} className="text-gray-900 hover:text-brand-600 hover:underline">
@@ -170,11 +153,6 @@ export default async function AdminApplicationsPage({
                   <td className="px-4 py-3 text-gray-700">{serviceLevelLabel}</td>
                   <td className="px-4 py-3 text-gray-700">{app._count.cards}枚</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{formatMoneyIn(app.totalAmount, "JPY")}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-medium ${paid ? "text-green-600" : "text-red-500"}`}>
-                      {paid ? "支払済" : "未払い"}
-                    </span>
-                  </td>
                   <td className="px-4 py-3 text-xs text-gray-600">
                     {booking?.status === "BOOKED" ? (
                       <>
