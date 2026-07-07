@@ -127,7 +127,8 @@ export default async function AdminApplicationsPage({
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm whitespace-nowrap">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="text-left px-4 py-3 text-gray-600 font-medium">申込番号</th>
@@ -200,6 +201,7 @@ export default async function AdminApplicationsPage({
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
