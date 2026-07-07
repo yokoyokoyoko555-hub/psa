@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { getAdminCustomers } from "@/actions/admin";
+import ClickableRow from "@/components/ClickableRow";
 
 export default async function AdminCustomersPage({
   searchParams,
@@ -47,7 +48,7 @@ export default async function AdminCustomersPage({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {customers.map((c) => (
-              <tr key={c.id} className="hover:bg-gray-50">
+              <ClickableRow key={c.id} href={`/admin/customers/${c.id}`} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
                   <p className="font-medium text-gray-900">{c.name}</p>
                   <p className="text-xs text-gray-400">{c.nameKana}</p>
@@ -55,7 +56,7 @@ export default async function AdminCustomersPage({
                 <td className="px-4 py-3 text-gray-600">{c.email}</td>
                 <td className="px-4 py-3 text-gray-700">{c.applicationCount}件</td>
                 <td className="px-4 py-3 font-medium text-gray-900">¥{c.totalAmount.toLocaleString()}</td>
-              </tr>
+              </ClickableRow>
             ))}
           </tbody>
         </table>
