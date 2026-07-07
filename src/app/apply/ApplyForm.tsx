@@ -250,6 +250,7 @@ export default function ApplyForm({
   const [clientSecret, setClientSecret] = useState("");
   const [createdApplicationId, setCreatedApplicationId] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentDone, setPaymentDone] = useState(false);
   const [stripeReady, setStripeReady] = useState(false);
   const [cardError, setCardError] = useState("");
   const cardElementContainerRef = useRef<HTMLDivElement | null>(null);
@@ -629,7 +630,7 @@ export default function ApplyForm({
         return;
       }
 
-      router.push(`/mypage/submission-booking/${encodeURIComponent(createdApplicationId)}/edit`);
+      setPaymentDone(true);
     } catch (err) {
       console.error(err);
       setError("決済処理中にエラーが発生しました。時間をおいて再度お試しください。");
@@ -1241,6 +1242,29 @@ export default function ApplyForm({
 
         {/* STEP 4: Payment */}
         {step === "payment" && (
+          paymentDone ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center space-y-4">
+              <div className="text-4xl">✅</div>
+              <h2 className="text-lg font-bold text-gray-900">お支払いが完了しました</h2>
+              <p className="text-sm text-gray-600">
+                次に、カードのお預け方法（店頭持込・郵送）と日時をご予約ください。
+              </p>
+              <div className="flex flex-col gap-3 pt-1">
+                <button
+                  onClick={() => router.push(`/mypage/submission-booking/${encodeURIComponent(createdApplicationId)}/edit`)}
+                  className="bg-brand-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-brand-700 transition"
+                >
+                  カード提出の予約へ進む
+                </button>
+                <button
+                  onClick={() => router.push("/mypage")}
+                  className="border border-gray-300 text-gray-700 font-bold px-6 py-3 rounded-lg hover:bg-gray-50 transition"
+                >
+                  マイページへ
+                </button>
+              </div>
+            </div>
+          ) : (
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <div>
@@ -1268,6 +1292,7 @@ export default function ApplyForm({
               </p>
             </div>
           </div>
+          )
         )}
       </main>
     </div>
