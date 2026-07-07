@@ -431,3 +431,15 @@
 - 影響: `prisma/schema.prisma`に`Card.customServiceLevelId`/`customServiceLevelName`・`Application.agencyQuantity`を追加（db push、非破壊）。`completeStoreApplication`/`saveStoreInputDraft`のAPIシグネチャ変更（申込単位の`customServiceLevelId`引数を廃止し、カードごとの`customServiceLevelId`に統一。呼び出し元は`StoreInputForm.tsx`のみのため影響範囲は限定的）。`chargeOffSession()`の引数名変更（`upchargeId`→`referenceId`、呼び出し元2箇所を修正）。
 - 未対応: off-session課金が失敗した場合の再請求・顧客への通知UIは用意していない（`Payment.status=FAILED`のレコードを管理画面から目視確認し、個別対応する運用を前提とする）。「申込管理」の決済列は「いずれかの支払いが成功しているか」のみを見ており、代理申込特有の「先払い＋確定分請求の両方が完了しているか」は区別して表示していない。
 
+## ADR-0039: Upchargeフォームの簡略化（申告関係フィールド廃止・対象カードのラベル改善）
+
+- 日付: 2026-07-07 / 状態: Accepted（実装済）
+- 背景: ADR-0036でUpchargeを申込単位のカード選択式フォームに変更した際、対象カードの`<select>`ラベルが`card.cardName`のみだったため、同一申込内に類似名のカードが複数あると「入力後に何が何だか分からない」状態になっていた。また`psaDeclaredValue`（PSA申告額）・`psaFinalValue`（最終評価額）の2項目は運用上ほぼ使われておらず、実務では「対象カード・理由・Upcharge額」の3項目だけで足りるという指摘があった。
+- 決定:
+  - **`UpchargeForm.tsx`から`psaDeclaredValue`/`psaFinalValue`の入力欄を削除**し、対象カード（`cardId`）・理由（`reason`）・Upcharge額（`upchargeAmount`）の3項目のみに簡略化。各欄にラベルを追加して用途を明示。
+  - **`Upcharge.psaDeclaredValue`/`psaFinalValue`を`Int?`に変更**（非破壊のnullable化。過去データは保持したまま、以後の入力を必須から除外）。`createUpcharge()`の`upchargeSchema`・`prisma.upcharge.create()`からもこの2項目を削除。
+  - **対象カード選択の表示ラベルを`card.cardNo` + `card.cardName` + `card.tcgTitle` + 申告額に拡張**（`admin/applications/[id]/page.tsx`）。同一申込内の複数カードを一意に識別できるようにした。
+  - **複数カードへのUpchargeは、1件＝1カードとして「続けて登録」ボタンでカードごとに繰り返し登録する運用のまま**とした（`Upcharge`モデルは元々1レコード=1カード固定であり、金額按分や複数カード同時請求は実務上ケースバイケースで異なるため、スキーマ変更は行わず案内文をフォームに追記するに留めた）。
+- 影響: `prisma/schema.prisma`の`Upcharge.psaDeclaredValue`/`psaFinalValue`を`Int`→`Int?`に変更（`db push --accept-data-loss`で反映、既存データは変更なし）。`UpchargeForm.tsx`・`createUpcharge()`の引数から2項目を削除（呼び出し元はこのフォームのみのため影響範囲は限定的）。
+- 未対応: 複数カードへの一括Upcharge登録UI（1回の操作で複数カードに同時登録）は用意していない。将来的にニーズが増えた場合は、カード複数選択+共通理由/金額での一括作成アクションを別途検討する。
+

@@ -227,8 +227,6 @@ export async function advanceGroupStatus(
 const upchargeSchema = z.object({
   cardId: z.string(),
   reason: z.string().min(1),
-  psaDeclaredValue: z.number().int().min(0),
-  psaFinalValue: z.number().int().min(0),
   upchargeAmount: z.number().int().min(1),
 });
 
@@ -248,8 +246,6 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
       cardId: parsed.cardId,
       customerId: card.customerId,
       reason: parsed.reason,
-      psaDeclaredValue: parsed.psaDeclaredValue,
-      psaFinalValue: parsed.psaFinalValue,
       upchargeAmount: parsed.upchargeAmount,
       status: "PENDING",
     },

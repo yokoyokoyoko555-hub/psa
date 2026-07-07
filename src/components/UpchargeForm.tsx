@@ -21,8 +21,6 @@ export default function UpchargeForm({ cards }: { cards: { id: string; label: st
       await createUpcharge({
         cardId: fd.get("cardId") as string,
         reason: fd.get("reason") as string,
-        psaDeclaredValue: parseInt(fd.get("psaDeclaredValue") as string),
-        psaFinalValue: parseInt(fd.get("psaFinalValue") as string),
         upchargeAmount: parseInt(fd.get("upchargeAmount") as string),
       });
       setSuccess(true);
@@ -54,29 +52,35 @@ export default function UpchargeForm({ cards }: { cards: { id: string; label: st
     <form onSubmit={handleSubmit} className="space-y-2">
       {error && <div className="text-red-600 text-sm bg-red-50 p-3 rounded-lg">{error}</div>}
 
-      <select
-        name="cardId"
-        required
-        defaultValue=""
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-      >
-        <option value="" disabled>対象を選択してください</option>
-        {cards.map((c) => (
-          <option key={c.id} value={c.id}>{c.label}</option>
-        ))}
-      </select>
-      <input
-        type="text"
-        name="reason"
-        required
-        placeholder="Upcharge理由（例: 評価額が高額なため）"
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-      />
-      <div className="grid grid-cols-3 gap-2">
-        <input type="number" name="psaDeclaredValue" required min={0} placeholder="PSA申告額" className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-        <input type="number" name="psaFinalValue" required min={0} placeholder="最終評価額" className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-        <input type="number" name="upchargeAmount" required min={1} placeholder="Upcharge額" className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">対象カード</label>
+        <select
+          name="cardId"
+          required
+          defaultValue=""
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+        >
+          <option value="" disabled>対象を選択してください</option>
+          {cards.map((c) => (
+            <option key={c.id} value={c.id}>{c.label}</option>
+          ))}
+        </select>
       </div>
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">理由</label>
+        <input
+          type="text"
+          name="reason"
+          required
+          placeholder="例: 評価額が高額なため"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Upcharge額（円）</label>
+        <input type="number" name="upchargeAmount" required min={1} placeholder="例: 2000" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <p className="text-xs text-gray-400">※複数枚にUpchargeする場合は、登録完了後に「続けて登録」からカードごとに繰り返し登録してください（1件＝1カードの請求として処理されます）。</p>
       <button
         type="submit"
         disabled={loading}

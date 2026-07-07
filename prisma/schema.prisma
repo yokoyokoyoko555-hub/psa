@@ -531,8 +531,8 @@ model Upcharge {
   cardId                String
   customerId            String
   reason                String
-  psaDeclaredValue      Int // PSA申告額
-  psaFinalValue         Int // PSA最終評価額
+  psaDeclaredValue      Int? // PSA申告額（ADR-0039で入力必須項目から除外・履歴用に残置）
+  psaFinalValue         Int? // PSA最終評価額（ADR-0039で入力必須項目から除外・履歴用に残置）
   upchargeAmount        Int // 追加請求額
   status                UpchargeStatus @default(PENDING)
   stripePaymentIntentId String?        @unique
