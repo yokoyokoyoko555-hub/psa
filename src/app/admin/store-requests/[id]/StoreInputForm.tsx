@@ -141,6 +141,9 @@ export default function StoreInputForm({
   const autographActive = activeAutographTiers.length > 0;
   const allTiers = [...customServicePrices, ...activeAutographTiers];
   const fieldLabels = CARD_FIELD_LABELS[itemType] ?? CARD_FIELD_LABELS.TRADING_CARD;
+  // 顧客向けApplyForm.tsxのカード情報入力欄と同じ見た目にする。ADR-0039
+  const inputCls =
+    "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500";
 
   function applyBulkServiceLevel() {
     if (!bulkServiceLevelId) return;
@@ -320,11 +323,12 @@ export default function StoreInputForm({
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">サービスレベル</label>
               <select
                 value={c.customServiceLevelId}
                 onChange={(e) => update(i, "customServiceLevelId", e.target.value)}
-                className="sm:col-span-2 border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+                className={inputCls}
               >
                 <option value="">サービスレベルを選択</option>
                 {customServicePrices.map((p) => (
@@ -344,65 +348,90 @@ export default function StoreInputForm({
                   </optgroup>
                 )}
               </select>
-              <input
-                type={itemType === "COMIC_MAGAZINE" ? "text" : "number"}
-                placeholder={fieldLabels.releaseYearLabel}
-                value={c.releaseYear}
-                onChange={(e) => update(i, "releaseYear", e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              />
-              <input
-                placeholder="TCGタイトル（例: ポケモンカード）"
-                value={c.tcgTitle}
-                onChange={(e) => update(i, "tcgTitle", e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              />
-              <input
-                placeholder={fieldLabels.namePlaceholder}
-                list={fieldLabels.showCardNumberRarity ? "card-name-master" : undefined}
-                value={c.cardName}
-                onChange={(e) => update(i, "cardName", e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">{fieldLabels.releaseYearLabel}</label>
+                <input
+                  type={itemType === "COMIC_MAGAZINE" ? "text" : "number"}
+                  className={inputCls}
+                  placeholder={fieldLabels.releaseYearPlaceholder}
+                  value={c.releaseYear}
+                  onChange={(e) => update(i, "releaseYear", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">タイトル *</label>
+                <input
+                  className={inputCls}
+                  placeholder="例: ワンピースカードゲーム"
+                  value={c.tcgTitle}
+                  onChange={(e) => update(i, "tcgTitle", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">{fieldLabels.secondaryLabel}</label>
+                <input
+                  className={inputCls}
+                  list={itemType !== "COMIC_MAGAZINE" ? "language-suggestions" : undefined}
+                  placeholder={fieldLabels.secondaryPlaceholder}
+                  value={c.language}
+                  onChange={(e) => update(i, "language", e.target.value)}
+                />
+              </div>
               {fieldLabels.showCardNumberRarity && (
-                <>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">カード番号／型番</label>
                   <input
-                    placeholder="型番（任意）"
+                    className={inputCls}
+                    placeholder="例: OP01-003"
                     value={c.cardNumber}
                     onChange={(e) => update(i, "cardNumber", e.target.value)}
-                    className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
                   />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">{fieldLabels.nameLabel} *</label>
+                <input
+                  className={inputCls}
+                  placeholder={fieldLabels.namePlaceholder}
+                  list={fieldLabels.showCardNumberRarity ? "card-name-master" : undefined}
+                  value={c.cardName}
+                  onChange={(e) => update(i, "cardName", e.target.value)}
+                />
+              </div>
+              {fieldLabels.showCardNumberRarity && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">レアリティ</label>
                   <input
-                    placeholder="レアリティ（任意）"
+                    className={inputCls}
+                    placeholder="例: Lパラレル"
                     value={c.rarity}
                     onChange={(e) => update(i, "rarity", e.target.value)}
-                    className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
                   />
-                </>
+                </div>
               )}
-              <input
-                placeholder={fieldLabels.secondaryPlaceholder}
-                list={itemType !== "COMIC_MAGAZINE" ? "language-suggestions" : undefined}
-                value={c.language}
-                onChange={(e) => update(i, "language", e.target.value)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              />
-              <input
-                type="number"
-                placeholder={`申告価格（${currencySymbol(region)}）`}
-                value={c.declaredValue || ""}
-                min={1}
-                onChange={(e) => update(i, "declaredValue", parseInt(e.target.value) || 0)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              />
-              <input
-                type="number"
-                placeholder={fieldLabels.quantityLabel}
-                value={c.quantity}
-                min={1}
-                onChange={(e) => update(i, "quantity", parseInt(e.target.value) || 1)}
-                className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
-              />
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">{fieldLabels.quantityLabel} *</label>
+                <input
+                  type="number"
+                  min={1}
+                  className={inputCls}
+                  value={c.quantity || ""}
+                  onChange={(e) => update(i, "quantity", parseInt(e.target.value) || 0)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">申告金額（{currencySymbol(region)}） *</label>
+                <input
+                  type="number"
+                  min={1}
+                  className={inputCls}
+                  placeholder={region === "PSA_US" ? "例: 500" : "例: 50000"}
+                  value={c.declaredValue || ""}
+                  onChange={(e) => update(i, "declaredValue", parseInt(e.target.value) || 0)}
+                />
+              </div>
             </div>
           </div>
         ))}
