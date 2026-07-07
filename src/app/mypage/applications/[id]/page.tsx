@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getApplicationDetail } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
+import DifferentialPaymentPanel from "@/components/DifferentialPaymentPanel";
 import { formatMoney, formatMoneyIn } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -77,6 +78,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const application = await getApplicationDetail(id);
   if (!application) notFound();
   const isPaid = application.payments.some((p) => p.status === "SUCCEEDED");
+  const pendingPayment = application.payments.find((p) => p.status === "PENDING");
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -155,6 +157,14 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </p>
           </div>
         </div>
+
+        {pendingPayment && (
+          <DifferentialPaymentPanel
+            applicationId={application.id}
+            amount={pendingPayment.amount}
+            publishableKey={process.env.STRIPE_PUBLISHABLE_KEY!}
+          />
+        )}
 
         {/* Submission booking */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">

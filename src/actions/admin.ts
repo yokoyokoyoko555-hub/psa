@@ -10,7 +10,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
 import { formatMoneyIn, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { pricingSettingId } from "@/lib/pricing-setting-id";
-import { CardStatus } from "@prisma/client";
+import { CardStatus, Application, CustomServicePrice } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
@@ -466,24 +466,26 @@ const completeStoreSchema = z.object({
 });
 
 /**
- * 店舗（当社）が代理申込にカード明細・サービスを入力して確定する。カードごとに異なるサービスレベルを
- * 選択できる（複数レベルにまたがる代理入力に対応）。ADR-0038
- * 手数料あり(applyAgencyFee=true)で料金計算し、申込を SUBMITTED にする。
- * 先払い済み額(prepaidAmount)を超える残額は、登録済みカードへ即時off-session課金で確定分請求する。
+ * completeStoreApplication/previewStoreApplicationFeesで共通の検証＋料金計算。
+ * 確定（persist）はしない。ADR-0042
  */
-export async function completeStoreApplication(
-  input: z.infer<typeof completeStoreSchema>
-): Promise<{ success: boolean; error?: string }> {
-  const user = await requireAdminOrStaff();
-  const parsed = completeStoreSchema.safeParse(input);
-  if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
-
-  const app = await prisma.application.findUnique({
-    where: { id: parsed.data.applicationId },
-  });
-  if (!app) return { success: false, error: "申込が見つかりません" };
+async function validateAndCalculateStoreFees(
+  applicationId: string,
+  cardsInput: z.infer<typeof storeCardSchema>[]
+): Promise<
+  | { error: string }
+  | {
+      app: Application;
+      fees: Awaited<ReturnType<typeof calculateFees>>;
+      priceMap: Map<string, CustomServicePrice>;
+      snapshotServiceLevelId: string | null;
+      snapshotServiceLevelName: string;
+    }
+> {
+  const app = await prisma.application.findUnique({ where: { id: applicationId } });
+  if (!app) return { error: "申込が見つかりません" } as const;
   if (app.source !== "STORE" || app.status !== "DRAFT") {
-    return { success: false, error: "対応可能な代理申込ではありません" };
+    return { error: "対応可能な代理申込ではありません" } as const;
   }
 
   // 全itemType（トレカ含む）がCustomServicePriceを参照する。ADR-0025/0026
@@ -494,8 +496,6 @@ export async function completeStoreApplication(
     ? [app.itemType, "AUTOGRAPH"]
     : [app.itemType];
 
-  const cardsInput = parsed.data.cards;
-
   // カードごとに異なるサービスレベルを持ちうるため、参照される全タイアをまとめて取得する。ADR-0038
   const tierIds = [...new Set(cardsInput.map((c) => c.customServiceLevelId))];
   const prices = await prisma.customServicePrice.findMany({
@@ -503,7 +503,7 @@ export async function completeStoreApplication(
   });
   const priceMap = new Map(prices.map((p) => [p.id, p]));
   if (priceMap.size !== tierIds.length) {
-    return { success: false, error: "サービスが見つかりません" };
+    return { error: "サービスが見つかりません" } as const;
   }
 
   // 申告価格上限は各カードが選択したタイアの上限と比較する。ADR-0038
@@ -511,9 +511,8 @@ export async function completeStoreApplication(
     const price = priceMap.get(c.customServiceLevelId)!;
     if (price.maxDeclaredValue !== null && c.declaredValue > price.maxDeclaredValue) {
       return {
-        success: false,
         error: `申告価格上限（${formatMoneyInt(price.maxDeclaredValue, app.region)}）を超えるカードがあります（${c.cardName}: ${formatMoneyInt(c.declaredValue, app.region)}）。`,
-      };
+      } as const;
     }
   }
 
@@ -525,7 +524,7 @@ export async function completeStoreApplication(
       return !Number.isInteger(y) || y < 1900 || y > 2100 || String(y) !== c.releaseYear.trim();
     });
     if (badYear) {
-      return { success: false, error: "発行年は1900〜2100の範囲で入力してください（空欄でも構いません）" };
+      return { error: "発行年は1900〜2100の範囲で入力してください（空欄でも構いません）" } as const;
     }
   }
 
@@ -534,14 +533,13 @@ export async function completeStoreApplication(
 
   // Application用のサービスレベルsnapshot: 単一タイアのみならそのid/name、複数タイアにまたがる場合はidをnullにし名称を連結する。ADR-0038
   const distinctTierIds = [...new Set(cardsInput.map((c) => c.customServiceLevelId))];
-  const snapshotServiceLevelId = distinctTierIds.length === 1 ? distinctTierIds[0] : null;
+  const snapshotServiceLevelId = distinctTierIds.length === 1 ? (distinctTierIds[0] ?? null) : null;
   const snapshotServiceLevelName = distinctTierIds.map((id) => priceMap.get(id)!.name).join(" / ");
 
   // 当社入力は手数料あり。代理入力料金は「種類数 × 手数料」（同一カードは何枚でも1種）。
   // 種類数 = 入力されたカード行数（行ごとに別カードを想定）。[ADR-0020 / PROXY_PREPAY 段階1]
-  let fees;
   try {
-    fees = await calculateFees({
+    const fees = await calculateFees({
       region: app.region,
       itemType: app.itemType,
       returnMethod: app.returnMethod,
@@ -552,15 +550,68 @@ export async function completeStoreApplication(
       customerId: app.customerId,
       cardServiceLevels: cardsInput.map((c) => ({ customServiceLevelId: c.customServiceLevelId, quantity: c.quantity })),
     });
+    return { app, fees, priceMap, snapshotServiceLevelId, snapshotServiceLevelName } as const;
   } catch (err) {
     console.error("Failed to calculate fees:", err);
-    return { success: false, error: err instanceof Error ? err.message : "料金の計算に失敗しました" };
+    return { error: err instanceof Error ? err.message : "料金の計算に失敗しました" } as const;
   }
+}
+
+/**
+ * 明細入力を確定する前に、料金内訳をスタッフが確認するためのプレビュー計算。
+ * 確定（persist）はしない。代理入力手数料の「見積り時の種類数 → 実績の種類数」比較も返す。ADR-0042
+ */
+export async function previewStoreApplicationFees(
+  input: z.infer<typeof completeStoreSchema>
+): Promise<
+  | { success: false; error: string }
+  | {
+      success: true;
+      fees: Awaited<ReturnType<typeof calculateFees>>;
+      additionalAmount: number;
+      agencyTypeCountEstimated: number | null;
+      agencyTypeCountActual: number;
+    }
+> {
+  await requireAdminOrStaff();
+  const parsed = completeStoreSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
+
+  const result = await validateAndCalculateStoreFees(parsed.data.applicationId, parsed.data.cards);
+  if ("error" in result) return { success: false, error: result.error };
+
+  const additionalAmount = Math.max(0, Math.round(result.fees.totalAmount - result.app.prepaidAmount));
+  return {
+    success: true,
+    fees: result.fees,
+    additionalAmount,
+    agencyTypeCountEstimated: result.app.agencyQuantity,
+    agencyTypeCountActual: parsed.data.cards.length,
+  };
+}
+
+/**
+ * 店舗（当社）が代理申込にカード明細・サービスを入力して確定する。カードごとに異なるサービスレベルを
+ * 選択できる（複数レベルにまたがる代理入力に対応）。ADR-0038
+ * 手数料あり(applyAgencyFee=true)で料金計算し、申込を SUBMITTED にする。
+ * 先払い済み額(prepaidAmount)を超える残額は請求データとしてPENDING登録し、顧客がマイページで
+ * 内容確認のうえ能動的に支払う（自動課金はしない）。ADR-0042
+ */
+export async function completeStoreApplication(
+  input: z.infer<typeof completeStoreSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdminOrStaff();
+  const parsed = completeStoreSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
+
+  const cardsInput = parsed.data.cards;
+  const result = await validateAndCalculateStoreFees(parsed.data.applicationId, cardsInput);
+  if ("error" in result) return { success: false, error: result.error };
+  const { app, fees, priceMap, snapshotServiceLevelId, snapshotServiceLevelName } = result;
 
   // 先払い済み額(prepaidAmount)を超える残額のみ確定分として追加請求する。ADR-0038
   const additionalAmount = Math.max(0, Math.round(fees.totalAmount - app.prepaidAmount));
 
-  let paymentId: string | null = null;
   try {
     await prisma.$transaction(async (tx) => {
       await tx.application.update({
@@ -628,7 +679,7 @@ export async function completeStoreApplication(
       }
 
       if (additionalAmount > 0) {
-        const payment = await tx.payment.create({
+        await tx.payment.create({
           data: {
             customerId: app.customerId,
             applicationId: app.id,
@@ -638,7 +689,6 @@ export async function completeStoreApplication(
             description: `代理申込 確定分請求 ${app.applicationNo}`,
           },
         });
-        paymentId = payment.id;
       }
     });
   } catch (err) {
@@ -656,35 +706,7 @@ export async function completeStoreApplication(
     after: { totalAmount: fees.totalAmount, additionalAmount },
   });
 
-  // 先払い済み額を超える残額を、登録済みカードへ即時off-session課金で確定分請求する（Upchargeと同じ仕組み）。ADR-0038
-  if (paymentId && additionalAmount > 0) {
-    const [savedMethod, customer] = await Promise.all([
-      prisma.savedPaymentMethod.findFirst({ where: { customerId: app.customerId, isDefault: true } }),
-      prisma.customer.findUnique({ where: { id: app.customerId } }),
-    ]);
-    if (savedMethod && customer?.stripeCustomerId) {
-      try {
-        const pi = await chargeOffSession({
-          amount: toStripeAmount(additionalAmount),
-          currency: stripeCurrency(),
-          customerId: customer.stripeCustomerId,
-          paymentMethodId: savedMethod.stripePaymentMethodId,
-          description: `代理申込 確定分請求 ${app.applicationNo}`,
-          referenceId: paymentId,
-        });
-        await prisma.payment.update({
-          where: { id: paymentId },
-          data: { status: "SUCCEEDED", stripePaymentIntentId: pi.id, paidAt: new Date() },
-        });
-      } catch (err) {
-        console.error("Failed to charge additional amount for store application:", err);
-        await prisma.payment.update({
-          where: { id: paymentId },
-          data: { status: "FAILED", failureReason: err instanceof Error ? err.message : "課金に失敗しました" },
-        });
-      }
-    }
-  }
+  // 先払い済み額を超える残額は自動課金せず、顧客がマイページで内容確認のうえ能動的に支払う。ADR-0042
 
   // 代理入力完了メール（best-effort・SMTP未設定/無効なら送信されない）
   const cust = await prisma.customer.findUnique({ where: { id: app.customerId } });
