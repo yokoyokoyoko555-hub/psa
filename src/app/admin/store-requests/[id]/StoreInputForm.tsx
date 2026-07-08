@@ -26,6 +26,7 @@ const CARD_FIELD_LABELS: Record<
     nameLabel: string; // cardNameフィールドの表示名（カード名／パック名／巻数・号）
     namePlaceholder: string;
     quantityLabel: string;
+    quantityUnit: string;
     showCardNumberRarity: boolean;
   }
 > = {
@@ -38,6 +39,7 @@ const CARD_FIELD_LABELS: Record<
     nameLabel: "カード名",
     namePlaceholder: "例: リザードン",
     quantityLabel: "枚数",
+    quantityUnit: "枚",
     showCardNumberRarity: true,
   },
   UNOPENED_PACK: {
@@ -49,6 +51,7 @@ const CARD_FIELD_LABELS: Record<
     nameLabel: "パック名",
     namePlaceholder: "例: ブースターパック",
     quantityLabel: "枚数",
+    quantityUnit: "枚",
     showCardNumberRarity: false,
   },
   COMIC_MAGAZINE: {
@@ -60,6 +63,7 @@ const CARD_FIELD_LABELS: Record<
     nameLabel: "巻数・号",
     namePlaceholder: "例: 3巻",
     quantityLabel: "冊数",
+    quantityUnit: "冊",
     showCardNumberRarity: false,
   },
 };
@@ -478,9 +482,27 @@ export default function StoreInputForm({
         <div className="bg-white rounded-xl border border-brand-300 p-6 space-y-2">
           <h2 className="font-bold text-gray-900 mb-2">請求内容の確認（編集不可）</h2>
           <div className="text-sm space-y-1">
-            <div className="flex justify-between text-gray-600">
-              <span>鑑定料（サービスレベル）</span><span>{formatMoney(preview.fees.psaFeeTotal, region)}</span>
-            </div>
+            {allTiers
+              .map((tier) => {
+                const quantity = cards
+                  .filter((c) => c.customServiceLevelId === tier.id)
+                  .reduce((sum, c) => sum + c.quantity, 0);
+                return { tier, quantity };
+              })
+              .filter(({ quantity }) => quantity > 0)
+              .map(({ tier, quantity }) => (
+                <div key={tier.id} className="flex justify-between text-gray-600">
+                  <span>
+                    鑑定料（{tier.name}）
+                    <span className="text-xs text-gray-400">
+                      {" "}
+                      {formatMoney(tier.pricePerCard, region)}×{quantity}
+                      {fieldLabels.quantityUnit}
+                    </span>
+                  </span>
+                  <span>{formatMoney(tier.pricePerCard * quantity, region)}</span>
+                </div>
+              ))}
             <div className="flex justify-between text-gray-600">
               <span>代理入力手数料</span>
               <span>
