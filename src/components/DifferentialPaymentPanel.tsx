@@ -6,17 +6,9 @@ import { createDifferentialPaymentIntent, confirmDifferentialPayment } from "@/a
 import { formatMoneyIn } from "@/lib/currency";
 import StripeCardPayment from "./StripeCardPayment";
 
-type MinimalStripeClient = {
-  confirmCardPayment: (secret: string) => Promise<{
-    error?: { message?: string };
-    paymentIntent?: { id: string; status: string };
-  }>;
-};
-
 /**
  * 代理申込の確定分請求（PENDING）を、顧客が能動的に確認・支払うためのパネル。
- * 保存済みデフォルトカードがあればワンクリック決済、無ければStripeCardPaymentでカード入力。
- * 自動課金は行わない（ADR-0042）。
+ * 保存済みカードの使い回しはせず、都度StripeCardPaymentでカード情報を入力してもらう。ADR-0046
  */
 export default function DifferentialPaymentPanel({
   applicationId,
@@ -31,10 +23,7 @@ export default function DifferentialPaymentPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [paid, setPaid] = useState(false);
-  const [intent, setIntent] = useState<{
-    clientSecret: string;
-    savedCard: { brand: string; last4: string } | null;
-  } | null>(null);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
 
   async function handleStart() {
     setError("");
@@ -45,10 +34,10 @@ export default function DifferentialPaymentPanel({
       setError(result.error ?? "決済準備に失敗しました");
       return;
     }
-    setIntent({ clientSecret: result.clientSecret, savedCard: result.savedCard });
+    setClientSecret(result.clientSecret);
   }
 
-  async function handleConfirmed(paymentIntentId: string) {
+  async function handlePaid(paymentIntentId: string) {
     setError("");
     const result = await confirmDifferentialPayment({ applicationId, paymentIntentId });
     if (!result.success) {
@@ -57,27 +46,6 @@ export default function DifferentialPaymentPanel({
     }
     setPaid(true);
     router.refresh();
-  }
-
-  async function handlePaySavedCard() {
-    if (!intent) return;
-    setError("");
-    setLoading(true);
-    try {
-      if (!window.Stripe) throw new Error("Stripe.js の読み込みに失敗しました");
-      const stripe = window.Stripe(publishableKey) as unknown as MinimalStripeClient;
-      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(intent.clientSecret);
-      if (stripeError) {
-        setError(stripeError.message ?? "決済エラーが発生しました");
-        return;
-      }
-      const paymentIntentId = paymentIntent?.id ?? intent.clientSecret.split("_secret_")[0];
-      await handleConfirmed(paymentIntentId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "決済処理中にエラーが発生しました");
-    } finally {
-      setLoading(false);
-    }
   }
 
   if (paid) {
@@ -98,7 +66,7 @@ export default function DifferentialPaymentPanel({
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm mb-4">{error}</div>}
 
-      {!intent ? (
+      {!clientSecret ? (
         <button
           type="button"
           onClick={handleStart}
@@ -107,26 +75,12 @@ export default function DifferentialPaymentPanel({
         >
           {loading ? "準備中..." : "内容を確認してお支払いへ進む"}
         </button>
-      ) : intent.savedCard ? (
-        <div className="space-y-3">
-          <p className="text-sm text-gray-600">
-            登録済みのカード（{intent.savedCard.brand} •••• {intent.savedCard.last4}）でお支払いします。
-          </p>
-          <button
-            type="button"
-            onClick={handlePaySavedCard}
-            disabled={loading}
-            className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
-          >
-            {loading ? "決済処理中..." : `${formatMoneyIn(amount, "JPY")} を支払う`}
-          </button>
-        </div>
       ) : (
         <StripeCardPayment
-          clientSecret={intent.clientSecret}
+          clientSecret={clientSecret}
           publishableKey={publishableKey}
           buttonLabel={`${formatMoneyIn(amount, "JPY")} を支払う`}
-          onPaid={handleConfirmed}
+          onPaid={handlePaid}
           onError={setError}
         />
       )}

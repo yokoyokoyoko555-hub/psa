@@ -519,3 +519,14 @@
 - 影響: `lib/application-status.ts`の`computeDisplayStatus()`のシグネチャ変更（破壊的）。呼び出し元は2箇所のみ（`mypage/applications/page.tsx`・`admin/applications/page.tsx`）で、いずれも対応済み。スキーマ変更なし。
 - 未対応: 1申込内でカードの返送進捗が混在するケース（一部のみ返送準備中など）の個別表示は行わない（全カードが揃った時点でのみ段階が進む）。
 
+## ADR-0046: 代理申込の差額決済で、保存カードのワンクリック支払いを廃止しカード入力に統一
+
+- 日付: 2026-07-08 / 状態: Accepted（実装済）
+- 背景: ADR-0042で実装した`DifferentialPaymentPanel`の「保存済みカードでワンクリック支払い」経路は、`window.Stripe`を参照するだけでStripe.jsのスクリプト自体を読み込んでおらず（`StripeCardPayment.tsx`側のuseEffectでしか読み込まれないため、保存カード経路では実行されない）、実際に押すと「Stripe.js の読み込みに失敗しました」で必ず失敗するバグがあった。また、保存済みカードを自動的に使い回すのではなく、顧客が支払いのたびにカード情報を入力し直せるようにしたいという要望があった。
+- 決定:
+  - **`DifferentialPaymentPanel.tsx`から保存カードのワンクリック支払い経路を削除**し、常に既存の`StripeCardPayment.tsx`（カード入力欄＋`confirmCardPayment`）を使う一本の経路に統一。これによりStripe.js読み込みバグも解消される（`StripeCardPayment.tsx`は初回代理入力先払い等で実績のある読み込み処理を持つため）。
+  - **`actions/payment.ts`の`createDifferentialPaymentIntent()`から、保存済みデフォルトカードの取得・PaymentIntentへの事前アタッチ（`paymentMethodId`）を削除**。返り値から`savedCard`も削除。
+  - **`lib/stripe.ts`の`createPaymentIntent()`から未使用になった`paymentMethodId`引数を削除**（呼び出し元がこの用途のみだったため）。
+- 影響: `DifferentialPaymentPanel.tsx`・`actions/payment.ts`・`lib/stripe.ts`の3ファイルのみ。`chargeOffSession()`（`createUpcharge`が使用）の`paymentMethodId`引数とは別物で影響なし。スキーマ変更なし。
+- 未対応: 特になし。
+

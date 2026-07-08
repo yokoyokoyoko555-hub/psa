@@ -33,9 +33,6 @@ export async function createPaymentIntent(params: {
   customerId: string;
   applicationId: string;
   description: string;
-  /** 保存済みカードを事前アタッチする場合に指定。クライアントはconfirmCardPayment(clientSecret)のみでよくなる
-   * （カード再入力不要）。顧客が能動的にボタンを押して確定するオンセッション決済のため、off_session化はしない。ADR-0042 */
-  paymentMethodId?: string;
 }) {
   return getStripe().paymentIntents.create({
     amount: params.amount,
@@ -47,7 +44,6 @@ export async function createPaymentIntent(params: {
       applicationId: params.applicationId,
     },
     payment_method_types: ["card"],
-    ...(params.paymentMethodId ? { payment_method: params.paymentMethodId } : {}),
   });
 }
 

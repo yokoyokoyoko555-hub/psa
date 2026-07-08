@@ -47,8 +47,8 @@ export async function deletePaymentMethod(methodId: string) {
 
 /**
  * 代理申込の確定分請求（PENDING）に対し、顧客が能動的に支払うためのPaymentIntentを作成する。
- * 保存済みのデフォルトカードがあれば事前アタッチし、クライアントはconfirmCardPayment(clientSecret)のみで
- * 支払える（カード再入力不要）。無ければクライアント側でカード入力欄を表示する。ADR-0042
+ * 保存済みカードは事前アタッチしない（同じカードの使い回しではなく、都度カード入力欄で
+ * 入力してもらう。同じカードを使い回したい場合もその場で番号を入力し直せば可）。ADR-0046
  */
 export async function createDifferentialPaymentIntent(applicationId: string) {
   const customer = await getCustomerSession();
@@ -69,17 +69,12 @@ export async function createDifferentialPaymentIntent(applicationId: string) {
     return { success: false, error: "決済情報の準備ができていません。サポートまでご連絡ください。" } as const;
   }
 
-  const savedMethod = await prisma.savedPaymentMethod.findFirst({
-    where: { customerId: customer.id, isDefault: true },
-  });
-
   const pi = await createPaymentIntent({
     amount: toStripeAmount(payment.amount),
     currency: stripeCurrency(),
     customerId: customer.stripeCustomerId,
     applicationId,
     description: payment.description ?? `代理申込 確定分請求 ${application.applicationNo}`,
-    paymentMethodId: savedMethod?.stripePaymentMethodId,
   });
 
   await prisma.payment.update({
@@ -91,7 +86,6 @@ export async function createDifferentialPaymentIntent(applicationId: string) {
     success: true,
     clientSecret: pi.client_secret!,
     amount: payment.amount,
-    savedCard: savedMethod ? { brand: savedMethod.brand, last4: savedMethod.last4 } : null,
   } as const;
 }
 
