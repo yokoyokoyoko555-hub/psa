@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 
 export const metadata = { title: "個人情報保護方針 | トレカビンクス" };
 
@@ -77,6 +78,8 @@ export default function PrivacyPage() {
           <p className="text-xs text-gray-400 pt-4">※ 本方針は叩き台です。事業者情報・窓口・保有期間等を確定し、公開前に弁護士等による確認を行ってください。</p>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { verifyRegistrationToken } from "@/actions/customer";
 import AuthScreen from "@/components/AuthScreen";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import RegisterForm from "./RegisterForm";
 
 export default async function RegisterPage({
@@ -38,6 +39,7 @@ export default async function RegisterPage({
             </Link>
           </div>
         </div>
+        <Footer />
       </div>
     );
   }

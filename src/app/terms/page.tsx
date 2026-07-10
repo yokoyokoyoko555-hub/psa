@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 
 export const metadata = { title: "利用規約 | トレカビンクス" };
 
@@ -240,6 +241,8 @@ export default function TermsPage() {
           </Chapter>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }

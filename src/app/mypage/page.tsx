@@ -6,6 +6,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import { getMyApplications } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -197,6 +198,8 @@ export default async function MypagePage() {
           </div>
         </div>
       </main>
+
+      <Footer />
     </div>
   );
 }
