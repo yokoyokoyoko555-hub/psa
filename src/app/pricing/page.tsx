@@ -54,7 +54,7 @@ export default async function PricingPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h1 className="text-xl font-bold text-gray-900 mb-2">PSA鑑定代行サービス 料金表</h1>
           <p className="text-sm text-gray-600">
-            下記の鑑定料に加えて、送料・保険料、事務手数料（全申込）、代理入力をご依頼の場合は代理入力料金がかかります。表示価格は税抜、消費税10%が別途かかります。
+            下記の鑑定料に加えて、送料・保険料、事務手数料（全申込）、代理入力をご依頼の場合は代理入力料金がかかります。表示価格はすべて消費税込みです。
           </p>
         </div>
 
