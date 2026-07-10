@@ -262,22 +262,25 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <p className="text-xs text-gray-400 text-right">
               （内消費税 {formatMoneyIn(application.taxAmount, "JPY")}）
             </p>
+
+            {prepayPayment && application.agencyQuantity != null && application.agencyQuantity > 0 && (
+              <>
+                <div className="flex justify-between text-gray-500 text-xs">
+                  <span>先払い済み額</span><span>{formatMoneyIn(application.prepaidAmount, "JPY")}</span>
+                </div>
+                <div className="flex justify-between font-bold text-brand-700 border-t border-gray-200 pt-1 mt-1">
+                  <span>顧客への請求額（差額）</span>
+                  <span>
+                    {formatMoneyIn(
+                      pendingPayment?.amount ?? Math.max(application.totalAmount - application.prepaidAmount, 0),
+                      "JPY"
+                    )}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
-
-        {prepayPayment && application.agencyQuantity != null && application.agencyQuantity > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-bold text-gray-900 mb-3">お支払い済みの料金</h2>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm">
-              <span className="text-gray-600">
-                {format(new Date(prepayPayment.paidAt ?? prepayPayment.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
-                　代理入力料金　{application.agencyQuantity}件×
-                {formatMoneyIn(Math.round(application.prepaidAmount / application.agencyQuantity), "JPY")}
-              </span>
-              <span className="font-bold text-gray-900">{formatMoneyIn(application.prepaidAmount, "JPY")}</span>
-            </div>
-          </div>
-        )}
 
         {pendingPayment && (
           <DifferentialPaymentPanel
