@@ -170,6 +170,7 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 | admin.ts | getDashboardStats / updateCardStatus / createPsaSubmissionGroup / submitPsaGroup / recordGrade / createUpcharge / getAdminCards / getAdminCustomers | ADMIN or STAFF |
 | submission-booking.ts | upsertSubmissionBooking / cancelSubmissionBooking / cancelSubmissionBookingByAdmin | 顧客 / ADMIN or STAFF |
 | inquiry.ts | createInquiry / getInquiries / getInquiryDetail / replyToInquiry | 顧客 / ADMIN or STAFF |
+| legal-document.ts | getLegalDocument / ensureLegalDocument / getLegalDocuments / updateLegalDocument | 公開 / ADMIN or STAFF |
 | payment.ts | deletePaymentMethod | 顧客 |
 
 ---

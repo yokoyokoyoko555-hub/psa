@@ -6,7 +6,7 @@
 
 ---
 
-## モデル一覧（18。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)参照）
+## モデル一覧（19。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)参照）
 
 | モデル / テーブル | 役割 | 主なカラム・ポイント |
 |------------------|------|---------------------|
@@ -32,6 +32,7 @@
 | `OperationLog` / operation_logs | 操作ログ | `userId`/`customerId`, `action`, `targetType`/`targetId`, `before`/`after`(Json), index×3 |
 | `SavedPaymentMethod` / saved_payment_methods | 保存カード | `stripePaymentMethodId`(uniq), `brand`/`last4`, `expMonth`/`expYear`, `isDefault` |
 | `Inquiry` / inquiries | 顧客お問い合わせ | `subject`/`body`, `status`(UNREAD/READ/REPLIED), `replyText`/`repliedAt`/`repliedBy`(userId)。[ADR-0055](DECISIONS.md) |
+| `LegalDocument` / legal_documents | 規程文書（利用規約/個人情報保護方針/カスハラポリシー） | `id`(固定スラッグ: terms/privacy/harassment_policy), `title`, `body`(簡易Markdown), `establishedAt`(制定日), `revisedAt`(改訂日?), `updatedBy`。管理画面で編集可能。[ADR-0057](DECISIONS.md) |
 
 ---
 

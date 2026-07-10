@@ -791,6 +791,21 @@ model Notification {
   @@map("notifications")
 }
 
+// ===== LEGAL DOCUMENTS (利用規約・個人情報保護方針・カスタマーハラスメントポリシー等) =====
+
+// idは固定スラッグ("terms"/"privacy"/"harassment_policy")で運用し、管理画面から編集する。ADR-0057
+model LegalDocument {
+  id            String    @id
+  title         String
+  body          String // 簡易Markdown（#/##/### 見出し、* 箇条書き、**太字**、---区切り）。src/lib/legal-markdown.tsxで描画
+  establishedAt DateTime // 制定日
+  revisedAt     DateTime? // 改訂日（null=未改訂）
+  updatedAt     DateTime  @updatedAt
+  updatedBy     String? // 編集した管理者・スタッフのuserId
+
+  @@map("legal_documents")
+}
+
 // ===== INQUIRIES (お問い合わせ) =====
 
 model Inquiry {

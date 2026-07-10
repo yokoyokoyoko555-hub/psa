@@ -645,4 +645,17 @@
 - 影響: 新規ファイル`src/app/pricing/page.tsx`のみ追加、既存`src/app/mypage/page.tsx`にカード1件追加。スキーマ・Server Action変更なし（既存データの読み取りのみ）。
 - 未対応: フッターへのリンクは追加していない（ユーザー指示がマイページのカード化のみだったため）。必要であれば別途追加を検討。
 
+## ADR-0057: 規程文書（利用規約・個人情報保護方針・カスハラポリシー）をDB化し管理画面から編集可能に
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: `/terms`・`/privacy`・`/harassment-policy`はいずれもJSXに条文をハードコードしており、内容変更・制定日/改訂日の追加にはコード変更とデプロイが必要だった。個人情報保護方針は差し替え、あわせて全規程を管理画面から編集できるようにし、制定日・改訂日を記録したいという要望があった。
+- 決定:
+  - **`LegalDocument`モデルを新設**（`id`は固定スラッグ`"terms"`/`"privacy"`/`"harassment_policy"`、`title`・`body`（簡易Markdown）・`establishedAt`（制定日・必須）・`revisedAt`（改訂日・任意）・`updatedBy`）。
+  - **本文は外部ライブラリを追加せず自前の最小Markdownパーサー`src/lib/legal-markdown.tsx`（`renderLegalMarkdown()`）でJSX化**。対応記法は`#`/`##`/`###`見出し・`* `箇条書き・`**太字**`・空行区切り段落・`---`（区切り線として非表示）のみ。管理画面のテキストエリアでこの記法により編集する。
+  - **`src/lib/legal-document-defaults.ts`に3文書の初期値（Markdown化した条文）を用意**。既存の`terms.tsx`（14章30条）・`harassment-policy.tsx`（7セクション）のハードコード文言をそのままMarkdown変換し、`privacy`はユーザー提供の新テキスト（14条）を採用。`ensureLegalDocument(id)`（`src/actions/legal-document.ts`）が、DBに行が無い場合のみこの初期値を投入する（既存の管理画面編集内容を上書きしない冪等設計。`ensureTradingCardCustomPrices()`と同じパターン）。
+  - **`src/components/LegalDocumentView.tsx`を新設**し、`/terms`・`/privacy`・`/harassment-policy`の3ページを`getLegalDocument(id)`→`renderLegalMarkdown()`で描画する薄いラッパーに置き換え。タイトル下に制定日、改訂日があれば併記する。
+  - **`/admin/legal-documents`を新設**（サイドバーに「規程管理」を追加）。3文書を`<details>`アコーディオンで一覧し、`LegalDocumentForm.tsx`（タイトル・本文テキストエリア・制定日/改訂日の日付入力）から`updateLegalDocument()`で更新する。
+- 影響: `prisma/schema.prisma`（`LegalDocument`モデル追加、非破壊）。新規: `src/actions/legal-document.ts`・`src/lib/legal-markdown.tsx`・`src/lib/legal-document-defaults.ts`・`src/components/LegalDocumentView.tsx`・`src/app/admin/legal-documents/`。置き換え: `src/app/terms/page.tsx`・`src/app/privacy/page.tsx`・`src/app/harassment-policy/page.tsx`（表示内容は既存と同等、privacyのみ内容差し替え）。`src/app/admin/layout.tsx`にナビ追加。
+- 未対応: Markdown記法は独自の最小サブセットのみ（表・リンク・ネストしたリスト等は非対応）。本文の変更履歴（誰がいつ何を変えたか）は`OperationLog`の`after`にタイトルのみ記録され、差分そのものは保存していない。
+
 

@@ -31,6 +31,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin/psa-groups", label: "PSA提出グループ", icon: "📦" },
     { href: "/admin/card-masters", label: "カード名称マスタ", icon: "🗂️" },
     { href: "/admin/mail-templates", label: "メールテンプレート", icon: "✉️" },
+    { href: "/admin/legal-documents", label: "規程管理", icon: "📜" },
     { href: "/admin/settings", label: "設定", icon: "⚙️" },
     { href: "/admin/account", label: "アカウント", icon: "🔑" },
   ];
