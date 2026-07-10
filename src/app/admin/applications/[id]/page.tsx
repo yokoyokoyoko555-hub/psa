@@ -362,12 +362,28 @@ export default async function AdminApplicationDetailPage({
                   <dd className="font-mono">{application.psaSubmissionGroup.groupNo}</dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500 text-xs">PSA Submission ID</dt>
-                  <dd className="font-mono font-bold">{application.psaSubmissionGroup.psaSubmissionId ?? "—"}</dd>
+                  <dt className="text-gray-500 text-xs">提出先</dt>
+                  <dd className="font-medium text-gray-900">
+                    {application.psaSubmissionGroup.region
+                      ? (REGION_LABELS[application.psaSubmissionGroup.region] ?? application.psaSubmissionGroup.region)
+                      : "—"}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500 text-xs">PSA Order ID（申請番号）</dt>
-                  <dd className="font-mono">{application.psaSubmissionGroup.psaOrderId ?? "—"}</dd>
+                  <dt className="text-gray-500 text-xs">アイテム種別</dt>
+                  <dd className="font-medium text-gray-900">
+                    {application.psaSubmissionGroup.itemType
+                      ? (ITEM_TYPE_LABELS[application.psaSubmissionGroup.itemType] ?? application.psaSubmissionGroup.itemType)
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 text-xs">サービスレベル</dt>
+                  <dd className="font-medium text-gray-900">{application.psaSubmissionGroup.customServiceLevelName ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 text-xs">申込番号（Sub#）</dt>
+                  <dd className="font-mono font-bold">{application.psaSubmissionGroup.psaSubmissionId ?? "—"}</dd>
                 </div>
               </dl>
             ) : (

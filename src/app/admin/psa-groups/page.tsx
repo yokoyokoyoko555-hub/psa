@@ -7,9 +7,21 @@ import Link from "next/link";
 import CreateGroupForm from "./CreateGroupForm";
 import SubmitGroupForm from "./SubmitGroupForm";
 import AdvanceGroupStatusForm from "./AdvanceGroupStatusForm";
+import type { ServiceRegion } from "@prisma/client";
+
+const REGION_LABELS: Record<ServiceRegion, string> = {
+  PSA_JP: "PSA 日本",
+  PSA_US: "PSA US",
+};
+
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  TRADING_CARD: "トレーディングカード",
+  UNOPENED_PACK: "未開封パック",
+  COMIC_MAGAZINE: "コミック・マガジン",
+};
 
 export default async function PsaGroupsPage() {
-  const [groups, ungrouped, progressStatuses] = await Promise.all([
+  const [groups, ungrouped, progressStatuses, customServicePrices] = await Promise.all([
     prisma.psaSubmissionGroup.findMany({
       include: {
         applications: {
@@ -35,13 +47,14 @@ export default async function PsaGroupsPage() {
       orderBy: { createdAt: "asc" },
     }),
     prisma.psaProgressStatus.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.customServicePrice.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
   ]);
 
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">PSA提出グループ管理</h1>
       <p className="text-sm text-gray-500 mb-6">
-        複数の申込を1つのPSA提出グループにまとめ、PSAサブミッションID・申請番号(Order ID)を紐づけます。
+        複数の申込を1つのPSA提出グループにまとめ、提出先・アイテム種別・サービスレベル・申込番号(Sub#)を紐づけます。
       </p>
 
       {/* Ungrouped applications */}
@@ -75,9 +88,11 @@ export default async function PsaGroupsPage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 text-sm mb-4">
-              <div><p className="text-gray-500">PSA Submission ID</p><p className="font-mono">{group.psaSubmissionId ?? "—"}</p></div>
-              <div><p className="text-gray-500">PSA Order ID（申請番号）</p><p className="font-mono">{group.psaOrderId ?? "—"}</p></div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm mb-4">
+              <div><p className="text-gray-500">提出先</p><p>{group.region ? REGION_LABELS[group.region] : "—"}</p></div>
+              <div><p className="text-gray-500">アイテム種別</p><p>{group.itemType ? ITEM_TYPE_LABELS[group.itemType] : "—"}</p></div>
+              <div><p className="text-gray-500">サービスレベル</p><p>{group.customServiceLevelName ?? "—"}</p></div>
+              <div><p className="text-gray-500">申込番号（Sub#）</p><p className="font-mono">{group.psaSubmissionId ?? "—"}</p></div>
               <div><p className="text-gray-500">提出日</p><p>{group.submittedAt ? format(new Date(group.submittedAt), "yyyy/MM/dd") : "—"}</p></div>
             </div>
 
@@ -94,7 +109,7 @@ export default async function PsaGroupsPage() {
             </div>
 
             {group.status === "PREPARING" && (
-              <SubmitGroupForm groupId={group.id} />
+              <SubmitGroupForm groupId={group.id} customServicePrices={customServicePrices} />
             )}
             {group.status !== "PREPARING" && (
               <AdvanceGroupStatusForm

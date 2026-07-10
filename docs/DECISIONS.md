@@ -575,3 +575,27 @@
 - 影響: `mypage/applications/[id]/page.tsx`のみ変更。新規クエリ・スキーマ変更なし。
 - 未対応: 「利用規約への同意」チェックボックスのような同意UIそのものは追加していない（代理申込は依頼時点で既に同意済みのため、確認表示のみで足りると判断）。
 
+## ADR-0051: PSA提出グループの提出情報を「PSA Submission ID / Order ID」から「提出先・アイテム種別・サービスレベル・申込番号(Sub#)」に変更
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: PSA提出グループの提出時入力は、PSAが発行する2つの自由記述ID（Submission ID / Order ID）を記録するだけで、そのグループが実際にどのPSAサービス（提出先リージョン・アイテム種別・サービスレベル）に対する提出なのかを構造化して記録していなかった。運用上、提出先・アイテム種別・サービスレベルの組み合わせで管理したいという要望があり、Order IDは実運用で使われていなかった。
+- 決定:
+  - **`PsaSubmissionGroup`に`region`（`ServiceRegion?`）・`itemType`（`ItemType?`）・`customServiceLevelId`/`customServiceLevelName`（`String?`、Application/Cardと同じスナップショット方式）を追加**。既存の`psaSubmissionId`はそのまま「申込番号（Sub#）」として使い続ける。
+  - **`psaOrderId`列は削除せず残置**（破壊的変更を避けるため。ADR-0021由来の既存データ保持）が、新しい提出フォーム・一覧表示からは参照しない（未使用として扱う）。
+  - **`SubmitGroupForm.tsx`を全面差し替え**: PSA Submission ID/Order IDのテキスト入力2つを廃止し、「提出先」（PSA日本/PSA US選択）→「アイテム種別」（PSA日本は常にトレーディングカード固定、PSA USはトレーディングカード/未開封パック/コミック・マガジンから選択）→「サービスレベル」（選択した提出先・アイテム種別で`CustomServicePrice`を絞り込んだセレクト。ApplyForm.tsxの`tierOptionsToShow`と同じフィルタロジック）→「申込番号（Sub#）」の4項目+提出日に変更。
+  - `submitPsaGroup`にzodバリデーションを追加（`region`/`itemType`/`customServiceLevelId`/`customServiceLevelName`/`psaSubmissionId`/`submittedAt`必須）。
+  - グループ一覧（`admin/psa-groups/page.tsx`）の表示も同じ4項目+提出日に変更。
+- 影響: `prisma/schema.prisma`（`PsaSubmissionGroup`にカラム追加のみ、非破壊）、`src/actions/admin.ts`、`src/app/admin/psa-groups/page.tsx`、`src/app/admin/psa-groups/SubmitGroupForm.tsx`。Google Drive上の開発環境では`prisma db push`が実行できないため、本番Railwayの`npm start`（`prisma db push --accept-data-loss && next start`）実行時に自動反映される。
+- 未対応: 既存の`PREPARING`以外（`SUBMITTED`以降）のグループは`region`/`itemType`/`customServiceLevelName`が`null`のまま（表示は「—」）。過去分の遡及入力機能は未実装。
+
+## ADR-0052: 簡易ステータス（`computeDisplayStatus()`）の固定値を`DISPLAY_STATUS`定数として明文化
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: 顧客画面・管理画面共通で使う「簡易ステータス」（申込完了／受取完了／発送準備中／発送完了／返送準備中／返送完了等）は、`computeDisplayStatus()`関数の分岐内にインラインの文字列リテラルとして散在しており、正式な一覧としてコード上に定義されていなかった。人間が意図した正しいフロー（自己入力: 下書き→申込完了→受取完了→発送準備中→発送完了→カスタムのPSA進捗ステータス→返送準備中→返送完了／代理入力: 申込完了→入力完了→支払完了→発送準備中→発送完了→カスタムのPSA進捗ステータス→返送準備中→返送完了、代理入力は発送準備中以降は自己入力と共通フローに合流）を再確認し、コード上の正式な定数として固定する必要があった。
+- 決定:
+  - **`src/lib/application-status.ts`に`DISPLAY_STATUS`定数（`as const`オブジェクト）を追加**し、`DRAFT`/`APPLIED`/`RECEIVED`/`INPUT_DONE`/`PAID`/`PREPARING_SHIPMENT`/`SHIPPED`/`RETURN_PREPARING`/`RETURNED`の9つのキーに日本語ラベルを割り当てた。`DRAFT`（下書き）は`computeDisplayStatus()`自体が返す値ではない（呼び出し元が`status==="DRAFT"`を個別に扱う既存設計を維持）が、フロー全体を示す定数として含めた。
+  - `computeDisplayStatus()`の戻り値の型を`string`から`DisplayStatus`（`FixedDisplayStatus | (string & {})`）に変更し、関数内の文字列リテラルをすべて`DISPLAY_STATUS.*`参照に置き換えた（カスタムのPSA進捗ステータス名は管理画面での自由入力のため、固定値には含まれず`string`として扱う）。
+  - 分岐系（`CardStatus`の`UPCHARGE_UNPAID`/`UPCHARGE_PAID`/`PROBLEM`/`CANCELLED`）・カード単位の17段階`CardStatus`enum自体は変更していない（対象外）。
+- 影響: `src/lib/application-status.ts`のみ変更。`computeDisplayStatus()`の戻り値の実際の文字列（表示内容）に変更はなく、既存の呼び出し元（`mypage/applications/page.tsx`・`admin/applications/page.tsx`・`ApplicationCenter.tsx`のStatusBadge等）は`string`を受け取れる箇所のため型変更のみで動作に影響しない。
+- 未対応: なし。
+

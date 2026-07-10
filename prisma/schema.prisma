@@ -473,8 +473,12 @@ model CardStatusHistory {
 model PsaSubmissionGroup {
   id              String    @id @default(cuid())
   groupNo         String    @unique // PSG-YYYYMMDD-XXX
-  psaSubmissionId String?
-  psaOrderId      String?
+  region                 ServiceRegion? // 提出先（PSA日本 / PSA US）。提出時に記録。ADR-0051
+  itemType               ItemType?      // アイテム種別（提出先に応じた選択）。ADR-0051
+  customServiceLevelId   String? // 選択したCustomServicePrice（動的サービスタイア）
+  customServiceLevelName String? // スナップショット（タイア削除・改名後も過去グループの表示を保つ）
+  psaSubmissionId String? // 申込番号（Sub#）
+  psaOrderId      String? // 旧: PSA Order ID（未使用・後方互換で残置）。ADR-0051
   submittedAt     DateTime?
   psaReceivedAt   DateTime?
   returnedAt      DateTime?

@@ -18,7 +18,7 @@
 | `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `itemType`(TRADING_CARD/UNOPENED_PACK/COMIC_MAGAZINE。JPは常にTRADING_CARD。[ADR-0023](DECISIONS.md)), `source`(CUSTOMER/STORE), 返送先住所/電話（暗号化）, 代理申込の選択保存カードID, 料金内訳(`autographFeeTotal`含む), `status` |
 | `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`(String, 自由記述)/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金, `autographRequested`/`autographFee`(オートグラフ) |
 | `CardStatusHistory` / card_status_histories | ステータス履歴 | `status`, `changedBy`(userId or customerId), Cardへ Cascade |
-| `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `psaSubmissionId`/`psaOrderId`, `status` |
+| `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `region`/`itemType`/`customServiceLevelId`/`customServiceLevelName`(提出時に記録。[ADR-0051](DECISIONS.md)), `psaSubmissionId`(申込番号/Sub#), `psaOrderId`(旧Order ID・未使用で残置), `status` |
 | `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(Float, JP=円/US=USD小数2桁), `currency`(jpy/usd), `status`(PaymentStatus) |
 | `Upcharge` / upcharges | 追加請求 | `psaDeclaredValue`/`psaFinalValue`/`upchargeAmount`, `status`(UpchargeStatus) |
 | `ServicePrice` / service_prices | 旧トレーディングカード料金（固定enum・**レガシー**） | `@@unique([serviceLevel, region, itemType])`。ADR-0026で`CustomServicePrice(category=TRADING_CARD)`へ移行済み。アプリロジックからは参照されず、過去データ保持・移行元データとして残置 |

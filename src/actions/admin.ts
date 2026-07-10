@@ -10,7 +10,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
 import { formatMoneyIn, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { pricingSettingId } from "@/lib/pricing-setting-id";
-import { CardStatus, Application, CustomServicePrice } from "@prisma/client";
+import { CardStatus, Application, CustomServicePrice, ServiceRegion, ItemType } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
@@ -178,23 +178,34 @@ export async function createPsaSubmissionGroup(applicationIds: string[]) {
   return group;
 }
 
-/** グループにPSAサブミッションID・申請番号(order ID)・提出日を記録するのみ（紐づけ）。ADR-0021 */
-export async function submitPsaGroup(
-  groupId: string,
-  params: { psaSubmissionId: string; psaOrderId: string; submittedAt: Date }
-) {
+const submitPsaGroupSchema = z.object({
+  region: z.nativeEnum(ServiceRegion),
+  itemType: z.nativeEnum(ItemType),
+  customServiceLevelId: z.string().min(1),
+  customServiceLevelName: z.string().min(1),
+  psaSubmissionId: z.string().min(1),
+  submittedAt: z.coerce.date(),
+});
+
+/** グループに提出先・アイテム種別・サービスレベル・申込番号(Sub#)・提出日を記録する（紐づけ）。ADR-0021/0051 */
+export async function submitPsaGroup(groupId: string, params: z.infer<typeof submitPsaGroupSchema>) {
   await requireAdminOrStaff();
+  const parsed = submitPsaGroupSchema.parse(params);
 
   const group = await prisma.psaSubmissionGroup.update({
     where: { id: groupId },
     data: {
-      psaSubmissionId: params.psaSubmissionId,
-      psaOrderId: params.psaOrderId,
-      submittedAt: params.submittedAt,
+      region: parsed.region,
+      itemType: parsed.itemType,
+      customServiceLevelId: parsed.customServiceLevelId,
+      customServiceLevelName: parsed.customServiceLevelName,
+      psaSubmissionId: parsed.psaSubmissionId,
+      submittedAt: parsed.submittedAt,
       status: "SUBMITTED",
     },
   });
 
+  revalidatePath("/admin/psa-groups");
   return group;
 }
 
