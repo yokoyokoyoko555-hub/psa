@@ -599,3 +599,50 @@
 - 影響: `src/lib/application-status.ts`のみ変更。`computeDisplayStatus()`の戻り値の実際の文字列（表示内容）に変更はなく、既存の呼び出し元（`mypage/applications/page.tsx`・`admin/applications/page.tsx`・`ApplicationCenter.tsx`のStatusBadge等）は`string`を受け取れる箇所のため型変更のみで動作に影響しない。
 - 未対応: なし。
 
+## ADR-0053: 管理画面の申込詳細ページに簡易ステータスのステッパーを常時表示
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: `admin/applications/[id]/page.tsx`（申込詳細）は、`Application.status`（`ApplicationStatus`enum: DRAFT/SUBMITTED/IN_PROGRESS/COMPLETED/CANCELLED）を生のままバッジ表示していたが、`IN_PROGRESS`/`COMPLETED`はコード上どこからも実際にセットされておらず実質未使用で、申込の実際の進捗（受取・発送準備・PSA提出・返送等）を表していなかった。一方、ADR-0052で明文化した`DISPLAY_STATUS`（簡易ステータス）は`admin/applications/page.tsx`の一覧では使われているが、詳細ページには表示されておらず、担当者が申込の進捗を詳細画面で常に確認できる場所がなかった。
+- 決定:
+  - **申込詳細ページのバッジ表示を`application.status`の生値から`computeDisplayStatus()`の結果（簡易ステータスの現在地）に変更**。DRAFT/CANCELLEDのみ従来通り個別文言（「下書き」/「キャンセル」）を表示。
+  - **サマリーカード内に、簡易ステータスのフロー全体を示すステッパー（丸数字＋ラベルの横並び、完了済みは✓・現在地はブランド色でハイライト）を常時表示**。自己入力(`source=CUSTOMER`)は「申込完了→受取完了→発送準備中→発送完了→(カスタムのPSA進捗ステータス)→返送準備中→返送完了」、代理入力(`source=STORE`)は「申込完了→入力完了→支払完了→発送準備中→発送完了→(カスタムのPSA進捗ステータス)→返送準備中→返送完了」の7ステップ。カスタムのPSA進捗ステータス（管理画面で自由入力）が現在地の場合はそのステップにその名称をそのまま表示し、未到達時は「PSA進捗」とプレースホルダー表示する。
+  - DRAFT・CANCELLEDの申込ではステッパーを表示しない（フローの対象外のため）。
+- 影響: `src/app/admin/applications/[id]/page.tsx`のみ変更。新規クエリ・スキーマ変更なし（既存の`computeDisplayStatus()`が必要とするフィールドは元々`include`済み）。
+- 未対応: なし。
+
+## ADR-0054: 提出予約一覧（顧客画面）から、代理入力の支払完了済み申込を除外
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: `mypage/submission-booking/page.tsx`はADR-0034で「受取完了済み（`receivedAt`セット済み）は既に提出済みのため予約対象から除外」としていたが、これは自己入力(`source=CUSTOMER`)にしか効かなかった。代理入力(`source=STORE`)はカードが既に店舗にある前提（明細入力＝受取を兼ねる。ADR-0034/0045の`computeDisplayStatus()`と同じ考え方）で`receivedAt`が使われないため、支払完了（差額決済含め全額支払済み）後もこの一覧に残り続けてしまっていた。
+- 決定:
+  - **`applicationsRaw`のクエリに`NOT: { AND: [{ source: "STORE" }, { payments: { none: { status: "PENDING" } } }] }`を追加**。代理入力かつ`PENDING`な決済が無い（＝`computeDisplayStatus()`が「支払完了」を返す状態）の申込を除外する。
+  - 自己入力側の`receivedAt: null`条件は変更なし（既に正しく動作しているため）。
+- 影響: `src/app/mypage/submission-booking/page.tsx`のみ変更。新規クエリ・スキーマ変更なし。
+- 未対応: なし。
+
+## ADR-0055: 顧客向け「お問い合わせ」機能を新設
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: 顧客が当社へ問い合わせる手段（フォーム）が無く、管理側で受付・回答を一元管理する仕組みも無かった。
+- 決定:
+  - **`Inquiry`モデルを新設**（`customerId`/`subject`/`body`/`status`(`InquiryStatus`: UNREAD/READ/REPLIED)/`replyText`/`repliedAt`/`repliedBy`）。`Customer`に`inquiries Inquiry[]`を追加。
+  - **`/contact`（顧客向け、要ログイン）を新設**。氏名・メールは`getCustomerProfile()`から自動入力（編集不可の読み取り専用表示）、件名・内容を入力。**カスタマーハラスメントポリシー同意・個人情報保護方針同意の2つのチェックボックス**（両方必須、`z.literal(true)`でサーバー側も検証）と、「サブミッション番号の開示、グレード、鑑定の催促に関するお問合せについては回答致しかねます」という注意書きを表示。送信は`createInquiry()`（`src/actions/inquiry.ts`）。
+  - **フッター（`Footer.tsx`）に「お問い合わせ」リンクを追加**。全顧客向けページから遷移可能。
+  - **管理画面に`/admin/inquiries`（一覧）・`/admin/inquiries/[id]`（詳細＋回答）を新設**。一覧は未読を先頭にソートし件数バッジを表示。詳細を開くと自動的に既読（`READ`）にする（`getInquiryDetail()`）。回答フォーム（`InquiryReplyForm.tsx`）から`replyToInquiry()`を呼ぶと`status`を`REPLIED`にし、顧客へ回答内容をメール送信（`inquiryReplyHtml()`、SMTP未設定時は既存の`sendMail`同様に失敗するが処理は止めない）。サイドバーナビに「お問い合わせ」を追加。
+  - メールHTML生成時、顧客が自由入力した`subject`と管理者が自由入力した`replyText`をエスケープする`escapeHtml()`を`mailer.ts`に追加（AGENTS.md §5のHTML埋め込み禁止ルールに従う。他の既存メールテンプレートは対象外）。
+- 影響: `prisma/schema.prisma`（`Inquiry`モデル・`InquiryStatus`enum追加、非破壊）、新規ファイル`src/actions/inquiry.ts`・`src/app/contact/`・`src/app/admin/inquiries/`、既存の`src/components/Footer.tsx`・`src/app/admin/layout.tsx`・`src/lib/mailer.ts`を変更。
+- 未対応: 顧客がマイページ側で過去の問い合わせ・回答履歴を一覧で見返すUIは未実装（回答はメール通知のみ）。管理者向けの新着問い合わせのサイドバー未読バッジは未実装（一覧ページ内のバッジのみ）。
+
+## ADR-0056: 顧客向け「料金表」ページを新設し、マイページトップにカードを追加
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: 鑑定料・送料保険料・代理入力料金・事務手数料は管理画面（`/admin/settings`）でのみ確認でき、顧客が事前に料金体系を確認できるページが無かった。
+- 決定:
+  - **`/contact`と異なりログイン不要の`/pricing`を新設**（料金情報自体は非会員にも案内してよい内容のため）。既存の料金系モデル（`CustomServicePrice`/`PricingSetting`/`ShippingInsuranceRate`/`ShippingRule`/`InsuranceRule`）を読み取り専用で表示する集計ページとして実装し、新規スキーマ・新規Server Actionは追加していない。
+  - 表示構成は`admin/settings/page.tsx`と同じ「リージョン（PSA日本/PSA US）× アイテム種別（トレーディングカード/デュアルサービス（オートグラフ）/未開封パック/コミック・マガジン）」の構造を踏襲。各区分ごとに①`CustomServicePrice`によるサービスレベル別鑑定料表、②`PricingSetting`による代理入力料金・事務手数料、③送料・保険料（`ShippingInsuranceRate`のマトリクスがあればそれを優先表示、無ければ`ShippingRule`/`InsuranceRule`の旧ロジックにフォールバック表示）を表示する。`fee-calculator.ts`の実際の計算ロジック（`calcShippingInsuranceMatrix`→未設定時`calcShippingInsuranceLegacy`）と同じ優先順位。
+  - 金額表示は帯の閾値（`minValue`/`maxAmount`等）はリージョン通貨（`formatMoneyInt(v, region)`）、実際に請求される送料・保険料・事務手数料・代理入力料金は常に円（`formatMoneyIn(v, "JPY")`）で表示（各モデルのコメント「常に円」に合わせた。鑑定料自体は`formatMoney(pricePerCard, region)`でリージョン通貨表示）。
+  - **`mypage/page.tsx`の「Quick actions」カードグリッドに「料金表」カードを追加**（`/pricing`へのリンク）。
+- 影響: 新規ファイル`src/app/pricing/page.tsx`のみ追加、既存`src/app/mypage/page.tsx`にカード1件追加。スキーマ・Server Action変更なし（既存データの読み取りのみ）。
+- 未対応: フッターへのリンクは追加していない（ユーザー指示がマイページのカード化のみだったため）。必要であれば別途追加を検討。
+
+

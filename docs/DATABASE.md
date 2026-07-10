@@ -6,7 +6,7 @@
 
 ---
 
-## モデル一覧（17。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)参照）
+## モデル一覧（18。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)参照）
 
 | モデル / テーブル | 役割 | 主なカラム・ポイント |
 |------------------|------|---------------------|
@@ -31,6 +31,7 @@
 | `SubmissionCalendarDay` / submission_calendar_days | 提出予約カレンダー日付設定 | `date`(uniq), `isClosed`(予約不可), `isShippingDay`(発送日), `note` |
 | `OperationLog` / operation_logs | 操作ログ | `userId`/`customerId`, `action`, `targetType`/`targetId`, `before`/`after`(Json), index×3 |
 | `SavedPaymentMethod` / saved_payment_methods | 保存カード | `stripePaymentMethodId`(uniq), `brand`/`last4`, `expMonth`/`expYear`, `isDefault` |
+| `Inquiry` / inquiries | 顧客お問い合わせ | `subject`/`body`, `status`(UNREAD/READ/REPLIED), `replyText`/`repliedAt`/`repliedBy`(userId)。[ADR-0055](DECISIONS.md) |
 
 ---
 

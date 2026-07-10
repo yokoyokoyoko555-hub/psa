@@ -133,6 +133,12 @@ enum NotificationType {
   SYSTEM
 }
 
+enum InquiryStatus {
+  UNREAD
+  READ
+  REPLIED
+}
+
 enum SubmissionBookingMethod {
   STORE_DROP_OFF
   SHIPPING
@@ -199,6 +205,7 @@ model Customer {
   submissionBookings SubmissionBooking[]
   subscriptions Subscription[]
   centeringMeasurements CenteringMeasurement[]
+  inquiries     Inquiry[]
 
   @@map("customers")
 }
@@ -782,6 +789,26 @@ model Notification {
   customer Customer? @relation(fields: [customerId], references: [id])
 
   @@map("notifications")
+}
+
+// ===== INQUIRIES (お問い合わせ) =====
+
+model Inquiry {
+  id         String        @id @default(cuid())
+  customerId String
+  subject    String
+  body       String
+  status     InquiryStatus @default(UNREAD)
+  replyText  String?
+  repliedAt  DateTime?
+  repliedBy  String? // 対応した管理者・スタッフのuserId
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("inquiries")
 }
 
 // ===== SUBMISSION BOOKINGS (持込・郵送予約) =====

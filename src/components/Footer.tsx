@@ -3,6 +3,7 @@ import Link from "next/link";
 const LINKS = [
   { href: "/terms", label: "利用規約" },
   { href: "/privacy", label: "個人情報保護方針" },
+  { href: "/contact", label: "お問い合わせ" },
 ];
 
 export default function Footer() {

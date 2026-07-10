@@ -76,6 +76,7 @@ psa-system/
 │   │   ├── application.ts   # 申込作成/一覧/詳細
 │   │   ├── admin.ts         # カード/PSAグループ/グレード/Upcharge/集計
 │   │   ├── submission-booking.ts # カード提出予約
+│   │   ├── inquiry.ts        # お問い合わせ作成/一覧/回答
 │   │   └── payment.ts       # 保存カード削除
 │   ├── lib/                 # 横断ロジック
 │   │   ├── prisma.ts        # PrismaClient（PrismaPgアダプタ、シングルトン）
@@ -168,6 +169,7 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 | application.ts | createApplication / getMyApplications / getApplicationDetail | 顧客 |
 | admin.ts | getDashboardStats / updateCardStatus / createPsaSubmissionGroup / submitPsaGroup / recordGrade / createUpcharge / getAdminCards / getAdminCustomers | ADMIN or STAFF |
 | submission-booking.ts | upsertSubmissionBooking / cancelSubmissionBooking / cancelSubmissionBookingByAdmin | 顧客 / ADMIN or STAFF |
+| inquiry.ts | createInquiry / getInquiries / getInquiryDetail / replyToInquiry | 顧客 / ADMIN or STAFF |
 | payment.ts | deletePaymentMethod | 顧客 |
 
 ---

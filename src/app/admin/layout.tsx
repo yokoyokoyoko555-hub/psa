@@ -26,6 +26,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: "/admin/store-requests", label: "代理申込", icon: "🏪" },
     { href: "/admin/customers", label: "顧客管理", icon: "👥" },
     { href: "/admin/notifications", label: "お知らせ", icon: "📣" },
+    { href: "/admin/inquiries", label: "お問い合わせ", icon: "💬" },
     { href: "/admin/submission-bookings", label: "提出予約", icon: "📅" },
     { href: "/admin/psa-groups", label: "PSA提出グループ", icon: "📦" },
     { href: "/admin/card-masters", label: "カード名称マスタ", icon: "🗂️" },

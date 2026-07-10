@@ -158,6 +158,16 @@ export default async function MypagePage() {
               <p className="text-gray-500 text-sm">無料・カメラでセンタリングを測定</p>
             </div>
           </Link>
+          <Link
+            href="/pricing"
+            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+          >
+            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">💴</div>
+            <div>
+              <p className="font-bold text-lg text-gray-900">料金表</p>
+              <p className="text-gray-500 text-sm">鑑定料・送料・手数料を確認</p>
+            </div>
+          </Link>
         </div>
 
         {/* この申込を続ける（直近の作業中） */}

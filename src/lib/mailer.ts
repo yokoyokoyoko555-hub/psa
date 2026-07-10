@@ -76,6 +76,34 @@ export function passwordResetHtml(params: { resetUrl: string }): string {
   `;
 }
 
+// 件名・回答内容は顧客/管理者の自由入力のため、メールHTMLへの埋め込み前にエスケープする。
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function inquiryReplyHtml(params: {
+  customerName: string;
+  subject: string;
+  replyText: string;
+  appUrl: string;
+}): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>お問い合わせへの回答</h2>
+      <p>${escapeHtml(params.customerName)} 様</p>
+      <p>お問い合わせいただいた下記の件について、回答いたします。</p>
+      <p style="color:#888;font-size:12px;">件名: ${escapeHtml(params.subject)}</p>
+      <div style="background:#f9f9f9;border-radius:8px;padding:16px;white-space:pre-wrap;">${escapeHtml(params.replyText)}</div>
+      <p style="margin-top:16px;"><a href="${params.appUrl}/mypage">マイページで確認する</a></p>
+    </div>
+  `;
+}
+
 export function upchargeNotificationHtml(params: {
   customerName: string;
   cardName: string;
