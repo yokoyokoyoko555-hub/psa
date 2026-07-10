@@ -113,7 +113,10 @@ export default function ContactForm({ name, email }: { name: string; email: stri
             className="mt-0.5"
           />
           <span>
-            カスタマーハラスメントポリシーに同意します。スタッフへの暴言・脅迫・過度な要求等が確認された場合、回答をお断りする場合があります。
+            <Link href="/harassment-policy" target="_blank" className="text-brand-600 hover:underline">
+              カスタマーハラスメントポリシー
+            </Link>
+            に同意します。スタッフへの暴言・脅迫・過度な要求等が確認された場合、回答をお断りする場合があります。
           </span>
         </label>
         <label className="flex items-start gap-2 text-sm text-gray-700">
