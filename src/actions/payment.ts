@@ -47,10 +47,11 @@ export async function deletePaymentMethod(methodId: string) {
 
 /**
  * 代理申込の確定分請求（PENDING）に対し、顧客が能動的に支払うためのPaymentIntentを作成する。
- * 保存済みカードは事前アタッチしない（同じカードの使い回しではなく、都度カード入力欄で
- * 入力してもらう。同じカードを使い回したい場合もその場で番号を入力し直せば可）。ADR-0046
+ * useSavedCard=true（既定）かつ既定の保存済みカードがあればそれを事前アタッチし、クライアントは
+ * confirmCardPayment(clientSecret)のみで支払える。別のカードを使いたい場合はuseSavedCard=false
+ * で呼び直すことで、事前アタッチなしのPaymentIntentを取得できる。ADR-0048
  */
-export async function createDifferentialPaymentIntent(applicationId: string) {
+export async function createDifferentialPaymentIntent(applicationId: string, useSavedCard: boolean = true) {
   const customer = await getCustomerSession();
   if (!customer) return { success: false, error: "ログインが必要です" } as const;
 
@@ -69,12 +70,17 @@ export async function createDifferentialPaymentIntent(applicationId: string) {
     return { success: false, error: "決済情報の準備ができていません。サポートまでご連絡ください。" } as const;
   }
 
+  const savedMethod = useSavedCard
+    ? await prisma.savedPaymentMethod.findFirst({ where: { customerId: customer.id, isDefault: true } })
+    : null;
+
   const pi = await createPaymentIntent({
     amount: toStripeAmount(payment.amount),
     currency: stripeCurrency(),
     customerId: customer.stripeCustomerId,
     applicationId,
     description: payment.description ?? `代理申込 確定分請求 ${application.applicationNo}`,
+    paymentMethodId: savedMethod?.stripePaymentMethodId,
   });
 
   await prisma.payment.update({
@@ -86,6 +92,7 @@ export async function createDifferentialPaymentIntent(applicationId: string) {
     success: true,
     clientSecret: pi.client_secret!,
     amount: payment.amount,
+    savedCard: savedMethod ? { brand: savedMethod.brand, last4: savedMethod.last4 } : null,
   } as const;
 }
 
@@ -141,8 +148,16 @@ export async function confirmDifferentialPayment(
 
   const paymentMethod = paymentIntent.payment_method;
   if (typeof paymentMethod === "object" && paymentMethod?.id && paymentMethod.card && customer.stripeCustomerId) {
+    // 同一カード（ブランド・下4桁・有効期限が一致）は重複保存しない。stripePaymentMethodIdだけで判定すると
+    // カードを入力し直すたびに新規Stripe PaymentMethodが発行され重複するため、カード指紋で判定する。ADR-0048
     const existing = await prisma.savedPaymentMethod.findFirst({
-      where: { stripePaymentMethodId: paymentMethod.id },
+      where: {
+        customerId: customer.id,
+        brand: paymentMethod.card.brand,
+        last4: paymentMethod.card.last4,
+        expMonth: paymentMethod.card.exp_month,
+        expYear: paymentMethod.card.exp_year,
+      },
     });
     if (!existing) {
       const hasDefault = await prisma.savedPaymentMethod.findFirst({
@@ -164,4 +179,38 @@ export async function confirmDifferentialPayment(
 
   revalidatePath(`/mypage/applications/${application.id}`);
   return { success: true };
+}
+
+/**
+ * 顧客自身の保存済みカードのうち、同一カード（ブランド・下4桁・有効期限が一致）の重複行を1件に
+ * まとめる（既定カード優先、無ければ最古の1件を残す）。既存データの一括整理用。ADR-0048
+ */
+export async function dedupeSavedPaymentMethods() {
+  const customer = await getCustomerSession();
+  if (!customer) return;
+
+  const methods = await prisma.savedPaymentMethod.findMany({
+    where: { customerId: customer.id },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+  });
+
+  const seen = new Set<string>();
+  const toDelete: typeof methods = [];
+  for (const m of methods) {
+    const key = `${m.brand}_${m.last4}_${m.expMonth}_${m.expYear}`;
+    if (seen.has(key)) {
+      toDelete.push(m);
+    } else {
+      seen.add(key);
+    }
+  }
+
+  for (const m of toDelete) {
+    try {
+      await getStripe().paymentMethods.detach(m.stripePaymentMethodId);
+    } catch {
+      // Stripe側の解除に失敗してもDB側の整理は継続する
+    }
+    await prisma.savedPaymentMethod.delete({ where: { id: m.id } });
+  }
 }

@@ -432,8 +432,15 @@ export async function confirmApplicationPayment(
     paymentMethod.card &&
     customer.stripeCustomerId
   ) {
+    // 同一カード（ブランド・下4桁・有効期限が一致）は重複保存しない。ADR-0048
     const existing = await prisma.savedPaymentMethod.findFirst({
-      where: { stripePaymentMethodId: paymentMethod.id },
+      where: {
+        customerId: customer.id,
+        brand: paymentMethod.card.brand,
+        last4: paymentMethod.card.last4,
+        expMonth: paymentMethod.card.exp_month,
+        expYear: paymentMethod.card.exp_year,
+      },
     });
     if (!existing) {
       const hasDefault = await prisma.savedPaymentMethod.findFirst({
@@ -661,8 +668,15 @@ export async function confirmStorePrepayPayment(
     paymentMethod.card &&
     customer.stripeCustomerId
   ) {
+    // 同一カード（ブランド・下4桁・有効期限が一致）は重複保存しない。ADR-0048
     const existing = await prisma.savedPaymentMethod.findFirst({
-      where: { stripePaymentMethodId: paymentMethod.id },
+      where: {
+        customerId: customer.id,
+        brand: paymentMethod.card.brand,
+        last4: paymentMethod.card.last4,
+        expMonth: paymentMethod.card.exp_month,
+        expYear: paymentMethod.card.exp_year,
+      },
     });
     if (!existing) {
       const hasDefault = await prisma.savedPaymentMethod.findFirst({

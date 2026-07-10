@@ -541,3 +541,15 @@
 - 影響: 新規コンポーネント1件＋顧客向け5ファイルへの追加のみ。スキーマ変更なし。
 - 未対応: 特定商取引法に基づく表記ページ・会社概要／お問い合わせページは未作成のため、フッターにはリンクを含めていない（必要な場合は別途ページ作成と事業者情報の確定が必要）。`mypage`配下の個別ページ（申込一覧・設定等のサブページ）には追加していない（トップページのみ）。
 
+## ADR-0048: 保存済みカードの重複バグ修正＋Stripe.js読み込みの共通化＋保存カードでの支払いを復活
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: マイページ「保存済みカード」に、実質同じカード（同一ブランド・下4桁・有効期限）が何件も重複登録される不具合が報告された。原因は、決済成功時にカードを保存する4箇所（Stripe Webhookの`payment_intent.succeeded`・`payment_method.attached`、`confirmApplicationPayment`、`confirmDifferentialPayment`）すべてが、重複判定を`stripePaymentMethodId`の一致のみで行っていたこと。カード番号を毎回入力し直すフロー（ADR-0046）では、同じカード番号を入力してもStripeはその都度新しい`PaymentMethod`オブジェクト（新しい`pm_xxx`）を発行するため、`stripePaymentMethodId`は常に異なり、重複判定が機能していなかった。あわせて、ADR-0046で一度廃止した「保存済みカードでのワンクリック支払い」を復活してほしいという要望があった（廃止理由だった「Stripe.jsを読み込んでいなかった」バグを、今回は正しく修正した上で）。
+- 決定:
+  - **保存判定を「ブランド・下4桁・有効期限（＋顧客ID）」のカード指紋ベースに変更**。4箇所すべて（`webhook/route.ts`の2ハンドラ、`confirmApplicationPayment`、`confirmDifferentialPayment`）を同じ判定に統一。
+  - **`actions/payment.ts`に`dedupeSavedPaymentMethods()`を新設**し、既存の重複行を1件（既定カード優先、無ければ最古）に整理する（Stripe側もbest-effortでdetach）。`mypage/settings/page.tsx`の一覧表示前に自動実行し、ユーザー操作なしで既存の重複を解消する。
+  - **`src/lib/stripe-client.ts`を新設**し、Stripe.jsの遅延読み込みロジック（スクリプトタグ挿入・多重読み込み防止・タイムアウト処理）を一箇所に共通化。今回の「保存済みカードのワンクリック支払い」バグ（Stripe.js自体を読み込んでいなかった）のような読み込み忘れの再発を防ぐため、`StripeCardPayment.tsx`・`ApplyForm.tsx`・`DifferentialPaymentPanel.tsx`の3箇所すべてをこの共通ユーティリティ経由に統一（`ApplyForm.tsx`が独自に持っていた`declare global`とローカル型定義は削除）。
+  - **`DifferentialPaymentPanel.tsx`に保存済みカードでのワンクリック支払いを復活**。`createDifferentialPaymentIntent(applicationId, useSavedCard)`が既定カードを事前アタッチしたPaymentIntentを返し、クライアントは共通ユーティリティで読み込んだStripe.jsで`confirmCardPayment(clientSecret)`のみで支払える。「別のカードを使う」を選ぶと`useSavedCard=false`で作り直した（事前アタッチなしの）PaymentIntentに切り替わり、`StripeCardPayment`でカードを新規入力できる。
+- 影響: `lib/stripe.ts`の`createPaymentIntent`に`paymentMethodId`引数を再追加（ADR-0046で一度削除したもの）。`actions/payment.ts`・`actions/application.ts`（`confirmApplicationPayment`・`confirmStorePrepayPayment`の2箇所）・`src/app/api/stripe/webhook/route.ts`（2ハンドラ）・`ApplyForm.tsx`・`StripeCardPayment.tsx`・`DifferentialPaymentPanel.tsx`を変更。スキーマ変更なし。
+- 未対応: 既存の重複行の自動整理は`mypage/settings`ページを開いたタイミングでのみ実行される（バックグラウンドジョブ等での一括整理は行っていない）。
+

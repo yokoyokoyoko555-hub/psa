@@ -4,11 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createDifferentialPaymentIntent, confirmDifferentialPayment } from "@/actions/payment";
 import { formatMoneyIn } from "@/lib/currency";
+import { getStripeClient } from "@/lib/stripe-client";
 import StripeCardPayment from "./StripeCardPayment";
 
 /**
  * 代理申込の確定分請求（PENDING）を、顧客が能動的に確認・支払うためのパネル。
- * 保存済みカードの使い回しはせず、都度StripeCardPaymentでカード情報を入力してもらう。ADR-0046
+ * 保存済みのデフォルトカードがあればワンクリック決済、無ければ（または別のカードを
+ * 使いたい場合は）StripeCardPaymentでカード入力。自動課金は行わない（ADR-0042/0048）。
  */
 export default function DifferentialPaymentPanel({
   applicationId,
@@ -23,21 +25,24 @@ export default function DifferentialPaymentPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [paid, setPaid] = useState(false);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [intent, setIntent] = useState<{
+    clientSecret: string;
+    savedCard: { brand: string; last4: string } | null;
+  } | null>(null);
 
-  async function handleStart() {
+  async function handleStart(useSavedCard: boolean) {
     setError("");
     setLoading(true);
-    const result = await createDifferentialPaymentIntent(applicationId);
+    const result = await createDifferentialPaymentIntent(applicationId, useSavedCard);
     setLoading(false);
     if (!result.success) {
       setError(result.error ?? "決済準備に失敗しました");
       return;
     }
-    setClientSecret(result.clientSecret);
+    setIntent({ clientSecret: result.clientSecret, savedCard: result.savedCard });
   }
 
-  async function handlePaid(paymentIntentId: string) {
+  async function handleConfirmed(paymentIntentId: string) {
     setError("");
     const result = await confirmDifferentialPayment({ applicationId, paymentIntentId });
     if (!result.success) {
@@ -46,6 +51,26 @@ export default function DifferentialPaymentPanel({
     }
     setPaid(true);
     router.refresh();
+  }
+
+  async function handlePaySavedCard() {
+    if (!intent) return;
+    setError("");
+    setLoading(true);
+    try {
+      const stripe = await getStripeClient(publishableKey);
+      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(intent.clientSecret);
+      if (stripeError) {
+        setError(stripeError.message ?? "決済エラーが発生しました");
+        return;
+      }
+      const paymentIntentId = paymentIntent?.id ?? intent.clientSecret.split("_secret_")[0];
+      await handleConfirmed(paymentIntentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "決済処理中にエラーが発生しました");
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (paid) {
@@ -66,21 +91,43 @@ export default function DifferentialPaymentPanel({
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm mb-4">{error}</div>}
 
-      {!clientSecret ? (
+      {!intent ? (
         <button
           type="button"
-          onClick={handleStart}
+          onClick={() => handleStart(true)}
           disabled={loading}
           className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
         >
           {loading ? "準備中..." : "内容を確認してお支払いへ進む"}
         </button>
+      ) : intent.savedCard ? (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            登録済みのカード（{intent.savedCard.brand} •••• {intent.savedCard.last4}）でお支払いします。
+          </p>
+          <button
+            type="button"
+            onClick={handlePaySavedCard}
+            disabled={loading}
+            className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
+          >
+            {loading ? "決済処理中..." : `${formatMoneyIn(amount, "JPY")} を支払う`}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStart(false)}
+            disabled={loading}
+            className="w-full text-sm text-gray-500 hover:text-gray-700"
+          >
+            別のカードを使う
+          </button>
+        </div>
       ) : (
         <StripeCardPayment
-          clientSecret={clientSecret}
+          clientSecret={intent.clientSecret}
           publishableKey={publishableKey}
           buttonLabel={`${formatMoneyIn(amount, "JPY")} を支払う`}
-          onPaid={handlePaid}
+          onPaid={handleConfirmed}
           onError={setError}
         />
       )}

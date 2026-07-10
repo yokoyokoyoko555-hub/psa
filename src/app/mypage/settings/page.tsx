@@ -5,6 +5,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import { getCustomerProfile } from "@/actions/customer";
 import { getMyAddresses } from "@/actions/address";
+import { dedupeSavedPaymentMethods } from "@/actions/payment";
 import AddressManager from "../addresses/AddressManager";
 import DeletePaymentMethodButton from "../payment-methods/DeletePaymentMethodButton";
 import ProfileSettingsModal from "./ProfileSettingsModal";
@@ -21,6 +22,9 @@ function brandLabel(brand: string) {
 export default async function SettingsPage() {
   const session = await getCustomerSession();
   if (!session) redirect("/login");
+
+  // 過去の重複バグで登録された保存済みカードを表示前に整理する。ADR-0048
+  await dedupeSavedPaymentMethods();
 
   const [profile, addresses, methods] = await Promise.all([
     getCustomerProfile(),

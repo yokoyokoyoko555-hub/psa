@@ -1,17 +1,12 @@
 "use client";
 
-declare global {
-  interface Window {
-    Stripe?: (key: string) => StripeClient;
-  }
-}
-
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { confirmApplicationPayment, createApplication, previewFees, saveDraft as saveDraftServer } from "@/actions/application";
 import type { FeeBreakdown } from "@/lib/fee-calculator";
 import { formatMoney, formatMoneyIn, formatMoneyInt, currencySymbol } from "@/lib/currency";
+import { getStripeClient, type StripeClientLike, type StripeCardElementLike } from "@/lib/stripe-client";
 import PaymentDoneScreen from "@/components/PaymentDoneScreen";
 
 export type InitialDraft = {
@@ -179,33 +174,6 @@ const STEPS = [
 ] as const;
 type StepKey = (typeof STEPS)[number]["key"];
 
-type StripeCardElement = {
-  mount: (selector: string | HTMLElement) => void;
-  destroy: () => void;
-  on: (event: "change", handler: (event: { error?: { message?: string } }) => void) => void;
-};
-
-type StripeElements = {
-  create: (
-    type: "card",
-    options?: {
-      style?: Record<string, Record<string, string | Record<string, string>>>;
-      hidePostalCode?: boolean;
-    }
-  ) => StripeCardElement;
-};
-
-type StripeClient = {
-  elements: (options?: { clientSecret?: string }) => StripeElements;
-  confirmCardPayment: (
-    secret: string,
-    opts: { payment_method: { card: StripeCardElement; billing_details?: { name?: string } } }
-  ) => Promise<{
-    error?: { message?: string };
-    paymentIntent?: { id: string; status: string };
-  }>;
-};
-
 export default function ApplyForm({
   shippingRules,
   insuranceRules,
@@ -272,8 +240,8 @@ export default function ApplyForm({
   const [stripeReady, setStripeReady] = useState(false);
   const [cardError, setCardError] = useState("");
   const cardElementContainerRef = useRef<HTMLDivElement | null>(null);
-  const stripeRef = useRef<StripeClient | null>(null);
-  const cardElementRef = useRef<StripeCardElement | null>(null);
+  const stripeRef = useRef<StripeClientLike | null>(null);
+  const cardElementRef = useRef<StripeCardElementLike | null>(null);
 
   // 動的サービスタイア一覧（トレカ含む全itemType共通）。ADR-0025/0026
   const customTierOptions = customServicePrices
@@ -418,36 +386,10 @@ export default function ApplyForm({
     let cancelled = false;
 
     async function loadStripeJs() {
-      if (!window.Stripe) {
-        await new Promise<void>((resolve, reject) => {
-          const existing = document.querySelector<HTMLScriptElement>('script[src="https://js.stripe.com/v3/"]');
-          if (existing) {
-            const wait = window.setInterval(() => {
-              if (window.Stripe) {
-                window.clearInterval(wait);
-                resolve();
-              }
-            }, 50);
-            window.setTimeout(() => {
-              window.clearInterval(wait);
-              if (window.Stripe) resolve();
-              else reject(new Error("Stripe.js の読み込みに失敗しました"));
-            }, 5000);
-            return;
-          }
-          const script = document.createElement("script");
-          script.src = "https://js.stripe.com/v3/";
-          script.async = true;
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Stripe.js の読み込みに失敗しました"));
-          document.head.appendChild(script);
-        });
-      }
-
-      if (cancelled || !window.Stripe || !cardElementContainerRef.current) return;
+      const stripe = await getStripeClient(stripePublishableKey);
+      if (cancelled || !cardElementContainerRef.current) return;
 
       cardElementRef.current?.destroy();
-      const stripe = window.Stripe(stripePublishableKey);
       const elements = stripe.elements({ clientSecret });
       const card = elements.create("card", {
         hidePostalCode: true,

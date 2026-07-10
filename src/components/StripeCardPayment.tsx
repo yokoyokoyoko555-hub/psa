@@ -1,39 +1,7 @@
 "use client";
 
-declare global {
-  interface Window {
-    Stripe?: (key: string) => StripeClient;
-  }
-}
-
 import { useState, useEffect, useRef } from "react";
-
-type StripeCardElement = {
-  mount: (selector: string | HTMLElement) => void;
-  destroy: () => void;
-  on: (event: "change", handler: (event: { error?: { message?: string } }) => void) => void;
-};
-
-type StripeElements = {
-  create: (
-    type: "card",
-    options?: {
-      style?: Record<string, Record<string, string | Record<string, string>>>;
-      hidePostalCode?: boolean;
-    }
-  ) => StripeCardElement;
-};
-
-type StripeClient = {
-  elements: (options?: { clientSecret?: string }) => StripeElements;
-  confirmCardPayment: (
-    secret: string,
-    opts: { payment_method: { card: StripeCardElement; billing_details?: { name?: string } } }
-  ) => Promise<{
-    error?: { message?: string };
-    paymentIntent?: { id: string; status: string };
-  }>;
-};
+import { getStripeClient, type StripeClientLike, type StripeCardElementLike } from "@/lib/stripe-client";
 
 type Props = {
   clientSecret: string;
@@ -51,6 +19,7 @@ type Props = {
 /**
  * Stripe.js を遅延ロードしカード Element をマウント、confirmCardPayment まで行う再利用コンポーネント。
  * ApplyForm の決済ロジックを切り出したもの（ADR-0020 の代理入力先払いで再利用）。
+ * Stripe.jsの読み込み自体は lib/stripe-client.ts の共通ユーティリティを使う。ADR-0048
  */
 export default function StripeCardPayment({
   clientSecret,
@@ -64,44 +33,18 @@ export default function StripeCardPayment({
   const [cardError, setCardError] = useState("");
   const [paying, setPaying] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const stripeRef = useRef<StripeClient | null>(null);
-  const cardRef = useRef<StripeCardElement | null>(null);
+  const stripeRef = useRef<StripeClientLike | null>(null);
+  const cardRef = useRef<StripeCardElementLike | null>(null);
 
   useEffect(() => {
     if (!clientSecret || !containerRef.current) return;
     let cancelled = false;
 
-    async function loadStripeJs() {
-      if (!window.Stripe) {
-        await new Promise<void>((resolve, reject) => {
-          const existing = document.querySelector<HTMLScriptElement>('script[src="https://js.stripe.com/v3/"]');
-          if (existing) {
-            const wait = window.setInterval(() => {
-              if (window.Stripe) {
-                window.clearInterval(wait);
-                resolve();
-              }
-            }, 50);
-            window.setTimeout(() => {
-              window.clearInterval(wait);
-              if (window.Stripe) resolve();
-              else reject(new Error("Stripe.js の読み込みに失敗しました"));
-            }, 5000);
-            return;
-          }
-          const script = document.createElement("script");
-          script.src = "https://js.stripe.com/v3/";
-          script.async = true;
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Stripe.js の読み込みに失敗しました"));
-          document.head.appendChild(script);
-        });
-      }
-
-      if (cancelled || !window.Stripe || !containerRef.current) return;
+    async function setup() {
+      const stripe = await getStripeClient(publishableKey);
+      if (cancelled || !containerRef.current) return;
 
       cardRef.current?.destroy();
-      const stripe = window.Stripe(publishableKey);
       const elements = stripe.elements({ clientSecret });
       const card = elements.create("card", {
         hidePostalCode: true,
@@ -123,7 +66,7 @@ export default function StripeCardPayment({
 
     setStripeReady(false);
     setCardError("");
-    loadStripeJs().catch((err: unknown) => {
+    setup().catch((err: unknown) => {
       onError?.(err instanceof Error ? err.message : "Stripe.js の読み込みに失敗しました");
     });
 
