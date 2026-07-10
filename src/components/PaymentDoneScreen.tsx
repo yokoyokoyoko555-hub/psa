@@ -20,7 +20,7 @@ export default function PaymentDoneScreen({
       <div className="text-4xl">✅</div>
       <h2 className="text-lg font-bold text-gray-900">お支払いが完了しました</h2>
       <p className="text-sm text-gray-600">
-        次に、お預け方法（店頭持込・郵送）と日時をご予約ください。
+        次に、提出方法（店頭持込・郵送）と日時をご予約ください。
         {extraNote ? ` ${extraNote}` : ""}
       </p>
       <div className="flex flex-col gap-3 pt-1">

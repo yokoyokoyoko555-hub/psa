@@ -803,25 +803,6 @@ export default function ApplyForm({
               )}
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h2 className="font-bold text-gray-800">返却方法</h2>
-              <div className="grid grid-cols-2 gap-3">
-                {(["STORE_PICKUP", "SHIPPING"] as ReturnMethod[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setReturnMethod(m)}
-                    className={`border-2 rounded-xl p-4 text-center font-bold transition ${
-                      returnMethod === m
-                        ? "border-brand-500 bg-brand-50 text-brand-700"
-                        : "border-gray-200 text-gray-700 hover:border-gray-300"
-                    }`}
-                  >
-                    {m === "STORE_PICKUP" ? "店頭受取" : "配送"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <button
               onClick={() => {
                 if (!hasSelectedService) {
@@ -1026,56 +1007,72 @@ export default function ApplyForm({
         {/* STEP 3: Shipping & Billing */}
         {step === "shipping" && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-gray-900">発送先（返却先）</h2>
-                <span className="text-xs text-gray-500">
-                  {returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}
-                </span>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <h2 className="font-bold text-gray-800">返却方法</h2>
+              <div className="grid grid-cols-2 gap-3">
+                {(["STORE_PICKUP", "SHIPPING"] as ReturnMethod[]).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setReturnMethod(m)}
+                    className={`border-2 rounded-xl p-4 text-center font-bold transition ${
+                      returnMethod === m
+                        ? "border-brand-500 bg-brand-50 text-brand-700"
+                        : "border-gray-200 text-gray-700 hover:border-gray-300"
+                    }`}
+                  >
+                    {m === "STORE_PICKUP" ? "店頭受取" : "配送"}
+                  </button>
+                ))}
               </div>
-              {/* 登録住所（デフォルト） */}
-              <label
-                className={`flex items-start gap-3 border-2 rounded-lg p-4 cursor-pointer transition ${
-                  returnSel === "registered" ? "border-brand-500 bg-brand-50" : "border-gray-200"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="returnAddr"
-                  checked={returnSel === "registered"}
-                  onChange={() => setReturnSel("registered")}
-                  className="mt-1"
-                />
-                <span className="text-sm text-gray-800">
-                  {profile ? (
-                    <>
-                      <span className="font-medium">{profile.name} 様（登録住所）</span>
-                      <br />
-                      <span className="text-gray-600">
-                        〒{profile.postalCode}　{profile.prefecture}
-                        {profile.address}
-                        {profile.address2 ? ` ${profile.address2}` : ""}
-                      </span>
-                    </>
-                  ) : (
-                    "登録住所"
-                  )}
-                </span>
-              </label>
-
-              {/* 住所帳（追加・編集・削除・デフォルト設定・選択） */}
-              <AddressManager
-                initialAddresses={addrList}
-                selectable
-                selectedId={returnSel === "registered" ? null : returnSel}
-                onSelect={(id) => setReturnSel(id)}
-                onChange={setAddrList}
-              />
-
-              <p className="text-xs text-gray-400">
-                ※ 登録住所のままにする場合は上を選択してください。住所帳はマイページからも管理できます。
-              </p>
             </div>
+
+            {returnMethod === "SHIPPING" && (
+              <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+                <h2 className="font-bold text-gray-900">発送先（返却先）</h2>
+                {/* 登録住所（デフォルト） */}
+                <label
+                  className={`flex items-start gap-3 border-2 rounded-lg p-4 cursor-pointer transition ${
+                    returnSel === "registered" ? "border-brand-500 bg-brand-50" : "border-gray-200"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="returnAddr"
+                    checked={returnSel === "registered"}
+                    onChange={() => setReturnSel("registered")}
+                    className="mt-1"
+                  />
+                  <span className="text-sm text-gray-800">
+                    {profile ? (
+                      <>
+                        <span className="font-medium">{profile.name} 様（登録住所）</span>
+                        <br />
+                        <span className="text-gray-600">
+                          〒{profile.postalCode}　{profile.prefecture}
+                          {profile.address}
+                          {profile.address2 ? ` ${profile.address2}` : ""}
+                        </span>
+                      </>
+                    ) : (
+                      "登録住所"
+                    )}
+                  </span>
+                </label>
+
+                {/* 住所帳（追加・編集・削除・デフォルト設定・選択） */}
+                <AddressManager
+                  initialAddresses={addrList}
+                  selectable
+                  selectedId={returnSel === "registered" ? null : returnSel}
+                  onSelect={(id) => setReturnSel(id)}
+                  onChange={setAddrList}
+                />
+
+                <p className="text-xs text-gray-400">
+                  ※ 登録住所のままにする場合は上を選択してください。住所帳はマイページからも管理できます。
+                </p>
+              </div>
+            )}
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
               <h2 className="font-bold text-gray-900">電話番号</h2>
@@ -1086,12 +1083,14 @@ export default function ApplyForm({
                 placeholder="090-1234-5678"
                 className={inputCls}
               />
-              <p className="text-xs text-gray-400">配送・連絡に使用します。</p>
+              <p className="text-xs text-gray-400">
+                {returnMethod === "STORE_PICKUP" ? "店舗からのご連絡に使用します。" : "配送・連絡に使用します。"}
+              </p>
             </div>
 
             <button
               onClick={() => {
-                if (returnSel !== "registered" && !selectedAddr) {
+                if (returnMethod === "SHIPPING" && returnSel !== "registered" && !selectedAddr) {
                   setError("返送先を選択してください");
                   return;
                 }
