@@ -553,3 +553,12 @@
 - 影響: `lib/stripe.ts`の`createPaymentIntent`に`paymentMethodId`引数を再追加（ADR-0046で一度削除したもの）。`actions/payment.ts`・`actions/application.ts`（`confirmApplicationPayment`・`confirmStorePrepayPayment`の2箇所）・`src/app/api/stripe/webhook/route.ts`（2ハンドラ）・`ApplyForm.tsx`・`StripeCardPayment.tsx`・`DifferentialPaymentPanel.tsx`を変更。スキーマ変更なし。
 - 未対応: 既存の重複行の自動整理は`mypage/settings`ページを開いたタイミングでのみ実行される（バックグラウンドジョブ等での一括整理は行っていない）。
 
+## ADR-0049: 代理申込の申込詳細に「お支払い済みの料金」内訳を表示
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: 代理申込は「先払い（概算の代理入力料金）→ 明細確定 → 差額請求」という2段階の支払いになるが、顧客が申込詳細ページを見ても、確定後の合計内訳（鑑定料・代理入力料金・送料保険料・事務手数料）と「これから支払う差額」しか表示されず、**そもそも先払いでいくら払ったのか**が分からなかった。
+- 決定:
+  - **`mypage/applications/[id]/page.tsx`に「お支払い済みの料金」セクションを追加**（`source=STORE`のみ）。`Application.payments`のうち最初に成立した`SUCCEEDED`な`Payment`（＝先払い）を特定し、その支払日時・`Application.agencyQuantity`（先払い時に申告した代理入力数）・単価（`prepaidAmount / agencyQuantity`から逆算）・合計（`prepaidAmount`）を「{日時}　代理入力料金　{件数}件×{単価}　{合計}」の形式で表示する。
+- 影響: `mypage/applications/[id]/page.tsx`のみ変更。新規クエリ・スキーマ変更なし（既存の`getApplicationDetail()`が返す`payments`・`agencyQuantity`・`prepaidAmount`から算出）。
+- 未対応: 単価は`prepaidAmount ÷ agencyQuantity`の逆算値であり、`PricingSetting.proxyFee`が先払い後に変更された場合でも先払い時点の実額を正しく表示する（意図した挙動）。
+

@@ -79,6 +79,13 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   if (!application) notFound();
   const isPaid = application.payments.some((p) => p.status === "SUCCEEDED");
   const pendingPayment = application.payments.find((p) => p.status === "PENDING");
+  // 代理申込の先払い（概算の代理入力料金）記録。何をいつ払ったか顧客に分かるよう表示する。ADR-0049
+  const prepayPayment =
+    application.source === "STORE"
+      ? [...application.payments]
+          .filter((p) => p.status === "SUCCEEDED")
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]
+      : undefined;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -157,6 +164,20 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </p>
           </div>
         </div>
+
+        {prepayPayment && application.agencyQuantity != null && application.agencyQuantity > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <h2 className="font-bold text-gray-900 mb-3">お支払い済みの料金</h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm">
+              <span className="text-gray-600">
+                {format(new Date(prepayPayment.paidAt ?? prepayPayment.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
+                　代理入力料金　{application.agencyQuantity}件×
+                {formatMoneyIn(Math.round(application.prepaidAmount / application.agencyQuantity), "JPY")}
+              </span>
+              <span className="font-bold text-gray-900">{formatMoneyIn(application.prepaidAmount, "JPY")}</span>
+            </div>
+          </div>
+        )}
 
         {pendingPayment && (
           <DifferentialPaymentPanel

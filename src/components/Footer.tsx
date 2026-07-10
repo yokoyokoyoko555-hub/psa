@@ -12,7 +12,7 @@ export default function Footer() {
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.jpg" alt="トレカビンクス" className="h-6 w-auto" />
-          <span className="text-xs text-gray-400">© {new Date().getFullYear()} 株式会社ツルプルン</span>
+          <span className="text-xs text-gray-400">© {new Date().getFullYear()} K.K.TURUPURUN All rights reserved.</span>
         </div>
         <nav className="flex flex-wrap items-center gap-x-6 gap-y-2">
           {LINKS.map((l) => (
