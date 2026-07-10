@@ -6,7 +6,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { getApplicationDetail } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
 import DifferentialPaymentPanel from "@/components/DifferentialPaymentPanel";
-import { formatMoney, formatMoneyIn } from "@/lib/currency";
+import { formatMoney, formatMoneyIn, formatMoneyInt } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -86,6 +86,82 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           .filter((p) => p.status === "SUCCEEDED")
           .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0]
       : undefined;
+  const displayLabels = CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
+  const isStoreInput = application.source === "STORE";
+
+  // 鑑定料をサービスレベルごとの内訳に分解する（代理入力は複数サービスレベルが混在しうるため）。ADR-0050
+  const psaFeeGroups = Object.values(
+    application.cards.reduce<Record<string, { name: string; quantity: number; feeTotal: number }>>((acc, c) => {
+      const key = c.customServiceLevelName ?? SERVICE_LABELS[application.serviceLevel] ?? application.serviceLevel;
+      if (!acc[key]) acc[key] = { name: key, quantity: 0, feeTotal: 0 };
+      acc[key].quantity += c.quantity;
+      acc[key].feeTotal += c.psaFee;
+      return acc;
+    }, {})
+  );
+
+  // 代理入力は明細を当社スタッフが入力するため、顧客が確認できるようカード一覧をサービスレベル・
+  // 申告額つきで表示する（自己入力は自分で入力した内容のため付加情報は出さない）。ADR-0050
+  const cardsSection = (
+    <div>
+      <h2 className="font-bold text-gray-900 mb-1">
+        {displayLabels.entryLabel}一覧（{application.cards.length}
+        {displayLabels.quantityUnit}）
+      </h2>
+      {isStoreInput && (
+        <p className="text-sm text-gray-500 mb-4">代理入力していただいた内容をご確認ください。</p>
+      )}
+      <div className="space-y-3 mt-4">
+        {application.cards.map((card) => {
+          const statusInfo = CARD_STATUS_LABELS[card.status] ?? { label: card.status, color: "bg-gray-100 text-gray-600" };
+          return (
+            <div key={card.id} className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <p className="font-mono text-xs text-gray-400">{card.cardNo}</p>
+                  <p className="font-bold text-gray-900">{card.cardName}</p>
+                  <p className="text-sm text-gray-500">{card.tcgTitle}</p>
+                  {isStoreInput && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      サービス: {card.customServiceLevelName ?? "—"}　/　{card.quantity}
+                      {displayLabels.quantityUnit}　/　申告額 {formatMoneyInt(card.declaredValue, application.region)}
+                    </p>
+                  )}
+                </div>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                  {statusInfo.label}
+                </span>
+              </div>
+
+              {card.psaGrade && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3">
+                  <p className="text-sm font-bold text-yellow-800">
+                    PSA Grade: {card.psaGrade}
+                    {card.psaCertNo && <span className="ml-3 font-normal text-yellow-600">Cert# {card.psaCertNo}</span>}
+                  </p>
+                </div>
+              )}
+
+              {/* Status history */}
+              <div className="mt-3">
+                <details className="text-xs text-gray-500">
+                  <summary className="cursor-pointer hover:text-gray-700">ステータス履歴</summary>
+                  <div className="mt-2 space-y-1 pl-2 border-l-2 border-gray-100">
+                    {card.statusHistory.map((h) => (
+                      <div key={h.id} className="flex justify-between">
+                        <span>{CARD_STATUS_LABELS[h.status]?.label ?? h.status}</span>
+                        <span>{format(new Date(h.changedAt), "MM/dd HH:mm")}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,14 +175,18 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       />
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+        {isStoreInput && cardsSection}
+
         {/* Summary */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-bold text-gray-900 mb-4">申込概要</h2>
+          <h2 className="font-bold text-gray-900 mb-4">{isStoreInput ? "請求内容の確認" : "申込概要"}</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div>
-              <p className="text-gray-500">サービス</p>
-              <p className="font-medium">{SERVICE_LABELS[application.serviceLevel]}</p>
-            </div>
+            {!isStoreInput && (
+              <div>
+                <p className="text-gray-500">サービス</p>
+                <p className="font-medium">{SERVICE_LABELS[application.serviceLevel]}</p>
+              </div>
+            )}
             {application.region === "PSA_US" && (
               <div>
                 <p className="text-gray-500">アイテム種別</p>
@@ -129,12 +209,32 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
 
           {/* Fee breakdown */}
           <div className="mt-4 pt-4 border-t border-gray-100 space-y-1 text-sm">
-            <div className="flex justify-between text-gray-600">
-              <span>PSA鑑定料</span><span>{formatMoney(application.psaFeeTotal, application.region)}</span>
-            </div>
+            {psaFeeGroups.map((g) => (
+              <div key={g.name} className="flex justify-between text-gray-600">
+                <span>
+                  鑑定料（{g.name}）
+                  <span className="text-xs text-gray-400">
+                    {" "}
+                    {formatMoney(g.quantity > 0 ? g.feeTotal / g.quantity : 0, application.region)}×{g.quantity}
+                    {displayLabels.quantityUnit}
+                  </span>
+                </span>
+                <span>{formatMoney(g.feeTotal, application.region)}</span>
+              </div>
+            ))}
             {application.agencyFeeTotal > 0 && (
               <div className="flex justify-between text-gray-600">
-                <span>代理入力料金</span><span>{formatMoneyIn(application.agencyFeeTotal, "JPY")}</span>
+                <span>
+                  代理入力料金
+                  {application.cards.length > 0 && (
+                    <span className="text-xs text-gray-400">
+                      {" "}
+                      {formatMoneyIn(Math.round(application.agencyFeeTotal / application.cards.length), "JPY")}×
+                      {application.cards.length}件
+                    </span>
+                  )}
+                </span>
+                <span>{formatMoneyIn(application.agencyFeeTotal, "JPY")}</span>
               </div>
             )}
             <div className="flex justify-between text-gray-600">
@@ -217,57 +317,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           </div>
         </div>
 
-        {/* Cards */}
-        <div>
-          <h2 className="font-bold text-gray-900 mb-4">
-            {(CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD).entryLabel}一覧（
-            {application.cards.length}
-            {(CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD).quantityUnit}）
-          </h2>
-          <div className="space-y-3">
-            {application.cards.map((card) => {
-              const statusInfo = CARD_STATUS_LABELS[card.status] ?? { label: card.status, color: "bg-gray-100 text-gray-600" };
-              return (
-                <div key={card.id} className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="font-mono text-xs text-gray-400">{card.cardNo}</p>
-                      <p className="font-bold text-gray-900">{card.cardName}</p>
-                      <p className="text-sm text-gray-500">{card.tcgTitle}</p>
-                    </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                      {statusInfo.label}
-                    </span>
-                  </div>
-
-                  {card.psaGrade && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3">
-                      <p className="text-sm font-bold text-yellow-800">
-                        PSA Grade: {card.psaGrade}
-                        {card.psaCertNo && <span className="ml-3 font-normal text-yellow-600">Cert# {card.psaCertNo}</span>}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Status history */}
-                  <div className="mt-3">
-                    <details className="text-xs text-gray-500">
-                      <summary className="cursor-pointer hover:text-gray-700">ステータス履歴</summary>
-                      <div className="mt-2 space-y-1 pl-2 border-l-2 border-gray-100">
-                        {card.statusHistory.map((h) => (
-                          <div key={h.id} className="flex justify-between">
-                            <span>{CARD_STATUS_LABELS[h.status]?.label ?? h.status}</span>
-                            <span>{format(new Date(h.changedAt), "MM/dd HH:mm")}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {!isStoreInput && cardsSection}
       </main>
     </div>
   );
