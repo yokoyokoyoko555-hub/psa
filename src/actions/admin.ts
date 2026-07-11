@@ -658,7 +658,7 @@ export async function completeStoreApplication(
         (await prisma.pricingSetting.findUnique({ where: { id: pricingSettingId(app.region, app.itemType) } }))
           ?.proxyFee ?? 0;
 
-      for (const c of cardsInput) {
+      for (const [i, c] of cardsInput.entries()) {
         const price = priceMap.get(c.customServiceLevelId)!;
         const isDualService = price.category === "AUTOGRAPH";
         const cardNo = await generateCardNo(tx);
@@ -671,6 +671,7 @@ export async function completeStoreApplication(
             customerId: app.customerId,
             applicationId: app.id,
             cardNo,
+            lineNo: i + 1,
             tcgTitle: c.tcgTitle,
             releaseYear: c.releaseYear,
             cardName: c.cardName,

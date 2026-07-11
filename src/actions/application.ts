@@ -253,7 +253,7 @@ export async function createApplication(
 
     // カード作成（顧客入力のため代行手数料は0）
     // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替（全itemType共通。ADR-0026）。
-    for (const cardInput of cardsInput) {
+    for (const [i, cardInput] of cardsInput.entries()) {
       const cardNo = await generateCardNo(tx);
       const psaFee = unitPricePerCard * cardInput.quantity;
       const perCardCost = unitCost > 0 ? unitCost : roundMoney(unitPricePerCard * 0.8, parsed.data.region);
@@ -265,6 +265,7 @@ export async function createApplication(
           customerId: customer.id,
           applicationId: app.id,
           cardNo,
+          lineNo: i + 1,
           tcgTitle: cardInput.tcgTitle,
           releaseYear: cardInput.releaseYear,
           cardName: cardInput.cardName,
@@ -899,7 +900,7 @@ export async function getApplicationDetail(applicationId: string) {
   return prisma.application.findFirst({
     where: { id: applicationId, customerId: customer.id },
     include: {
-      cards: { include: { statusHistory: { orderBy: { changedAt: "desc" } } } },
+      cards: { orderBy: { lineNo: "asc" }, include: { statusHistory: { orderBy: { changedAt: "desc" } } } },
       payments: true,
       agreement: true,
       submissionBooking: true,

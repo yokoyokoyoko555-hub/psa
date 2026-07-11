@@ -684,4 +684,39 @@
 - 影響: `prisma/schema.prisma`（`AdminNavItem`モデル追加、非破壊）。新規: `src/actions/admin-nav.ts`・`src/lib/admin-nav-defaults.ts`・`src/app/admin/settings/AdminNavOrderForm.tsx`。既存: `src/app/admin/layout.tsx`・`src/app/admin/settings/page.tsx`。
 - 未対応: なし。
 
+## ADR-0060: 規程文書に`footerLabel`（フッター用の短い表記）を追加
+
+- 日付: 2026-07-11 / 状態: Accepted（実装済）
+- 背景: ADR-0057でFooter.tsxをDB駆動にした際、フッターのリンク文言に`LegalDocument.title`（ページ見出し・ブラウザタブ用の正式名称、例:「トレカビンクス PSA鑑定代行サービス利用規約」）をそのまま流用してしまい、以前ハードコードされていた短い表記（「利用規約」等）より長くなって収まりが悪くなる不具合が生じた。
+- 決定:
+  - **`LegalDocument.footerLabel String?`を追加**（未設定なら`title`にフォールバック）。既定3文書の初期値には短い表記（利用規約／個人情報保護方針／カスタマーハラスメントポリシー）を設定。
+  - **`ensureLegalDocument()`を、既存行でも`footerLabel`が`null`の場合だけ既定値で補完するように変更**（新規追加フィールドの後付け補完であり、既存のtitle/body等の編集内容は一切上書きしない）。これにより本番の既存3行も次回アクセス時に自動修正される。
+  - **`getFooterLegalDocuments()`は`footerLabel ?? title`を返す**ように変更。管理画面（`LegalDocumentForm.tsx`）にも「フッター表示名」の編集欄を追加。
+- 影響: `prisma/schema.prisma`（`footerLabel`列追加、非破壊）、`src/actions/legal-document.ts`、`src/lib/legal-document-defaults.ts`、`src/app/admin/legal-documents/LegalDocumentForm.tsx`・`page.tsx`。
+- 未対応: なし。
+
+## ADR-0061: 代理申込のカード入力UIを自己入力（ApplyForm.tsx）と同じ「1件ずつ入力→保存→一覧」方式に統一
+
+- 日付: 2026-07-11 / 状態: Accepted（実装済）
+- 背景: `StoreInputForm.tsx`（代理申込のカード明細入力）は、全カードを常時展開した編集ブロックとして縦に並べる方式で、自己入力（`ApplyForm.tsx`）の「1件ずつ入力→保存→コンパクトな一覧」という方式と見た目・操作感が異なっていた。またサービスレベルの「一括設定」ボタンがあったが、代理入力は複数サービスレベルが混在しうる（ADR-0038）ため、カードごとに都度選択させたいという要望があった。
+- 決定:
+  - **`ApplyForm.tsx`と同じ「draft（入力中の1件）＋cards（保存済み一覧）」の状態管理に変更**。`draft`/`editingIndex`/`saveDraftCard()`/`clearDraft()`/`editCard()`/`deleteCard()`を追加し、旧来の「全カードを`cards`配列としてその場編集」方式を廃止。
+  - **サービスレベルの一括設定機能（`bulkServiceLevelId`・「全カードに適用」ボタン）を削除**。サービスレベル選択を入力フォーム（`draft`）自体に組み込み、カードを保存するたびに選択を求める。
+  - 保存済み一覧はApplyForm.tsxと同じコンパクトな行表示（タイトル・カード名・枚数・申告額の1行＋編集/削除ボタン）とし、サービスレベル名を行内に表示（カードごとに異なりうるため）。
+  - バリデーション（`validateCards()`）に「1件以上必須」のチェックを追加（従来は初期状態で必ず1行存在したため不要だったが、`cards`が空で始まりうるようになったため）。
+- 影響: `src/app/admin/store-requests/[id]/StoreInputForm.tsx`のみ変更。Server Action（`saveStoreInputDraft`/`previewStoreApplicationFees`/`completeStoreApplication`）のインターフェースは変更なし（`cards`配列の形は従来と同じ）。
+- 未対応: なし。
+
+## ADR-0062: カードに申込内の入力順（`lineNo`）を付与し、店頭提出時の照合に使えるようにする
+
+- 日付: 2026-07-11 / 状態: Accepted（実装済）
+- 背景: 提出予約完了ページ（ADR-0061と同日の別修正）で「カードをソフトスリーブ→カードセイバーに入れ、注文ごとにグループ分けして番号通りに並べてご提出」という案内を追加したが、その「番号」に対応するものがシステム側になく、顧客・スタッフの双方が参照できる一意な入力順の番号が必要になった。
+- 決定:
+  - **`Card.lineNo Int?`を追加**（1始まり、申込内での入力順）。既存カードは`null`のまま（過去分の遡及付番はしない）。
+  - **`createApplication()`（自己入力・`application.ts`）と`completeStoreApplication()`（代理入力・`admin.ts`）のカード作成ループを`for...of`から`.entries()`に変更し、`lineNo: i + 1`を設定**。カードの入力順＝配列順＝`lineNo`が一致する。
+  - **`ApplyForm.tsx`・`StoreInputForm.tsx`の保存済みカード一覧（入力中・未送信）に丸数字バッジで番号を表示**（配列インデックス+1。確定時にそのまま`lineNo`として保存される）。
+  - **申込詳細（顧客`mypage/applications/[id]`・管理`admin/applications/[id]`）のカード一覧にも`lineNo`を表示**。あわせて両ページの`cards`取得クエリに`orderBy: { lineNo: "asc" }`を追加し、常に入力順で表示されるようにした（従来は`createdAt`順または未指定）。
+- 影響: `prisma/schema.prisma`（`Card.lineNo`列追加、非破壊）、`src/actions/application.ts`、`src/actions/admin.ts`、`src/app/apply/ApplyForm.tsx`、`src/app/admin/store-requests/[id]/StoreInputForm.tsx`、`src/app/mypage/applications/[id]/page.tsx`、`src/app/admin/applications/[id]/page.tsx`。
+- 未対応: 既存（本ADR以前に作成された）カードの`lineNo`は`null`のまま。QRコード印刷（`/api/qrcode`）への番号表示は未対応。
+
 

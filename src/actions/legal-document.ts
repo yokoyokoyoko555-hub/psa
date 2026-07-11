@@ -17,21 +17,28 @@ async function requireAdminOrStaff() {
 }
 
 /**
- * 規程文書がDBに無ければ初期値を投入する（冪等・既存行は一切上書きしない）。
- * 顧客向けページ・管理画面の両方から、参照前に必ず呼ぶこと。ADR-0057
+ * 規程文書がDBに無ければ初期値を投入する（冪等）。既存行のtitle/body等は上書きしないが、
+ * footerLabel未設定行（ADR-0060で追加した新フィールド。既存行はnull）だけは既定値で補完する。
+ * 顧客向けページ・管理画面の両方から、参照前に必ず呼ぶこと。ADR-0057/0060
  * （管理画面で新規作成した文書のidにはLEGAL_DOCUMENT_DEFAULTSが無いため何もしない）
  */
 export async function ensureLegalDocument(id: string): Promise<void> {
-  const existing = await prisma.legalDocument.findUnique({ where: { id } });
-  if (existing) return;
-
   const defaults = LEGAL_DOCUMENT_DEFAULTS[id];
   if (!defaults) return;
+
+  const existing = await prisma.legalDocument.findUnique({ where: { id } });
+  if (existing) {
+    if (existing.footerLabel === null) {
+      await prisma.legalDocument.update({ where: { id }, data: { footerLabel: defaults.footerLabel } });
+    }
+    return;
+  }
 
   await prisma.legalDocument.create({
     data: {
       id,
       title: defaults.title,
+      footerLabel: defaults.footerLabel,
       body: defaults.body,
       establishedAt: new Date(defaults.establishedAt),
     },
@@ -51,7 +58,7 @@ export async function getFooterLegalDocuments() {
     where: { showInFooter: true },
     orderBy: { establishedAt: "asc" },
   });
-  return docs.map((d) => ({ id: d.id, title: d.title, path: legalDocumentPath(d.id) }));
+  return docs.map((d) => ({ id: d.id, title: d.footerLabel ?? d.title, path: legalDocumentPath(d.id) }));
 }
 
 /** 管理画面の一覧・編集用。既定3文書を初期値投入のうえ、新規作成分も含め全件返す。 */
@@ -89,6 +96,7 @@ export async function createLegalDocument(
     data: {
       id: parsed.data.id,
       title: parsed.data.title,
+      footerLabel: parsed.data.title,
       body: `## ${parsed.data.title}\n\nここに本文を入力してください。`,
       establishedAt: parsed.data.establishedAt,
       updatedBy: user.id,
@@ -112,6 +120,7 @@ export async function createLegalDocument(
 const updateSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1).max(200),
+  footerLabel: z.string().min(1).max(60),
   body: z.string().min(1),
   establishedAt: z.coerce.date(),
   revisedAt: z.array(z.coerce.date()),
@@ -132,6 +141,7 @@ export async function updateLegalDocument(
     where: { id: parsed.data.id },
     update: {
       title: parsed.data.title,
+      footerLabel: parsed.data.footerLabel,
       body: parsed.data.body,
       establishedAt: parsed.data.establishedAt,
       revisedAt: parsed.data.revisedAt,
@@ -141,6 +151,7 @@ export async function updateLegalDocument(
     create: {
       id: parsed.data.id,
       title: parsed.data.title,
+      footerLabel: parsed.data.footerLabel,
       body: parsed.data.body,
       establishedAt: parsed.data.establishedAt,
       revisedAt: parsed.data.revisedAt,

@@ -16,7 +16,7 @@
 | `EmailVerification` / email_verifications | 新規登録メール認証 | `token`(uniq), `email`, `expiresAt`(24h), `consumedAt` |
 | `CustomerAddress` / customer_addresses | 住所帳（返送先） | 姓名/ローマ字/住所などPII列=`*Encrypted`, `isDefault`, Customterへ Cascade |
 | `Application` / applications | 申込 | `applicationNo`(uniq, APP-…), `region`(PSA_JP/PSA_US), `itemType`(TRADING_CARD/UNOPENED_PACK/COMIC_MAGAZINE。JPは常にTRADING_CARD。[ADR-0023](DECISIONS.md)), `source`(CUSTOMER/STORE), 返送先住所/電話（暗号化）, 代理申込の選択保存カードID, 料金内訳(`autographFeeTotal`含む), `status` |
-| `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`(String, 自由記述)/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金, `autographRequested`/`autographFee`(オートグラフ) |
+| `Card` / cards | **カード（最重要）** | `cardNo`(uniq, CARD-…), `lineNo`(Int?, 申込内の入力順1始まり。[ADR-0062](DECISIONS.md)), `tcgTitle`/`releaseYear`/`cardNumber`/`cardName`/`rarity`/`language`(String, 自由記述)/`declaredValue`/`quantity`, PSA各種ID/grade, 画像S3キー, `status`(CardStatus 17), 料金, `autographRequested`/`autographFee`(オートグラフ) |
 | `CardStatusHistory` / card_status_histories | ステータス履歴 | `status`, `changedBy`(userId or customerId), Cardへ Cascade |
 | `PsaSubmissionGroup` / psa_submission_groups | PSA提出グループ | `groupNo`(uniq, PSG-…), `region`/`itemType`/`customServiceLevelId`/`customServiceLevelName`(提出時に記録。[ADR-0051](DECISIONS.md)), `psaSubmissionId`(申込番号/Sub#), `psaOrderId`(旧Order ID・未使用で残置), `status` |
 | `Payment` / payments | 決済 | `stripePaymentIntentId`(uniq), `amount`(Float, JP=円/US=USD小数2桁), `currency`(jpy/usd), `status`(PaymentStatus) |
@@ -32,7 +32,7 @@
 | `OperationLog` / operation_logs | 操作ログ | `userId`/`customerId`, `action`, `targetType`/`targetId`, `before`/`after`(Json), index×3 |
 | `SavedPaymentMethod` / saved_payment_methods | 保存カード | `stripePaymentMethodId`(uniq), `brand`/`last4`, `expMonth`/`expYear`, `isDefault` |
 | `Inquiry` / inquiries | 顧客お問い合わせ | `subject`/`body`, `status`(UNREAD/READ/REPLIED), `replyText`/`repliedAt`/`repliedBy`(userId)。[ADR-0055](DECISIONS.md) |
-| `LegalDocument` / legal_documents | 規程文書（利用規約/個人情報保護方針/カスハラポリシー等） | `id`(スラッグ。既定3件は terms/privacy/harassment_policy 固定、管理画面から追加可), `title`, `body`(簡易Markdown), `establishedAt`(制定日), `revisedAt`(改訂日の配列・複数回分), `showInFooter`(フッターリンクON/OFF), `updatedBy`。管理画面で追加・編集・削除可能。[ADR-0057](DECISIONS.md)/[ADR-0058](DECISIONS.md) |
+| `LegalDocument` / legal_documents | 規程文書（利用規約/個人情報保護方針/カスハラポリシー等） | `id`(スラッグ。既定3件は terms/privacy/harassment_policy 固定、管理画面から追加可), `title`(ページ見出し用), `footerLabel`(フッター用の短い表記・未設定はtitleにフォールバック), `body`(簡易Markdown), `establishedAt`(制定日), `revisedAt`(改訂日の配列・複数回分), `showInFooter`(フッターリンクON/OFF), `updatedBy`。管理画面で追加・編集・削除可能。[ADR-0057](DECISIONS.md)/[ADR-0058](DECISIONS.md)/[ADR-0060](DECISIONS.md) |
 | `AdminNavItem` / admin_nav_items | 管理画面サイドバーの表示名・並び順 | `id`(hrefベースの固定キー。href/iconはコード側`src/lib/admin-nav-defaults.ts`で固定), `label`, `sortOrder`。管理画面「料金設定」から編集可能。[ADR-0059](DECISIONS.md) |
 
 ---

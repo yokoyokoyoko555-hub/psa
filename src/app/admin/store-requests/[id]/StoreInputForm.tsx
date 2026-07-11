@@ -84,7 +84,7 @@ interface CardRow {
   customServiceLevelId: string;
 }
 
-function newRow(defaultServiceLevelId = ""): CardRow {
+function newRow(): CardRow {
   return {
     tcgTitle: "",
     releaseYear: "",
@@ -95,7 +95,7 @@ function newRow(defaultServiceLevelId = ""): CardRow {
     declaredValue: 0,
     quantity: 1,
     notes: "",
-    customServiceLevelId: defaultServiceLevelId,
+    customServiceLevelId: "",
   };
 }
 
@@ -134,9 +134,9 @@ export default function StoreInputForm({
   initialDraft?: { cards?: unknown[] } | null;
 }) {
   const router = useRouter();
-  const draftCards = initialDraft?.cards?.map(toCardRow) ?? [];
-  const [cards, setCards] = useState<CardRow[]>(draftCards.length > 0 ? draftCards : [newRow()]);
-  const [bulkServiceLevelId, setBulkServiceLevelId] = useState(""); // 一括設定用（保存はしない）
+  const [cards, setCards] = useState<CardRow[]>(initialDraft?.cards?.map(toCardRow) ?? []);
+  const [draft, setDraft] = useState<CardRow>(newRow());
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -150,13 +150,72 @@ export default function StoreInputForm({
   const autographActive = activeAutographTiers.length > 0;
   const allTiers = [...customServicePrices, ...activeAutographTiers];
   const fieldLabels = CARD_FIELD_LABELS[itemType] ?? CARD_FIELD_LABELS.TRADING_CARD;
-  // 顧客向けApplyForm.tsxのカード情報入力欄と同じ見た目にする。ADR-0039
+  // 顧客向けApplyForm.tsxのカード情報入力欄と同じ見た目・同じ「1件ずつ入力→保存→一覧」の流れにする。ADR-0039/0061
   const inputCls =
     "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500";
 
-  function applyBulkServiceLevel() {
-    if (!bulkServiceLevelId) return;
-    setCards((prev) => prev.map((c) => ({ ...c, customServiceLevelId: bulkServiceLevelId })));
+  const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
+
+  function setDraftField<K extends keyof CardRow>(field: K, value: CardRow[K]) {
+    setDraft((d) => ({ ...d, [field]: value }));
+  }
+
+  function clearDraft() {
+    setDraft(newRow());
+    setEditingIndex(null);
+    setError("");
+  }
+
+  function saveDraftCard() {
+    setError("");
+    if (!draft.customServiceLevelId) {
+      setError("サービスレベルを選択してください");
+      return;
+    }
+    if (!draft.tcgTitle.trim() || !draft.cardName.trim()) {
+      setError(`タイトルと${fieldLabels.nameLabel}は必須です`);
+      return;
+    }
+    // 発行年の範囲チェックは「トレカ／未開封パック」のみ。コミック・マガジンは発行年月の自由記述のため対象外。ADR-0033
+    if (itemType !== "COMIC_MAGAZINE" && draft.releaseYear.trim()) {
+      const y = parseInt(draft.releaseYear, 10);
+      if (!Number.isInteger(y) || y < 1900 || y > 2100) {
+        setError(`${fieldLabels.releaseYearLabel}は1900〜2100の範囲で入力してください（空欄でも構いません）`);
+        return;
+      }
+    }
+    if (draft.declaredValue < 1) {
+      setError("申告金額を入力してください");
+      return;
+    }
+    const tier = allTiers.find((t) => t.id === draft.customServiceLevelId);
+    if (tier?.maxDeclaredValue != null && draft.declaredValue > tier.maxDeclaredValue) {
+      setError(`申告価格上限（${formatMoneyInt(tier.maxDeclaredValue, region)}）を超えています。上位サービスを選択してください。`);
+      return;
+    }
+    if (draft.quantity < 1) {
+      setError(`${fieldLabels.quantityLabel}は1以上で入力してください`);
+      return;
+    }
+
+    if (editingIndex !== null) {
+      setCards((prev) => prev.map((c, i) => (i === editingIndex ? draft : c)));
+    } else {
+      setCards((prev) => [...prev, draft]);
+    }
+    clearDraft();
+    setPreview(null);
+  }
+
+  function editCard(i: number) {
+    setDraft(cards[i]);
+    setEditingIndex(i);
+    setError("");
+  }
+
+  function deleteCard(i: number) {
+    setCards((prev) => prev.filter((_, idx) => idx !== i));
+    if (editingIndex === i) clearDraft();
     setPreview(null);
   }
 
@@ -186,12 +245,10 @@ export default function StoreInputForm({
     }
   }
 
-  function update<K extends keyof CardRow>(i: number, field: K, value: CardRow[K]) {
-    setCards((prev) => prev.map((c, idx) => (idx === i ? { ...c, [field]: value } : c)));
-    setPreview(null);
-  }
-
   function validateCards(): string | null {
+    if (cards.length === 0) {
+      return `${fieldLabels.entryLabel}を1${fieldLabels.quantityUnit}以上追加してください`;
+    }
     if (cards.some((c) => !c.customServiceLevelId)) {
       return `各${fieldLabels.entryLabel}のサービスレベルを選択してください`;
     }
@@ -206,17 +263,6 @@ export default function StoreInputForm({
     if (overCap) {
       const tier = allTiers.find((t) => t.id === overCap.customServiceLevelId)!;
       return `申告価格上限（${formatMoneyInt(tier.maxDeclaredValue!, region)}）を超えています（${overCap.cardName}: ${formatMoneyInt(overCap.declaredValue, region)}）。`;
-    }
-    // 発行年の範囲チェックは「トレカ／未開封パック」のみ。コミック・マガジンは発行年月の自由記述のため対象外。ADR-0033
-    if (itemType !== "COMIC_MAGAZINE") {
-      const badYear = cards.find((c) => {
-        if (!c.releaseYear.trim()) return false;
-        const y = parseInt(c.releaseYear, 10);
-        return !Number.isInteger(y) || y < 1900 || y > 2100 || String(y) !== c.releaseYear.trim();
-      });
-      if (badYear) {
-        return `${fieldLabels.releaseYearLabel}は1900〜2100の範囲で入力してください（空欄でも構いません）`;
-      }
     }
     return null;
   }
@@ -278,22 +324,25 @@ export default function StoreInputForm({
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="font-bold text-gray-900 mb-3">サービスレベル（{fieldLabels.entryLabel}ごとに選択）</h2>
-        {region === "PSA_US" && (
-          <p className="text-xs text-gray-500 mb-2">アイテム種別: {ITEM_TYPE_LABELS[itemType] ?? itemType}</p>
-        )}
-        <p className="text-xs text-gray-500 mb-2">
-          複数のサービスレベルにまたがる場合も、{fieldLabels.entryLabel}ごとに下の明細で個別に選択してください。
-          全て同じ場合は、以下から一括設定できます。
-        </p>
-        <div className="flex items-center gap-2">
+      {region === "PSA_US" && (
+        <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
+          アイテム種別: <strong>{ITEM_TYPE_LABELS[itemType] ?? itemType}</strong>
+        </div>
+      )}
+
+      {/* Card entry form（自己入力ApplyForm.tsxと同じ「1件ずつ入力→保存」の流れ） */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <h2 className="font-bold text-gray-800">
+          {editingIndex !== null ? `${fieldLabels.entryLabel}を編集` : `${fieldLabels.entryLabel}情報入力`}
+        </h2>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">サービスレベル *</label>
           <select
-            value={bulkServiceLevelId}
-            onChange={(e) => setBulkServiceLevelId(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+            value={draft.customServiceLevelId}
+            onChange={(e) => setDraftField("customServiceLevelId", e.target.value)}
+            className={inputCls}
           >
-            <option value="">一括設定するサービスレベルを選択</option>
+            <option value="">サービスレベルを選択</option>
             {customServicePrices.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}（{formatMoney(p.pricePerCard, region)}/枚）
@@ -311,172 +360,168 @@ export default function StoreInputForm({
               </optgroup>
             )}
           </select>
-          <button
-            type="button"
-            onClick={applyBulkServiceLevel}
-            disabled={!bulkServiceLevelId}
-            className="border border-brand-600 text-brand-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-50 disabled:opacity-50"
-          >
-            全{fieldLabels.entryLabel}に適用
-          </button>
-        </div>
-        {autographActive && (
-          <p className="text-xs text-gray-500 mt-2">
-            デュアルサービスは通常サービスの代わりに選択します（追加料金ではありません）。
+          <p className="text-xs text-gray-400 mt-1">
+            複数のサービスレベルが混在する場合も、{fieldLabels.entryLabel}ごとに選択してください。
+            {autographActive && "デュアルサービスは通常サービスの代わりに選択します（追加料金ではありません）。"}
           </p>
-        )}
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">{fieldLabels.entryLabel}明細</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">{fieldLabels.releaseYearLabel}</label>
+            <input
+              type={itemType === "COMIC_MAGAZINE" ? "text" : "number"}
+              className={inputCls}
+              placeholder={fieldLabels.releaseYearPlaceholder}
+              value={draft.releaseYear}
+              onChange={(e) => setDraftField("releaseYear", e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">タイトル *</label>
+            <input
+              className={inputCls}
+              placeholder="例: ワンピースカードゲーム"
+              value={draft.tcgTitle}
+              onChange={(e) => setDraftField("tcgTitle", e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">{fieldLabels.secondaryLabel}</label>
+            <input
+              className={inputCls}
+              list={itemType !== "COMIC_MAGAZINE" ? "language-suggestions" : undefined}
+              placeholder={fieldLabels.secondaryPlaceholder}
+              value={draft.language}
+              onChange={(e) => setDraftField("language", e.target.value)}
+            />
+          </div>
+          {fieldLabels.showCardNumberRarity && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">カード番号／型番</label>
+              <input
+                className={inputCls}
+                placeholder="例: OP01-003"
+                value={draft.cardNumber}
+                onChange={(e) => setDraftField("cardNumber", e.target.value)}
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">{fieldLabels.nameLabel} *</label>
+            <input
+              className={inputCls}
+              placeholder={fieldLabels.namePlaceholder}
+              list={fieldLabels.showCardNumberRarity ? "card-name-master" : undefined}
+              value={draft.cardName}
+              onChange={(e) => setDraftField("cardName", e.target.value)}
+            />
+          </div>
+          {fieldLabels.showCardNumberRarity && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">レアリティ</label>
+              <input
+                className={inputCls}
+                placeholder="例: Lパラレル"
+                value={draft.rarity}
+                onChange={(e) => setDraftField("rarity", e.target.value)}
+              />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">{fieldLabels.quantityLabel} *</label>
+            <input
+              type="number"
+              min={1}
+              className={inputCls}
+              value={draft.quantity || ""}
+              onChange={(e) => setDraftField("quantity", parseInt(e.target.value) || 0)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">申告金額（{currencySymbol(region)}） *</label>
+            <input
+              type="number"
+              min={1}
+              className={inputCls}
+              placeholder={region === "PSA_US" ? "例: 500" : "例: 50000"}
+              value={draft.declaredValue || ""}
+              onChange={(e) => setDraftField("declaredValue", parseInt(e.target.value) || 0)}
+            />
+          </div>
+        </div>
+        <div className="flex gap-3">
           <button
             type="button"
-            onClick={() => {
-              setCards((p) => [...p, newRow(bulkServiceLevelId)]);
-              setPreview(null);
-            }}
-            className="text-brand-600 text-sm font-medium hover:text-brand-800"
+            onClick={saveDraftCard}
+            className="bg-brand-600 text-white font-bold px-6 py-2 rounded-lg hover:bg-brand-700 transition"
           >
-            + {fieldLabels.entryLabel}を追加
+            {editingIndex !== null ? "更新" : "保存"}
+          </button>
+          <button
+            type="button"
+            onClick={clearDraft}
+            className="border border-gray-300 text-gray-600 px-6 py-2 rounded-lg hover:bg-gray-50 transition"
+          >
+            消去
           </button>
         </div>
-
-        {cards.map((c, i) => (
-          <div key={i} className="border border-gray-200 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="font-bold text-gray-800 text-sm">{fieldLabels.entryLabel} {i + 1}</p>
-              {cards.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCards((p) => p.filter((_, idx) => idx !== i));
-                    setPreview(null);
-                  }}
-                  className="text-red-500 text-xs hover:text-red-700"
-                >
-                  削除
-                </button>
-              )}
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">サービスレベル</label>
-              <select
-                value={c.customServiceLevelId}
-                onChange={(e) => update(i, "customServiceLevelId", e.target.value)}
-                className={inputCls}
-              >
-                <option value="">サービスレベルを選択</option>
-                {customServicePrices.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}（{formatMoney(p.pricePerCard, region)}/枚）
-                    {p.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(p.maxDeclaredValue, region)}` : ""}
-                  </option>
-                ))}
-                {autographActive && (
-                  <optgroup label="デュアルサービス（カードとサインの鑑定）">
-                    {activeAutographTiers.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}（{formatMoney(t.pricePerCard, region)}/枚）
-                        {t.maxDeclaredValue !== null ? ` 上限${formatMoneyInt(t.maxDeclaredValue, region)}` : ""}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">{fieldLabels.releaseYearLabel}</label>
-                <input
-                  type={itemType === "COMIC_MAGAZINE" ? "text" : "number"}
-                  className={inputCls}
-                  placeholder={fieldLabels.releaseYearPlaceholder}
-                  value={c.releaseYear}
-                  onChange={(e) => update(i, "releaseYear", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">タイトル *</label>
-                <input
-                  className={inputCls}
-                  placeholder="例: ワンピースカードゲーム"
-                  value={c.tcgTitle}
-                  onChange={(e) => update(i, "tcgTitle", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">{fieldLabels.secondaryLabel}</label>
-                <input
-                  className={inputCls}
-                  list={itemType !== "COMIC_MAGAZINE" ? "language-suggestions" : undefined}
-                  placeholder={fieldLabels.secondaryPlaceholder}
-                  value={c.language}
-                  onChange={(e) => update(i, "language", e.target.value)}
-                />
-              </div>
-              {fieldLabels.showCardNumberRarity && (
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">カード番号／型番</label>
-                  <input
-                    className={inputCls}
-                    placeholder="例: OP01-003"
-                    value={c.cardNumber}
-                    onChange={(e) => update(i, "cardNumber", e.target.value)}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">{fieldLabels.nameLabel} *</label>
-                <input
-                  className={inputCls}
-                  placeholder={fieldLabels.namePlaceholder}
-                  list={fieldLabels.showCardNumberRarity ? "card-name-master" : undefined}
-                  value={c.cardName}
-                  onChange={(e) => update(i, "cardName", e.target.value)}
-                />
-              </div>
-              {fieldLabels.showCardNumberRarity && (
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">レアリティ</label>
-                  <input
-                    className={inputCls}
-                    placeholder="例: Lパラレル"
-                    value={c.rarity}
-                    onChange={(e) => update(i, "rarity", e.target.value)}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">{fieldLabels.quantityLabel} *</label>
-                <input
-                  type="number"
-                  min={1}
-                  className={inputCls}
-                  value={c.quantity || ""}
-                  onChange={(e) => update(i, "quantity", parseInt(e.target.value) || 0)}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">申告金額（{currencySymbol(region)}） *</label>
-                <input
-                  type="number"
-                  min={1}
-                  className={inputCls}
-                  placeholder={region === "PSA_US" ? "例: 500" : "例: 50000"}
-                  value={c.declaredValue || ""}
-                  onChange={(e) => update(i, "declaredValue", parseInt(e.target.value) || 0)}
-                />
-              </div>
-            </div>
-          </div>
-        ))}
       </div>
       <datalist id="language-suggestions">
         {LANGUAGE_SUGGESTIONS.map((v) => (
           <option key={v} value={v} />
         ))}
       </datalist>
+
+      {/* Saved cards list */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">{fieldLabels.entryLabel}明細（{cards.length}）</h3>
+          <span className="text-sm text-gray-500">申告合計 {formatMoneyInt(totalDeclaredValue, region)}</span>
+        </div>
+        {cards.length === 0 ? (
+          <p className="px-4 py-8 text-center text-gray-400 text-sm">
+            上のフォームから{fieldLabels.entryLabel}を追加してください
+          </p>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {cards.map((c, i) => {
+              const tier = allTiers.find((t) => t.id === c.customServiceLevelId);
+              return (
+                <div key={i} className="px-4 py-3 flex items-center gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">
+                      {c.releaseYear ? `${c.releaseYear} ` : ""}
+                      {c.tcgTitle} {c.cardNumber} {c.cardName}
+                      {c.rarity ? `（${c.rarity}）` : ""}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {tier?.name ?? "サービスレベル未選択"} / {c.quantity}
+                      {fieldLabels.quantityUnit} / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => editCard(i)}
+                    className="text-brand-600 hover:text-brand-800 text-sm font-medium"
+                  >
+                    編集
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteCard(i)}
+                    className="text-red-500 hover:text-red-700 text-sm font-medium"
+                  >
+                    削除
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {preview && (
         <div className="bg-white rounded-xl border border-brand-300 p-6 space-y-2">

@@ -407,6 +407,7 @@ model Card {
   psaGradedAt          DateTime?
 
   // カード情報
+  lineNo        Int? // 申込内の入力順（1始まり）。お客様が店頭提出時にカードへ付けるライン番号と対応。ADR-0062
   tcgTitle      String // タイトル（セット名など）
   releaseYear   String? // 発行年（トレカ/パック）または発行年月の自由記述（コミック・マガジン）。ADR-0033
   cardName      String // カード名（パックはパック名、コミック・マガジンは巻数・号として使用）。ADR-0033
@@ -810,7 +811,8 @@ model AdminNavItem {
 // 入力されたスラッグをそのまま使う）。管理画面から追加・編集・削除できる。ADR-0057/0058
 model LegalDocument {
   id            String     @id
-  title         String
+  title         String // ページ見出し・ブラウザタブ用の正式名称（長くなりがち）
+  footerLabel   String? // フッター表示用の短い表記。未設定ならtitleを使う。ADR-0060
   body          String // 簡易Markdown（#/##/### 見出し、* 箇条書き、**太字**、---区切り）。src/lib/legal-markdown.tsxで描画
   establishedAt DateTime // 制定日
   revisedAt     DateTime[] @default([]) // 改訂日（複数回分を配列で保持。本文の差分は保持しない）。ADR-0058

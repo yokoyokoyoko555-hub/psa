@@ -11,6 +11,7 @@ function toDateInputValue(date: Date): string {
 export default function LegalDocumentForm({
   id,
   initialTitle,
+  initialFooterLabel,
   initialBody,
   initialEstablishedAt,
   initialRevisedAt,
@@ -18,6 +19,7 @@ export default function LegalDocumentForm({
 }: {
   id: string;
   initialTitle: string;
+  initialFooterLabel: string;
   initialBody: string;
   initialEstablishedAt: Date;
   initialRevisedAt: Date[];
@@ -25,6 +27,7 @@ export default function LegalDocumentForm({
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
+  const [footerLabel, setFooterLabel] = useState(initialFooterLabel);
   const [body, setBody] = useState(initialBody);
   const [establishedAt, setEstablishedAt] = useState(toDateInputValue(initialEstablishedAt));
   const [revisedDates, setRevisedDates] = useState(initialRevisedAt.map(toDateInputValue).sort());
@@ -53,6 +56,7 @@ export default function LegalDocumentForm({
       const result = await updateLegalDocument({
         id,
         title: title.trim(),
+        footerLabel: footerLabel.trim(),
         body,
         establishedAt: new Date(establishedAt),
         revisedAt: revisedDates.map((d) => new Date(d)),
@@ -83,8 +87,22 @@ export default function LegalDocumentForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">タイトル</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          タイトル（ページ見出し・ブラウザタブに使用）
+        </label>
         <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          フッター表示名（短い表記。例: 利用規約）
+        </label>
+        <input
+          className={inputCls}
+          value={footerLabel}
+          onChange={(e) => setFooterLabel(e.target.value)}
+          maxLength={60}
+        />
       </div>
 
       <div>

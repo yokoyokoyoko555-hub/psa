@@ -14,10 +14,11 @@ export function legalDocumentPath(id: string): string {
 
 export const LEGAL_DOCUMENT_DEFAULTS: Record<
   string,
-  { title: string; body: string; establishedAt: string }
+  { title: string; footerLabel: string; body: string; establishedAt: string }
 > = {
   terms: {
     title: "トレカビンクス PSA鑑定代行サービス利用規約",
+    footerLabel: "利用規約",
     establishedAt: "2026-07-08",
     body: `株式会社ツルプルン（以下「当社」といいます。）は、当社が運営する「トレカビンクス」において提供するPSA鑑定代行サービス（以下「本サービス」といいます。）について、以下のとおり利用規約（以下「本規約」といいます。）を定めます。
 
@@ -256,6 +257,7 @@ export const LEGAL_DOCUMENT_DEFAULTS: Record<
 
   privacy: {
     title: "個人情報保護方針（プライバシーポリシー）",
+    footerLabel: "個人情報保護方針",
     establishedAt: "2026-07-10",
     body: `株式会社ツルプルン（以下「当社」といいます。）は、「トレカビンクス PSA鑑定受付代行サービス」（以下「本サービス」といいます。）における利用者の個人情報の取扱いについて、個人情報の保護に関する法律その他関係法令を遵守し、以下のとおり個人情報保護方針（以下「本ポリシー」といいます。）を定めます。
 
@@ -439,6 +441,7 @@ export const LEGAL_DOCUMENT_DEFAULTS: Record<
 
   harassment_policy: {
     title: "カスタマーハラスメントポリシー",
+    footerLabel: "カスタマーハラスメントポリシー",
     establishedAt: "2026-07-10",
     body: `## 1. 基本方針
 

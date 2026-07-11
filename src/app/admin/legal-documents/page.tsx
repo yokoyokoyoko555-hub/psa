@@ -38,6 +38,7 @@ export default async function LegalDocumentsPage() {
             <LegalDocumentForm
               id={doc.id}
               initialTitle={doc.title}
+              initialFooterLabel={doc.footerLabel ?? doc.title}
               initialBody={doc.body}
               initialEstablishedAt={doc.establishedAt}
               initialRevisedAt={doc.revisedAt}

@@ -118,7 +118,10 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             <div key={card.id} className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <p className="font-mono text-xs text-gray-400">{card.cardNo}</p>
+                  <p className="font-mono text-xs text-gray-400">
+                    {card.cardNo}
+                    {card.lineNo != null && <span className="ml-2 text-gray-500">No.{card.lineNo}</span>}
+                  </p>
                   <p className="font-bold text-gray-900">{card.cardName}</p>
                   <p className="text-sm text-gray-500">{card.tcgTitle}</p>
                   {isStoreInput && (

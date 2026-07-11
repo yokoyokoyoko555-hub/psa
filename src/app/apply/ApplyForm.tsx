@@ -959,6 +959,9 @@ export default function ApplyForm({
                 <div className="divide-y divide-gray-100">
                   {cards.map((c, i) => (
                     <div key={i} className="px-4 py-3 flex items-center gap-3">
+                      <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
+                        {i + 1}
+                      </span>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 truncate">
                           {c.releaseYear ? `${c.releaseYear} ` : ""}

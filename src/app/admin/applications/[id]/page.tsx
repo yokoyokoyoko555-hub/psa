@@ -52,7 +52,7 @@ export default async function AdminApplicationDetailPage({
     where: { id },
     include: {
       customer: true,
-      cards: { orderBy: { createdAt: "asc" }, include: { upcharges: { orderBy: { createdAt: "desc" } } } },
+      cards: { orderBy: { lineNo: "asc" }, include: { upcharges: { orderBy: { createdAt: "desc" } } } },
       payments: { orderBy: { createdAt: "desc" } },
       agreement: true,
       submissionBooking: true,
@@ -300,6 +300,11 @@ export default async function AdminApplicationDetailPage({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
+                        {card.lineNo != null && (
+                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-900 text-white text-xs font-bold flex items-center justify-center">
+                            {card.lineNo}
+                          </span>
+                        )}
                         <span className="font-medium text-gray-900">{card.cardName}</span>
                         {card.autographRequested && (
                           <span className="text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5">

@@ -6,7 +6,6 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import CustomerHeader from "@/components/CustomerHeader";
-import CancelBookingButton from "../CancelBookingButton";
 import { format } from "date-fns";
 
 export const metadata = { title: "提出予約の詳細 | トレカビンクス" };
@@ -48,7 +47,7 @@ export default async function BookingDetailPage({
         </Link>
 
         <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 text-sm">
-          提出予約を受け付けました。{isStore ? "店頭ではこの受付番号のご提示とご本人確認のみで受付します。" : "到着後、スタッフが受け付けます。"}
+          提出予約を受け付けました。{isStore ? "店頭ではこの受付番号のご提示とご本人様確認にて受付します。" : "到着後、スタッフが受け付けます。"}
         </div>
 
         {/* 受付番号カード */}
@@ -74,11 +73,19 @@ export default async function BookingDetailPage({
           </div>
 
           <div className="px-6 py-4 bg-gray-50 text-xs text-gray-600 leading-relaxed">
-            {isStore
-              ? "店頭では、この受付番号の画面提示と本人確認書類（運転免許証等）でのご本人確認のみを行います。カードの内容確認は後日スタッフが行います。"
-              : "郵送でお送りください。到着後、スタッフが受け付けます。"}
-            <br />
-            ※ 提出方法・日時の変更は下のボタンから行えます。
+            {isStore ? (
+              <>
+                <p>店頭では、この受付番号の画面提示と本人確認書類（運転免許証等）でのご本人様確認を行います。</p>
+                <p className="mt-2">カードは以下の準備をしてご提出お願いいたします。</p>
+                <ol className="list-decimal pl-4 mt-1 space-y-1">
+                  <li>カードはソフトスリーブにカードを入れ、スリーブに入ったカードをカードセイバーに入れてください。</li>
+                  <li>面前にてカードの確認を行いますが、注文ごとにアイテムをグループ分けして番号通りに並べてご提出お願いいたします。</li>
+                </ol>
+              </>
+            ) : (
+              <p>郵送でお送りください。到着後、スタッフが受け付けます。</p>
+            )}
+            <p className="mt-2">※ 提出日時の変更は下のボタンから行えます。</p>
           </div>
         </div>
 
@@ -89,7 +96,12 @@ export default async function BookingDetailPage({
           >
             予約を変更
           </Link>
-          <CancelBookingButton bookingId={booking.id} />
+          <Link
+            href={`/mypage/applications/${app.id}`}
+            className="inline-block border border-gray-300 rounded-lg px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
+          >
+            申込内容を確認する
+          </Link>
         </div>
       </main>
     </div>
