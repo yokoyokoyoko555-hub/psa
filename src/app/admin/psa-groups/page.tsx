@@ -7,6 +7,7 @@ import Link from "next/link";
 import CreateGroupForm from "./CreateGroupForm";
 import SubmitGroupForm from "./SubmitGroupForm";
 import AdvanceGroupStatusForm from "./AdvanceGroupStatusForm";
+import ReturnStatusButtons from "./ReturnStatusButtons";
 import type { ServiceRegion } from "@prisma/client";
 
 const REGION_LABELS: Record<ServiceRegion, string> = {
@@ -112,11 +113,18 @@ export default async function PsaGroupsPage() {
               <SubmitGroupForm groupId={group.id} customServicePrices={customServicePrices} />
             )}
             {group.status !== "PREPARING" && (
-              <AdvanceGroupStatusForm
-                groupId={group.id}
-                currentStatus={group.status}
-                statusOptions={progressStatuses.map((s) => ({ id: s.id, name: s.name }))}
-              />
+              <div className="space-y-3">
+                <AdvanceGroupStatusForm
+                  groupId={group.id}
+                  currentStatus={group.status}
+                  statusOptions={progressStatuses.map((s) => ({ id: s.id, name: s.name }))}
+                />
+                <ReturnStatusButtons
+                  groupId={group.id}
+                  returnReady={Boolean(group.returnReadyAt)}
+                  returned={Boolean(group.returnedAt)}
+                />
+              </div>
             )}
           </div>
         ))}

@@ -10,7 +10,7 @@ import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
 import { formatMoneyIn, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { pricingSettingId } from "@/lib/pricing-setting-id";
-import { CardStatus, Application, CustomServicePrice, ServiceRegion, ItemType } from "@prisma/client";
+import { Application, CustomServicePrice, ServiceRegion, ItemType } from "@prisma/client";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
@@ -85,64 +85,19 @@ export async function getDashboardStats() {
   return { total, psaWaiting, psaReturning, unpaid, upchargeCount };
 }
 
-export async function updateCardStatus(
-  cardId: string,
-  status: CardStatus,
-  note?: string
-) {
-  const user = await requireAdminOrStaff();
-
-  const card = await prisma.card.findUniqueOrThrow({ where: { id: cardId } });
-
-  await prisma.$transaction([
-    prisma.card.update({
-      where: { id: cardId },
-      data: { status, updatedAt: new Date() },
-    }),
-    prisma.cardStatusHistory.create({
-      data: { cardId, status, note, changedBy: user.id },
-    }),
-  ]);
-
-  const hdrs = await headers();
-  await logOperation({
-    userId: user.id,
-    ipAddress: (hdrs as unknown as Headers).get?.("x-forwarded-for") ?? "unknown",
-    action: "CARD_STATUS_UPDATE",
-    targetType: "cards",
-    targetId: cardId,
-    before: { status: card.status },
-    after: { status },
-  });
-}
-
 /**
  * 申込単位で「受取完了」を記録する（スタッフが実物を受け取った際に申込詳細ページで押す）。
- * Application.receivedAtを設定し、配下カードを一括でRECEIVED_BY_STOREへ進める。ADR-0034
+ * Application.receivedAtのみを設定する（カード単位のステータスは持たない）。ADR-0034/0066
  */
 export async function markApplicationReceived(applicationId: string) {
   const user = await requireAdminOrStaff();
 
-  const app = await prisma.application.findUniqueOrThrow({
-    where: { id: applicationId },
-    include: { cards: true },
-  });
+  const app = await prisma.application.findUniqueOrThrow({ where: { id: applicationId } });
   if (app.receivedAt) return { success: true }; // 既に受取済みなら何もしない（二重押下対策）
 
-  await prisma.$transaction(async (tx) => {
-    await tx.application.update({
-      where: { id: applicationId },
-      data: { receivedAt: new Date() },
-    });
-    for (const card of app.cards) {
-      await tx.card.update({
-        where: { id: card.id },
-        data: { status: "RECEIVED_BY_STORE" },
-      });
-      await tx.cardStatusHistory.create({
-        data: { cardId: card.id, status: "RECEIVED_BY_STORE", changedBy: user.id },
-      });
-    }
+  await prisma.application.update({
+    where: { id: applicationId },
+    data: { receivedAt: new Date() },
   });
 
   const hdrs = await headers();
@@ -235,6 +190,50 @@ export async function advanceGroupStatus(
   return { success: true };
 }
 
+/**
+ * PSA提出グループを一括で「④受取可能/返送準備中」または「⑤受取完了/返送完了」に進める。
+ * カード単位のステータスは持たない（ユーザー方針）ため、`PsaSubmissionGroup.returnReadyAt`/`returnedAt`
+ * （グループ単位・グループ配下の全申込に共通で適用される）を進める。表示ラベルは申込ごとの
+ * `returnMethod`により`computeDisplayStatus()`側で分岐する。ADR-0065/0066
+ */
+async function advanceGroupReturnStatus(
+  groupId: string,
+  stage: "READY" | "RETURNED"
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdminOrStaff();
+
+  const group = await prisma.psaSubmissionGroup.findUnique({ where: { id: groupId } });
+  if (!group) return { success: false, error: "グループが見つかりません" };
+  if (group.status === "PREPARING") {
+    return { success: false, error: "先に発送完了（提出）を行ってください" };
+  }
+
+  // ⑤（返送完了/店頭受取完了）は必ず④（返送準備中/店頭受取可能）を経由させる。ADR-0065
+  if (stage === "RETURNED" && !group.returnReadyAt) {
+    return { success: false, error: "先に「受取可能/返送準備中にする」を行ってください" };
+  }
+
+  await prisma.psaSubmissionGroup.update({
+    where: { id: groupId },
+    data: stage === "READY" ? { returnReadyAt: new Date() } : { returnedAt: new Date() },
+  });
+
+  revalidatePath("/admin/psa-groups");
+  revalidatePath("/admin/applications");
+  revalidatePath("/mypage/applications");
+  return { success: true };
+}
+
+/** グループを「④受取可能/返送準備中」にする（PSAから返却物を受け取った時点）。 */
+export async function markGroupReturnPreparing(groupId: string) {
+  return advanceGroupReturnStatus(groupId, "READY");
+}
+
+/** グループを「⑤受取完了/返送完了」にする（顧客への引き渡し・発送が完了した時点）。 */
+export async function markGroupReturned(groupId: string) {
+  return advanceGroupReturnStatus(groupId, "RETURNED");
+}
+
 const upchargeSchema = z.object({
   cardId: z.string(),
   reason: z.string().min(1),
@@ -260,12 +259,6 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
       upchargeAmount: parsed.upchargeAmount,
       status: "PENDING",
     },
-  });
-
-  // カードステータス更新
-  await prisma.card.update({
-    where: { id: parsed.cardId },
-    data: { status: "UPCHARGE_UNPAID" },
   });
 
   // 顧客へメール通知（送信失敗でUpcharge自体の登録は止めない）
@@ -313,11 +306,6 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
           stripePaymentIntentId: pi.id,
           paidAt: new Date(),
         },
-      });
-
-      await prisma.card.update({
-        where: { id: parsed.cardId },
-        data: { status: "UPCHARGE_PAID" },
       });
     } catch {
       await prisma.upcharge.update({
@@ -691,8 +679,6 @@ export async function completeStoreApplication(
             autographCost: 0,
             autographCustomServiceLevelId: isDualService ? price.id : null,
             autographCustomServiceLevelName: isDualService ? price.name : null,
-            status: "SUBMITTED_BY_CUSTOMER",
-            statusHistory: { create: { status: "SUBMITTED_BY_CUSTOMER", changedBy: user.id } },
           },
         });
       }

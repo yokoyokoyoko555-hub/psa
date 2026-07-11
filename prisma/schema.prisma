@@ -488,7 +488,10 @@ model PsaSubmissionGroup {
   psaSubmissionId String? // 申込番号（Sub#）
   psaOrderId      String? // 旧: PSA Order ID（未使用・後方互換で残置）。ADR-0051
   submittedAt     DateTime?
-  psaReceivedAt   DateTime?
+  psaReceivedAt   DateTime? // 未使用（後方互換で残置）。PSA進捗の細かい段階はstatus（下記）の自由記述で表現する
+  // グループ配下の全申込を一括で④受取可能/返送準備中・⑤受取完了/返送完了に進めた日時。
+  // returnMethodにより表示ラベルが分岐（STORE_PICKUP=店頭受取可能/完了、SHIPPING=返送準備中/完了）が実体は共通。ADR-0065
+  returnReadyAt   DateTime?
   returnedAt      DateTime?
   // PREPARING（提出準備中）/ SUBMITTED（発送完了）は固定。それ以降はPsaProgressStatus.nameから
   // 自由記述で選び管理画面から一括更新する（PSAの進捗ステージ変化に追従するため）。ADR-0021/0034

@@ -742,4 +742,29 @@
 - 影響: `src/app/admin/submission-bookings/page.tsx`のみ変更。スキーマ変更なし。
 - 未対応: なし。
 
+## ADR-0065: 簡易ステータスのフローを再設計（発送準備中を廃止、返却方法で末尾を分岐、返送系の一括操作を新設）
+
+- 日付: 2026-07-11 / 状態: Accepted（実装済）。ADR-0066で「実体」の設計を訂正（Card.status→PsaSubmissionGroup）。
+- 背景: ADR-0036でカード単位の個別ステータス変更UIを廃止して以降、`computeDisplayStatus()`が参照していた`Card.status`の`READY_FOR_CUSTOMER_RETURN`/`RETURNED_TO_CUSTOMER`（返送準備中／返送完了）へ書き込む手段が管理画面のどこにも存在せず、申込ステータスが「発送完了」以降で行き止まりになっていた。あわせて、既存の「発送準備中→発送完了」の2段階（PSA提出グループの作成→提出）は運用上区別する意味が薄く、店頭受取と配送で返却時の呼び方・工程も本来異なる、という指摘があった。ユーザー方針として、**カード単位のステータス管理機能は復活させず、申込単位のステータス管理のみで完結させる**（[[feedback-status-management-scope]]参照）。
+- 決定:
+  - **「発送準備中」を簡易ステータスから廃止**。PSA提出グループへ**割り当てられた時点**（`createPsaSubmissionGroup`実行時。提出情報《Sub#・提出日等》の記録有無は問わない）で即座に「発送完了」を返すよう`computeDisplayStatus()`を変更（`DISPLAY_STATUS.PREPARING_SHIPMENT`を削除）。グループ自体のPREPARING/SUBMITTED内部ステートやSubmitGroupFormの提出情報記録フローは変更していない（あくまで顧客・管理画面への表示ラベルの簡略化）。
+  - **返送以降の2段階を`Application.returnMethod`で分岐**。`STORE_PICKUP`は「④店頭受取可能→⑤店頭受取完了」、`SHIPPING`は「④返送準備中→⑤返送完了」。表示ラベルのみ`returnMethod`で出し分け、実体（何を進捗の根拠にするか）はADR-0066で確定。`DISPLAY_STATUS`に`STORE_PICKUP_READY`/`STORE_PICKUP_DONE`を追加。
+  - **新規サーバーアクション`markGroupReturnPreparing`/`markGroupReturned`（`admin.ts`）を追加**。PSA提出グループ単位で一括して④→⑤に進める（カード単位・申込単位の個別操作は提供しない）。PSA提出グループ管理画面（`/admin/psa-groups`）に`ReturnStatusButtons.tsx`として設置。
+  - **⑤は必ず④を経由させる**（サーバー側で④未達なら⑤への更新を拒否、UI側でも⑤ボタンを無効化）。グループが未提出（`status==="PREPARING"`）の場合は④⑤とも操作不可（従来の`advanceGroupStatus`と同じガード）。
+  - 1グループに`returnMethod`が異なる申込が混在しうるため、`ReturnStatusButtons`のボタン文言は「④受取可能/返送準備中にする」のように両方を併記（グループ単位の一括操作のため申込ごとに文言を出し分けない）。
+- 影響: `src/lib/application-status.ts`（`DISPLAY_STATUS`/`computeDisplayStatus()`のシグネチャに`returnMethod`追加・破壊的）、`src/actions/admin.ts`（新規アクション2つ）、`src/app/admin/psa-groups/page.tsx`・新規`ReturnStatusButtons.tsx`、`src/app/admin/applications/page.tsx`・`src/app/mypage/applications/ApplicationCenter.tsx`（バッジ色マップ更新）、`src/app/admin/applications/[id]/page.tsx`（完了系バッジの緑色判定に`STORE_PICKUP_DONE`追加）。
+- 未対応: PSA進捗ステータス（③、`advanceGroupStatus`）自体の順序・逆戻り防止バリデーションは引き続き未対応（ADR-0034から持ち越し）。
+
+## ADR-0066: カード単位のステータス管理を全廃止（`Card.status`への書き込みを撤去、④⑤の実体は`PsaSubmissionGroup`に集約）
+
+- 日付: 2026-07-11 / 状態: Accepted（実装済）。ADR-0065を補完・一部訂正。
+- 背景: ADR-0065の実装時、④⑤（受取可能/返送準備中・受取完了/返送完了）を`Card.status`（`READY_FOR_CUSTOMER_RETURN`/`RETURNED_TO_CUSTOMER`）の一括更新で実現しようとしたところ、ユーザーから「カードにステータスは割り振らない、申込単位でステータスを管理する」という明確な方針指摘があった。あわせて`Card.status`（`CardStatus`enum、17値）の全使用箇所を監査した結果、**書き込みは常に該当Applicationの全カードへ一括適用されるのみで、同一申込内でカードごとに値が異なることは構造上あり得ず**、`SUBMITTED_BY_CUSTOMER`/`RECEIVED_BY_STORE`/`UPCHARGE_UNPAID`/`UPCHARGE_PAID`はいずれもゲート判定（if文・where句）に一切使われておらず、表示専用の死んだ複製データだったことが判明した（実際のゲートは`Application.status`/`receivedAt`や`Upcharge.status`が担っていた）。
+- 決定:
+  - **④⑤の実体を`PsaSubmissionGroup`の列に変更**。同モデルには過去の設計（ADR-0021以前、`psaOrderId`と同時期）で追加されたまま未使用だった`returnedAt`列が既に存在しており、これに`returnReadyAt`列を追加してペアにした（`Application`への新規列追加は行わなかった）。`markGroupReturnPreparing`/`markGroupReturned`（`admin.ts`）は`PsaSubmissionGroup`を1回updateするだけになり、カードをループする処理は削除。`computeDisplayStatus()`は`app.psaSubmissionGroup.returnReadyAt`/`returnedAt`を参照する（グループ配下の全申込に共通で適用される。ADR-0021以来、グループの`status`が③の実体になっているのと同じ考え方）。
+  - **`Card.status`への書き込みを全廃止**。以下を削除: `application.ts`の`confirmApplicationPayment()`・カード作成時の`status`/`statusHistory`明示指定（`@default(DRAFT)`に委ねる）、`admin.ts`の`markApplicationReceived()`（`RECEIVED_BY_STORE`更新）・STORE入力確定時のカード作成（`SUBMITTED_BY_CUSTOMER`）・`createUpcharge()`（`UPCHARGE_UNPAID`/`UPCHARGE_PAID`。認可の実体は既存の`Upcharge.status`のみで完結）、`app/api/stripe/webhook/route.ts`の3箇所（`SUBMITTED_BY_CUSTOMER`／`UPCHARGE_PAID`／`UPCHARGE_UNPAID`）。呼び出し側のどこからも参照されていなかった`updateCardStatus()`アクション（`admin.ts`）も削除。
+  - **カード単位の生ステータス表示を申込単位のバッジに置換**。`admin/dashboard`の「最近のカード」テーブルを「最近の申込」（`computeDisplayStatus()`バッジ）に置換。`mypage/applications/[id]/page.tsx`のカード行から個別ステータスバッジ・「ステータス履歴」（`card.statusHistory`）表示を削除し、ページ上部のサマリーに申込単位の状態バッジを1つ追加。`mypage/page.tsx`の未使用だった`STATUS_LABELS`/`CARD_STATUS_LABELS`定数（死んだコード）も削除。
+  - **`CardStatus`enum・`Card.status`列・`CardStatusHistory`モデル自体は削除しない**（`db push`でのデータ消失回避、過去ADRの残置慣例に合わせる）。今後は`Card.status`は常にスキーマ既定値（`DRAFT`）のまま更新されない列として凍結される。
+- 影響: `prisma/schema.prisma`（`PsaSubmissionGroup.returnReadyAt`列追加。既存の未使用`returnedAt`は用途確定）。`src/actions/application.ts`・`src/actions/admin.ts`・`src/app/api/stripe/webhook/route.ts`・`src/lib/application-status.ts`・`src/app/admin/psa-groups/{page.tsx,ReturnStatusButtons.tsx}`・`src/app/admin/{dashboard,applications}/page.tsx`・`src/app/mypage/{page.tsx,applications/[id]/page.tsx}`・`src/actions/application.ts`の`getApplicationDetail()`/`getMyApplications()`（`psaSubmissionGroup`のselectに`returnReadyAt`/`returnedAt`追加、`cards.statusHistory`のselect削除）。
+- 未対応: `Card.psaGrade`/`psaCertNo`（PSAグレード結果）の表示は本ADRの対象外でそのまま維持（グレード登録機能自体はADR-0021で既に廃止・未使用のフィールド）。
+
 

@@ -9,26 +9,7 @@ import DifferentialPaymentPanel from "@/components/DifferentialPaymentPanel";
 import { formatMoney, formatMoneyIn, formatMoneyInt } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-
-const CARD_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  DRAFT: { label: "下書き", color: "bg-gray-100 text-gray-600" },
-  SUBMITTED_BY_CUSTOMER: { label: "申込済", color: "bg-brand-100 text-brand-700" },
-  RECEIVED_BY_STORE: { label: "店舗受取済", color: "bg-brand-100 text-brand-700" },
-  INSPECTION_PENDING: { label: "検品待ち", color: "bg-yellow-100 text-yellow-700" },
-  INSPECTED: { label: "検品済", color: "bg-yellow-100 text-yellow-700" },
-  READY_FOR_PSA: { label: "PSA提出準備中", color: "bg-orange-100 text-orange-700" },
-  SUBMITTED_TO_PSA: { label: "PSA提出済", color: "bg-purple-100 text-purple-700" },
-  PSA_RECEIVED: { label: "PSA受付済", color: "bg-purple-100 text-purple-700" },
-  GRADING: { label: "鑑定中", color: "bg-purple-100 text-purple-700" },
-  GRADE_AVAILABLE: { label: "グレード確定", color: "bg-green-100 text-green-700" },
-  RETURNED_TO_STORE: { label: "店舗返却済", color: "bg-green-100 text-green-700" },
-  READY_FOR_CUSTOMER_RETURN: { label: "返却準備中", color: "bg-teal-100 text-teal-700" },
-  RETURNED_TO_CUSTOMER: { label: "返却完了", color: "bg-green-100 text-green-700" },
-  UPCHARGE_UNPAID: { label: "Upcharge未払い", color: "bg-red-100 text-red-700" },
-  UPCHARGE_PAID: { label: "Upcharge支払済", color: "bg-green-100 text-green-700" },
-  PROBLEM: { label: "問題発生", color: "bg-red-100 text-red-700" },
-  CANCELLED: { label: "キャンセル", color: "bg-gray-100 text-gray-600" },
-};
+import { computeDisplayStatus, DISPLAY_STATUS } from "@/lib/application-status";
 
 const SERVICE_LABELS: Record<string, string> = {
   VALUE: "バリュー",
@@ -88,6 +69,9 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       : undefined;
   const displayLabels = CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
   const isStoreInput = application.source === "STORE";
+  const isDraft = application.status === "DRAFT";
+  const isCancelled = application.status === "CANCELLED";
+  const displayStatus = !isDraft && !isCancelled ? computeDisplayStatus(application) : null;
 
   // 鑑定料をサービスレベルごとの内訳に分解する（代理入力は複数サービスレベルが混在しうるため）。ADR-0050
   const psaFeeGroups = Object.values(
@@ -112,56 +96,35 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         <p className="text-sm text-gray-500 mb-4">代理入力していただいた内容をご確認ください。</p>
       )}
       <div className="space-y-3 mt-4">
-        {application.cards.map((card) => {
-          const statusInfo = CARD_STATUS_LABELS[card.status] ?? { label: card.status, color: "bg-gray-100 text-gray-600" };
-          return (
-            <div key={card.id} className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="font-mono text-xs text-gray-400">
-                    {card.cardNo}
-                    {card.lineNo != null && <span className="ml-2 text-gray-500">No.{card.lineNo}</span>}
-                  </p>
-                  <p className="font-bold text-gray-900">{card.cardName}</p>
-                  <p className="text-sm text-gray-500">{card.tcgTitle}</p>
-                  {isStoreInput && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      サービス: {card.customServiceLevelName ?? "—"}　/　{card.quantity}
-                      {displayLabels.quantityUnit}　/　申告額 {formatMoneyInt(card.declaredValue, application.region)}
-                    </p>
-                  )}
-                </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                  {statusInfo.label}
+        {application.cards.map((card) => (
+          <div key={card.id} className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center gap-2">
+              {card.lineNo != null && (
+                <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
+                  {card.lineNo}
                 </span>
-              </div>
-
-              {card.psaGrade && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3">
-                  <p className="text-sm font-bold text-yellow-800">
-                    PSA Grade: {card.psaGrade}
-                    {card.psaCertNo && <span className="ml-3 font-normal text-yellow-600">Cert# {card.psaCertNo}</span>}
-                  </p>
-                </div>
               )}
-
-              {/* Status history */}
-              <div className="mt-3">
-                <details className="text-xs text-gray-500">
-                  <summary className="cursor-pointer hover:text-gray-700">ステータス履歴</summary>
-                  <div className="mt-2 space-y-1 pl-2 border-l-2 border-gray-100">
-                    {card.statusHistory.map((h) => (
-                      <div key={h.id} className="flex justify-between">
-                        <span>{CARD_STATUS_LABELS[h.status]?.label ?? h.status}</span>
-                        <span>{format(new Date(h.changedAt), "MM/dd HH:mm")}</span>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              </div>
+              <p className="font-mono text-xs text-gray-400">{card.cardNo}</p>
             </div>
-          );
-        })}
+            <p className="font-bold text-gray-900">{card.cardName}</p>
+            <p className="text-sm text-gray-500">{card.tcgTitle}</p>
+            {isStoreInput && (
+              <p className="text-xs text-gray-500 mt-1">
+                サービス: {card.customServiceLevelName ?? "—"}　/　{card.quantity}
+                {displayLabels.quantityUnit}　/　申告額 {formatMoneyInt(card.declaredValue, application.region)}
+              </p>
+            )}
+
+            {card.psaGrade && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3">
+                <p className="text-sm font-bold text-yellow-800">
+                  PSA Grade: {card.psaGrade}
+                  {card.psaCertNo && <span className="ml-3 font-normal text-yellow-600">Cert# {card.psaCertNo}</span>}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -182,7 +145,22 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
 
         {/* Summary */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-bold text-gray-900 mb-4">{isStoreInput ? "請求内容の確認" : "申込概要"}</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-gray-900">{isStoreInput ? "請求内容の確認" : "申込概要"}</h2>
+            {(isDraft || isCancelled || displayStatus) && (
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  isCancelled
+                    ? "bg-gray-100 text-gray-600"
+                    : displayStatus === DISPLAY_STATUS.RETURNED || displayStatus === DISPLAY_STATUS.STORE_PICKUP_DONE
+                    ? "bg-green-100 text-green-700"
+                    : "bg-brand-100 text-brand-700"
+                }`}
+              >
+                {isDraft ? DISPLAY_STATUS.DRAFT : isCancelled ? "キャンセル" : displayStatus}
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             {!isStoreInput && (
               <div>

@@ -124,7 +124,7 @@ export default async function AdminApplicationDetailPage({
                   className={`px-3 py-1 rounded-full text-sm font-medium ${
                     isCancelled
                       ? "bg-gray-100 text-gray-600"
-                      : currentDisplayStatus === DISPLAY_STATUS.RETURNED
+                      : currentDisplayStatus === DISPLAY_STATUS.RETURNED || currentDisplayStatus === DISPLAY_STATUS.STORE_PICKUP_DONE
                       ? "bg-green-100 text-green-700"
                       : "bg-brand-100 text-brand-700"
                   }`}
@@ -243,7 +243,7 @@ export default async function AdminApplicationDetailPage({
                     <div>
                       <div className="flex items-center gap-2">
                         {card.lineNo != null && (
-                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-900 text-white text-xs font-bold flex items-center justify-center">
+                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
                             {card.lineNo}
                           </span>
                         )}

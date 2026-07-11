@@ -10,34 +10,6 @@ import Footer from "@/components/Footer";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "下書き",
-  SUBMITTED: "申込済",
-  IN_PROGRESS: "処理中",
-  COMPLETED: "完了",
-  CANCELLED: "キャンセル",
-};
-
-const CARD_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "下書き",
-  SUBMITTED_BY_CUSTOMER: "申込済",
-  RECEIVED_BY_STORE: "店舗受取済",
-  INSPECTION_PENDING: "検品待ち",
-  INSPECTED: "検品済",
-  READY_FOR_PSA: "PSA提出準備中",
-  SUBMITTED_TO_PSA: "PSA提出済",
-  PSA_RECEIVED: "PSA受付済",
-  GRADING: "鑑定中",
-  GRADE_AVAILABLE: "グレード確定",
-  RETURNED_TO_STORE: "店舗返却済",
-  READY_FOR_CUSTOMER_RETURN: "返却準備中",
-  RETURNED_TO_CUSTOMER: "返却完了",
-  UPCHARGE_UNPAID: "Upcharge未払い",
-  UPCHARGE_PAID: "Upcharge支払済",
-  PROBLEM: "問題発生",
-  CANCELLED: "キャンセル",
-};
-
 export default async function MypagePage() {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");

@@ -287,13 +287,6 @@ export async function createApplication(
           autographCost: 0,
           autographCustomServiceLevelId: isDualService ? customPrice.id : null,
           autographCustomServiceLevelName: isDualService ? customPrice.name : null,
-          status: "DRAFT",
-          statusHistory: {
-            create: {
-              status: "DRAFT",
-              changedBy: customer.id,
-            },
-          },
         },
       });
     }
@@ -418,11 +411,6 @@ export async function confirmApplicationPayment(
     await tx.application.update({
       where: { id: application.id },
       data: { status: "SUBMITTED", submittedAt: application.submittedAt ?? new Date() },
-    });
-
-    await tx.card.updateMany({
-      where: { applicationId: application.id },
-      data: { status: "SUBMITTED_BY_CUSTOMER" },
     });
   });
 
@@ -887,7 +875,7 @@ export async function getMyApplications() {
         select: { id: true, cardName: true, status: true, psaGrade: true, psaCertNo: true },
       },
       payments: { select: { status: true, amount: true, paidAt: true } },
-      psaSubmissionGroup: { select: { status: true, submittedAt: true } },
+      psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -900,10 +888,11 @@ export async function getApplicationDetail(applicationId: string) {
   return prisma.application.findFirst({
     where: { id: applicationId, customerId: customer.id },
     include: {
-      cards: { orderBy: { lineNo: "asc" }, include: { statusHistory: { orderBy: { changedAt: "desc" } } } },
+      cards: { orderBy: { lineNo: "asc" } },
       payments: true,
       agreement: true,
       submissionBooking: true,
+      psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } },
     },
   });
 }

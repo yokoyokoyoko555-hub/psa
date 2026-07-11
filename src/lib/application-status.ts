@@ -51,10 +51,12 @@ export function resolveServiceLevel(app: { serviceLevel: string; customServiceLe
 }
 
 /**
- * 顧客・管理画面共通の「簡易ステータス」固定値。ADR-0034/0036/0045/0052
- * 自己入力(CUSTOMER): DRAFT→APPLIED→RECEIVED→PREPARING_SHIPMENT→SHIPPED→(カスタムのPSA進捗ステータス)→RETURN_PREPARING→RETURNED
- * 代理入力(STORE): APPLIED→INPUT_DONE→PAID→PREPARING_SHIPMENT→SHIPPED→(カスタムのPSA進捗ステータス)→RETURN_PREPARING→RETURNED
- * 代理入力はPREPARING_SHIPMENT（発送準備中）以降、自己入力と完全に同じ扱いに合流する。
+ * 顧客・管理画面共通の「簡易ステータス」固定値。ADR-0034/0036/0045/0052/0065
+ * 自己入力(CUSTOMER): DRAFT→APPLIED→RECEIVED→SHIPPED→(カスタムのPSA進捗ステータス)→(④返送準備中/店頭受取可能)→(⑤返送完了/店頭受取完了)
+ * 代理入力(STORE): APPLIED→INPUT_DONE→PAID→SHIPPED→(カスタムのPSA進捗ステータス)→(④⑤は自己入力と共通)
+ * 代理入力はSHIPPED（発送完了）以降、自己入力と完全に同じ扱いに合流する。
+ * ④⑤は`returnMethod`により表示ラベルが分岐する（STORE_PICKUP=店頭受取可能/店頭受取完了、SHIPPING=返送準備中/返送完了）が、
+ * 実体（`PsaSubmissionGroup.returnReadyAt`/`returnedAt`）はグループ単位で共通（カード単位のステータスは持たない）。
  * DRAFTは`computeDisplayStatus()`自体は返さない（呼び出し元がstatus==="DRAFT"を個別に扱う。下書きは
  * 「申込一覧」で別セクション表示されるため）。ここには全体像を示す定数として含める。
  */
@@ -64,10 +66,11 @@ export const DISPLAY_STATUS = {
   RECEIVED: "受取完了", // 自己入力のみ
   INPUT_DONE: "入力完了", // 代理入力のみ
   PAID: "支払完了", // 代理入力のみ
-  PREPARING_SHIPMENT: "発送準備中", // ここから自己入力・代理入力で共通フローに合流
-  SHIPPED: "発送完了",
-  RETURN_PREPARING: "返送準備中",
-  RETURNED: "返送完了",
+  SHIPPED: "発送完了", // PSA提出グループへ割り当てた時点で即時この状態になる（提出情報の記録有無は問わない）
+  RETURN_PREPARING: "返送準備中", // returnMethod=SHIPPING
+  RETURNED: "返送完了", // returnMethod=SHIPPING
+  STORE_PICKUP_READY: "店頭受取可能", // returnMethod=STORE_PICKUP
+  STORE_PICKUP_DONE: "店頭受取完了", // returnMethod=STORE_PICKUP
 } as const;
 
 export type FixedDisplayStatus = (typeof DISPLAY_STATUS)[keyof typeof DISPLAY_STATUS];
@@ -78,37 +81,34 @@ export type DisplayStatus = FixedDisplayStatus | (string & {});
  * 簡易ステータスを算出する。最も進んだ状態から順に判定し、該当しなければ手前の状態にフォールバックする。
  * （代理入力は明細入力＝受取を兼ねるため「受取完了」は出さない。この関数はstatusがDRAFTでない前提で呼ぶこと）
  * PSA提出グループのstatusがPREPARING/SUBMITTED以外（=管理画面で登録したPSA進捗ステータス名）
- * の場合はその名称をそのまま表示する。顧客画面・管理画面で共通のロジックを使う。
+ * の場合はその名称をそのまま表示する。顧客画面・管理画面で共通のロジックを使う。ADR-0065
  */
 export function computeDisplayStatus(app: {
   source: string; // "CUSTOMER" | "STORE"
   receivedAt: Date | null;
-  psaSubmissionGroup: { status: string; submittedAt: Date | null } | null;
+  returnMethod: string; // "STORE_PICKUP" | "SHIPPING"
+  psaSubmissionGroup: { status: string; submittedAt: Date | null; returnReadyAt: Date | null; returnedAt: Date | null } | null;
   payments: { status: string }[];
-  cards: { status: string }[];
 }): DisplayStatus {
   const group = app.psaSubmissionGroup;
-  const cards = app.cards;
+  const isStorePickup = app.returnMethod === "STORE_PICKUP";
 
-  // 返送完了・返送準備中: 全カードが返却完了／返却準備中以降の場合のみ（一部混在時は下の判定にフォールバック）
-  if (cards.length > 0 && cards.every((c) => c.status === "RETURNED_TO_CUSTOMER")) {
-    return DISPLAY_STATUS.RETURNED;
+  // ⑤ 店頭受取完了・返送完了（グループ単位。カード単位のステータスは持たない）
+  if (group?.returnedAt) {
+    return isStorePickup ? DISPLAY_STATUS.STORE_PICKUP_DONE : DISPLAY_STATUS.RETURNED;
   }
-  if (cards.length > 0 && cards.every((c) => c.status === "READY_FOR_CUSTOMER_RETURN" || c.status === "RETURNED_TO_CUSTOMER")) {
-    return DISPLAY_STATUS.RETURN_PREPARING;
+  // ④ 店頭受取可能・返送準備中
+  if (group?.returnReadyAt) {
+    return isStorePickup ? DISPLAY_STATUS.STORE_PICKUP_READY : DISPLAY_STATUS.RETURN_PREPARING;
   }
 
-  // カスタムのPSA進捗ステータス（管理画面「PSA進捗ステータス」で登録した任意の名称）
+  // ③ カスタムのPSA進捗ステータス（管理画面「PSA進捗ステータス」で登録した任意の名称）
   if (group && group.status !== "PREPARING" && group.status !== "SUBMITTED") {
     return group.status;
   }
-  // 発送完了
-  if (group && (group.status === "SUBMITTED" || group.submittedAt)) {
+  // ② 発送完了: PSA提出グループへ割り当てられた時点で即時この状態になる（提出情報の記録タイミングは問わない）
+  if (group) {
     return DISPLAY_STATUS.SHIPPED;
-  }
-  // 発送準備中（PSA提出グループ作成済みだが未提出）
-  if (group && group.status === "PREPARING") {
-    return DISPLAY_STATUS.PREPARING_SHIPMENT;
   }
 
   if (app.source === "STORE") {

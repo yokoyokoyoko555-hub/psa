@@ -77,11 +77,6 @@ async function handlePaymentSucceeded(pi: Stripe.PaymentIntent) {
           where: { id: payment.applicationId },
           data: { status: "SUBMITTED" },
         });
-        // カードステータスを一括更新
-        await prisma.card.updateMany({
-          where: { applicationId: payment.applicationId },
-          data: { status: "SUBMITTED_BY_CUSTOMER" },
-        });
       }
     }
   }
@@ -94,10 +89,6 @@ async function handlePaymentSucceeded(pi: Stripe.PaymentIntent) {
     await prisma.upcharge.update({
       where: { id: upcharge.id },
       data: { status: "PAID", paidAt: new Date() },
-    });
-    await prisma.card.update({
-      where: { id: upcharge.cardId },
-      data: { status: "UPCHARGE_PAID" },
     });
   }
 
@@ -160,10 +151,6 @@ async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
         failedAt: new Date(),
         failureReason: pi.last_payment_error?.message,
       },
-    });
-    await prisma.card.update({
-      where: { id: upcharge.cardId },
-      data: { status: "UPCHARGE_UNPAID" },
     });
   }
 }
