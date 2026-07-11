@@ -672,4 +672,16 @@
 - 影響: `prisma/schema.prisma`（`revisedAt`型変更・`showInFooter`追加）、`src/actions/legal-document.ts`、`src/components/Footer.tsx`（非同期化）、`src/components/AuthScreen.tsx`・`src/app/page.tsx`・`src/app/login/page.tsx`・`src/app/register/page.tsx`（footer prop化）、`src/components/LegalDocumentView.tsx`（revisedAt表示を配列対応）、新規`src/app/legal/[id]/page.tsx`・`src/app/admin/legal-documents/NewLegalDocumentForm.tsx`。
 - 未対応: 新規作成したスラッグのリネーム機能は無い（削除して作り直す運用）。フッターの表示順は`sortOrder`のような明示的な並び替えフィールドを設けず、制定日の昇順固定。
 
+## ADR-0059: 管理画面サイドバーの表示名・並び順をDB化し、設定画面から編集可能に
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: サイドバーの「設定」項目は実際には料金関連の設定（サービス料金・代理入力料金・送料保険マトリクス等）がほとんどで、ページ自体の見出しも既に「料金設定」だったにもかかわらず、サイドバーのラベルだけ「設定」のままで不一致だった。あわせて、サイドバー項目の並び順を今後も自由に変えたいという要望があった。
+- 決定:
+  - **`AdminNavItem`モデルを新設**（`id`はhrefベースの固定キー、`label`・`sortOrder`のみDBで管理）。href・アイコンは`src/lib/admin-nav-defaults.ts`の`ADMIN_NAV_DEFAULTS`にコード側で固定し、ルーティングやアイコン変更は開発者が行う（誤って存在しないパスに向けられる事故を防ぐため、URLは管理画面から編集不可）。
+  - **`ensureAdminNavItems()`は項目単位の差分投入**（`ensureLegalDocument()`と同じ考え方）。既存の`label`/`sortOrder`は上書きせず、コード側に新しいナビ項目が追加された場合のみDBに補完する。
+  - **`admin/layout.tsx`のハードコードされた`navItems`配列を`getAdminNavItems()`に置き換え**。
+  - **`/admin/settings`（サイドバーのラベルを「設定」→「料金設定」に変更）に「サイドバー表示順」セクションを追加**。`AdminNavOrderForm.tsx`で各項目のラベル・表示順（数値）を編集し、`updateAdminNavItems()`で一括保存する（既存の`PsaProgressStatusForm`と同じ「表示順を数値で入力」方式。ドラッグ&ドロップは採用しない）。
+- 影響: `prisma/schema.prisma`（`AdminNavItem`モデル追加、非破壊）。新規: `src/actions/admin-nav.ts`・`src/lib/admin-nav-defaults.ts`・`src/app/admin/settings/AdminNavOrderForm.tsx`。既存: `src/app/admin/layout.tsx`・`src/app/admin/settings/page.tsx`。
+- 未対応: なし。
+
 

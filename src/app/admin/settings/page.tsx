@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
 import { ensureTradingCardCustomPrices } from "@/actions/pricing";
+import { getAdminNavItems } from "@/actions/admin-nav";
 import { pricingSettingId } from "@/lib/pricing-setting-id";
 import ShippingInsuranceForm from "./ShippingInsuranceForm";
 import HandlingFeeForm from "./HandlingFeeForm";
@@ -10,6 +11,7 @@ import CustomServicePriceForm from "./CustomServicePriceForm";
 import ExchangeRateForm from "./ExchangeRateForm";
 import PsaProgressStatusForm from "./PsaProgressStatusForm";
 import StoreSettingsForm from "./StoreSettingsForm";
+import AdminNavOrderForm from "./AdminNavOrderForm";
 
 const groupCls = "bg-white rounded-xl border border-gray-200 p-6";
 const subCls = "border border-gray-100 rounded-lg p-4";
@@ -24,15 +26,17 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 export default async function SettingsPage() {
   await ensureTradingCardCustomPrices(); // 旧ServicePrice→CustomServicePrice(category=TRADING_CARD)の初回移行。ADR-0026
 
-  const [siRates, settings, campaigns, customServicePrices, exchangeRate, psaProgressStatuses, storeSettings] = await Promise.all([
-    prisma.shippingInsuranceRate.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.pricingSetting.findMany(),
-    prisma.campaign.findMany({ orderBy: { startAt: "desc" } }),
-    prisma.customServicePrice.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.exchangeRate.findUnique({ where: { id: "default" } }),
-    prisma.psaProgressStatus.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.storeSettings.findUnique({ where: { id: "default" } }),
-  ]);
+  const [siRates, settings, campaigns, customServicePrices, exchangeRate, psaProgressStatuses, storeSettings, navItems] =
+    await Promise.all([
+      prisma.shippingInsuranceRate.findMany({ orderBy: { sortOrder: "asc" } }),
+      prisma.pricingSetting.findMany(),
+      prisma.campaign.findMany({ orderBy: { startAt: "desc" } }),
+      prisma.customServicePrice.findMany({ orderBy: { sortOrder: "asc" } }),
+      prisma.exchangeRate.findUnique({ where: { id: "default" } }),
+      prisma.psaProgressStatus.findMany({ orderBy: { sortOrder: "asc" } }),
+      prisma.storeSettings.findUnique({ where: { id: "default" } }),
+      getAdminNavItems(),
+    ]);
 
   // region/itemTypeカラムでの照合は既存行のカラム不整合により一致しないことがあるため、idで照合する。
   // lib/pricing-setting-id.ts参照（ADR-0023追記の教訓）。
@@ -141,6 +145,14 @@ export default async function SettingsPage() {
             storeName={storeSettings?.storeName ?? ""}
             phone={storeSettings?.phone ?? ""}
           />
+        </div>
+      </details>
+
+      {/* 管理画面サイドバーの表示名・並び順 */}
+      <details className={groupCls}>
+        <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">サイドバー表示順</summary>
+        <div className="mt-4">
+          <AdminNavOrderForm items={navItems} />
         </div>
       </details>
     </div>

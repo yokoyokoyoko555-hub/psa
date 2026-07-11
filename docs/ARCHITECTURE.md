@@ -171,6 +171,7 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 | submission-booking.ts | upsertSubmissionBooking / cancelSubmissionBooking / cancelSubmissionBookingByAdmin | 顧客 / ADMIN or STAFF |
 | inquiry.ts | createInquiry / getInquiries / getInquiryDetail / replyToInquiry | 顧客 / ADMIN or STAFF |
 | legal-document.ts | getLegalDocument / getFooterLegalDocuments / ensureLegalDocument / getLegalDocuments / createLegalDocument / updateLegalDocument / deleteLegalDocument | 公開 / ADMIN or STAFF |
+| admin-nav.ts | getAdminNavItems / ensureAdminNavItems / updateAdminNavItems | 公開(参照) / ADMIN or STAFF(更新) |
 | payment.ts | deletePaymentMethod | 顧客 |
 
 ---

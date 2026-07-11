@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { signOut } from "@/lib/auth";
+import { getAdminNavItems } from "@/actions/admin-nav";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = (await headers()).get("x-pathname") ?? "";
@@ -20,21 +21,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/admin/login");
   }
 
-  const navItems = [
-    { href: "/admin/dashboard", label: "ダッシュボード", icon: "📊" },
-    { href: "/admin/applications", label: "申込管理", icon: "📋" },
-    { href: "/admin/store-requests", label: "代理申込", icon: "🏪" },
-    { href: "/admin/customers", label: "顧客管理", icon: "👥" },
-    { href: "/admin/notifications", label: "お知らせ", icon: "📣" },
-    { href: "/admin/inquiries", label: "お問い合わせ", icon: "💬" },
-    { href: "/admin/submission-bookings", label: "提出予約", icon: "📅" },
-    { href: "/admin/psa-groups", label: "PSA提出グループ", icon: "📦" },
-    { href: "/admin/card-masters", label: "カード名称マスタ", icon: "🗂️" },
-    { href: "/admin/mail-templates", label: "メールテンプレート", icon: "✉️" },
-    { href: "/admin/legal-documents", label: "規程管理", icon: "📜" },
-    { href: "/admin/settings", label: "設定", icon: "⚙️" },
-    { href: "/admin/account", label: "アカウント", icon: "🔑" },
-  ];
+  const navItems = await getAdminNavItems();
 
   return (
     <div className="min-h-screen bg-gray-100 flex">

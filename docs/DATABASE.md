@@ -6,7 +6,7 @@
 
 ---
 
-## モデル一覧（19。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)参照）
+## モデル一覧（20。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)参照）
 
 | モデル / テーブル | 役割 | 主なカラム・ポイント |
 |------------------|------|---------------------|
@@ -33,6 +33,7 @@
 | `SavedPaymentMethod` / saved_payment_methods | 保存カード | `stripePaymentMethodId`(uniq), `brand`/`last4`, `expMonth`/`expYear`, `isDefault` |
 | `Inquiry` / inquiries | 顧客お問い合わせ | `subject`/`body`, `status`(UNREAD/READ/REPLIED), `replyText`/`repliedAt`/`repliedBy`(userId)。[ADR-0055](DECISIONS.md) |
 | `LegalDocument` / legal_documents | 規程文書（利用規約/個人情報保護方針/カスハラポリシー等） | `id`(スラッグ。既定3件は terms/privacy/harassment_policy 固定、管理画面から追加可), `title`, `body`(簡易Markdown), `establishedAt`(制定日), `revisedAt`(改訂日の配列・複数回分), `showInFooter`(フッターリンクON/OFF), `updatedBy`。管理画面で追加・編集・削除可能。[ADR-0057](DECISIONS.md)/[ADR-0058](DECISIONS.md) |
+| `AdminNavItem` / admin_nav_items | 管理画面サイドバーの表示名・並び順 | `id`(hrefベースの固定キー。href/iconはコード側`src/lib/admin-nav-defaults.ts`で固定), `label`, `sortOrder`。管理画面「料金設定」から編集可能。[ADR-0059](DECISIONS.md) |
 
 ---
 

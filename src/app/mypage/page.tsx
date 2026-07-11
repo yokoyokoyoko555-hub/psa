@@ -129,6 +129,16 @@ export default async function MypagePage() {
             </div>
           </Link>
           <Link
+            href="/how-to-apply"
+            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+          >
+            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">🗺️</div>
+            <div>
+              <p className="font-bold text-lg text-gray-900">申込の流れ</p>
+              <p className="text-gray-500 text-sm">自己入力・代理入力の流れを確認</p>
+            </div>
+          </Link>
+          <Link
             href="/mypage/applications"
             className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
           >
