@@ -94,6 +94,13 @@ export default async function AdminApplicationDetailPage({
   const isDraft = application.status === "DRAFT";
   const isCancelled = application.status === "CANCELLED";
   const currentDisplayStatus = !isDraft && !isCancelled ? computeDisplayStatus(application) : null;
+  // 現物が既に手元にある（自己入力=受取済み／代理入力=支払完了）のにPSA提出グループが未割当＝
+  // 次にスタッフがやるべきアクション。ADR-0067
+  const hasCardsInHand =
+    application.source === "STORE"
+      ? !application.payments.some((p) => p.status === "PENDING")
+      : Boolean(application.receivedAt);
+  const needsGroupAssignment = !isDraft && !isCancelled && hasCardsInHand && !application.psaSubmissionGroup;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -363,8 +370,22 @@ export default async function AdminApplicationDetailPage({
             </Link>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-bold text-gray-900 mb-3">PSA提出グループ</h2>
+          <div
+            className={`bg-white rounded-xl border p-6 ${
+              needsGroupAssignment ? "border-amber-300 ring-1 ring-amber-200" : "border-gray-200"
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="font-bold text-gray-900">PSA提出グループ</h2>
+              {needsGroupAssignment && (
+                <span className="text-xs font-bold text-amber-700 bg-amber-100 rounded-full px-2 py-0.5">
+                  次のアクション
+                </span>
+              )}
+            </div>
+            {needsGroupAssignment && (
+              <p className="text-sm text-amber-700 mb-3">受取済みです。PSA提出グループへ割り当ててください。</p>
+            )}
             {application.psaSubmissionGroup ? (
               <dl className="space-y-2 text-sm">
                 <div>
@@ -397,46 +418,49 @@ export default async function AdminApplicationDetailPage({
                 </div>
               </dl>
             ) : (
-              <p className="text-sm text-gray-500">未割当です。</p>
+              !needsGroupAssignment && <p className="text-sm text-gray-500">未割当です。</p>
             )}
             <Link href="/admin/psa-groups" className="mt-4 block text-sm text-brand-600 hover:underline">
               PSA提出グループ管理 →
             </Link>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="font-bold text-gray-900 mb-3">提出予約</h2>
-            {application.submissionBooking?.status === "BOOKED" ? (
-              <dl className="space-y-2 text-sm">
-                <div>
-                  <dt className="text-gray-500 text-xs">予約日時</dt>
-                  <dd className="font-bold text-gray-900">
-                    {format(new Date(application.submissionBooking.scheduledAt), "yyyy/M/d HH:mm", { locale: ja })}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500 text-xs">方法</dt>
-                  <dd className="font-medium text-gray-900">
-                    {application.submissionBooking.method === "STORE_DROP_OFF" ? "店頭持込" : "郵送予定"}
-                  </dd>
-                </div>
-                {application.submissionBooking.note && (
+          {/* 現物が既に手元にある状態になったら、提出予約の情報は不要。ADR-0067 */}
+          {!hasCardsInHand && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h2 className="font-bold text-gray-900 mb-3">提出予約</h2>
+              {application.submissionBooking?.status === "BOOKED" ? (
+                <dl className="space-y-2 text-sm">
                   <div>
-                    <dt className="text-gray-500 text-xs">備考</dt>
-                    <dd className="text-gray-900 whitespace-pre-wrap">{application.submissionBooking.note}</dd>
+                    <dt className="text-gray-500 text-xs">予約日時</dt>
+                    <dd className="font-bold text-gray-900">
+                      {format(new Date(application.submissionBooking.scheduledAt), "yyyy/M/d HH:mm", { locale: ja })}
+                    </dd>
                   </div>
-                )}
-              </dl>
-            ) : (
-              <p className="text-sm text-gray-500">予約はまだありません。</p>
-            )}
-            <Link
-              href="/admin/submission-bookings"
-              className="mt-4 block text-sm text-brand-600 hover:underline"
-            >
-              予約カレンダーを見る →
-            </Link>
-          </div>
+                  <div>
+                    <dt className="text-gray-500 text-xs">方法</dt>
+                    <dd className="font-medium text-gray-900">
+                      {application.submissionBooking.method === "STORE_DROP_OFF" ? "店頭持込" : "郵送予定"}
+                    </dd>
+                  </div>
+                  {application.submissionBooking.note && (
+                    <div>
+                      <dt className="text-gray-500 text-xs">備考</dt>
+                      <dd className="text-gray-900 whitespace-pre-wrap">{application.submissionBooking.note}</dd>
+                    </div>
+                  )}
+                </dl>
+              ) : (
+                <p className="text-sm text-gray-500">予約はまだありません。</p>
+              )}
+              <Link
+                href="/admin/submission-bookings"
+                className="mt-4 block text-sm text-brand-600 hover:underline"
+              >
+                予約カレンダーを見る →
+              </Link>
+            </div>
+          )}
 
           {application.returnMethod === "SHIPPING" && (
             <div className="bg-white rounded-xl border border-gray-200 p-6">

@@ -21,6 +21,12 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
+// PREPARING/SUBMITTEDは固定値、それ以外は管理画面「PSA進捗ステータス」で登録した自由記述名（すでに日本語）。ADR-0021/0034
+const GROUP_STATUS_LABELS: Record<string, string> = {
+  PREPARING: "提出準備中",
+  SUBMITTED: "発送完了",
+};
+
 export default async function PsaGroupsPage() {
   const [groups, ungrouped, progressStatuses, customServicePrices] = await Promise.all([
     prisma.psaSubmissionGroup.findMany({
@@ -85,7 +91,7 @@ export default async function PsaGroupsPage() {
                 group.status === "SUBMITTED" ? "bg-purple-100 text-purple-700" :
                 "bg-yellow-100 text-yellow-700"
               }`}>
-                {group.status}
+                {GROUP_STATUS_LABELS[group.status] ?? group.status}
               </span>
             </div>
 

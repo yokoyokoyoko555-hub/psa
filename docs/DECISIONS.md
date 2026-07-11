@@ -767,4 +767,14 @@
 - 影響: `prisma/schema.prisma`（`PsaSubmissionGroup.returnReadyAt`列追加。既存の未使用`returnedAt`は用途確定）。`src/actions/application.ts`・`src/actions/admin.ts`・`src/app/api/stripe/webhook/route.ts`・`src/lib/application-status.ts`・`src/app/admin/psa-groups/{page.tsx,ReturnStatusButtons.tsx}`・`src/app/admin/{dashboard,applications}/page.tsx`・`src/app/mypage/{page.tsx,applications/[id]/page.tsx}`・`src/actions/application.ts`の`getApplicationDetail()`/`getMyApplications()`（`psaSubmissionGroup`のselectに`returnReadyAt`/`returnedAt`追加、`cards.statusHistory`のselect削除）。
 - 未対応: `Card.psaGrade`/`psaCertNo`（PSAグレード結果）の表示は本ADRの対象外でそのまま維持（グレード登録機能自体はADR-0021で既に廃止・未使用のフィールド）。
 
+## ADR-0067: 申込詳細ページで「提出予約」を受取後は非表示にし、「PSA提出グループ未割当」を次のアクションとして強調
+
+- 日付: 2026-07-11 / 状態: Accepted（実装済）
+- 背景: 申込詳細ページ（`admin/applications/[id]/page.tsx`）は、現物が既に手元にある（自己入力=受取完了後／代理入力=支払完了後）状態でも「提出予約」カードを常時表示しており、この時点では既に意味を持たない情報だった。また「PSA提出グループ」カードは未割当時も「未割当です。」という控えめな表示のみで、担当者が次に何をすべきか（グループへの割り当て）が視覚的に伝わっていなかった。
+- 決定:
+  - **`hasCardsInHand`判定を追加**（自己入力=`receivedAt`あり／代理入力=`PENDING`な決済なし）。これが真の間は「提出予約」カードを非表示にする。
+  - **`hasCardsInHand`かつグループ未割当の場合、「PSA提出グループ」カードをアンバー色でハイライト**（枠線・「次のアクション」バッジ・案内文「受取済みです。PSA提出グループへ割り当ててください。」）。
+- 影響: `src/app/admin/applications/[id]/page.tsx`のみ変更。スキーマ・クエリ変更なし。
+- 未対応: なし。
+
 
