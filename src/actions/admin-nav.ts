@@ -32,7 +32,9 @@ export async function ensureAdminNavItems(): Promise<void> {
 export async function getAdminNavItems() {
   await ensureAdminNavItems();
   const rows = await prisma.adminNavItem.findMany({ orderBy: { sortOrder: "asc" } });
-  const defsById = new Map(ADMIN_NAV_DEFAULTS.map((n) => [n.id, n]));
+  const defsById = new Map<string, (typeof ADMIN_NAV_DEFAULTS)[number]>(
+    ADMIN_NAV_DEFAULTS.map((n) => [n.id, n])
+  );
 
   return rows
     .map((row) => {

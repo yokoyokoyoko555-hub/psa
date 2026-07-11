@@ -719,4 +719,27 @@
 - 影響: `prisma/schema.prisma`（`Card.lineNo`列追加、非破壊）、`src/actions/application.ts`、`src/actions/admin.ts`、`src/app/apply/ApplyForm.tsx`、`src/app/admin/store-requests/[id]/StoreInputForm.tsx`、`src/app/mypage/applications/[id]/page.tsx`、`src/app/admin/applications/[id]/page.tsx`。
 - 未対応: 既存（本ADR以前に作成された）カードの`lineNo`は`null`のまま。QRコード印刷（`/api/qrcode`）への番号表示は未対応。
 
+## ADR-0063: 管理画面の申込詳細ページから簡易ステータスのステッパーを削除（ADR-0053の一部差し戻し）
+
+- 日付: 2026-07-11 / 状態: Accepted（実装済）
+- 背景: ADR-0053で追加した進捗ステッパー（番号付きの横並びステップバー）が、ステップ数が多い申込（特に代理入力）で横スクロールバーが出てしまい、見た目・使い勝手が良くないという指摘があった。
+- 決定:
+  - **ステッパーのUI（`progressSteps`の横並び描画）を削除**。`fixedProgressSteps`/`knownDisplayStatusValues`/`isCustomPsaProgress`/`progressSteps`/`currentStepIndex`の算出ロジックも不要になったため削除。
+  - **簡易ステータスのバッジ表示（`computeDisplayStatus()`の結果を「受取完了」等のバッジで表示する部分）はそのまま維持**。ADR-0053の「生の`Application.status`ではなく簡易ステータスをバッジ表示する」という変更自体は有用と判断し、ステッパー部分のみを差し戻した。
+- 影響: `src/app/admin/applications/[id]/page.tsx`のみ変更。
+- 未対応: なし。
+
+## ADR-0064: 提出予約カレンダーを月間表示から週間表示（月曜始まり）に変更
+
+- 日付: 2026-07-11 / 状態: Accepted（実装済）
+- 背景: `/admin/submission-bookings`は42セル（6週×7日）の月間グリッドで、各日のセルが狭く予約詳細が表示しきれなかった。週間表示に変更し、日曜始まりではなく月曜始まりにしたいという要望があった。
+- 決定:
+  - **`makeMonthDays()`（42日パディング）を`makeWeekDays()`（7日、月曜始まり）に置き換え**。`parseWeekStart()`が`?week=YYYY-MM-DD`（週内の任意の日でよい）を月曜0時に正規化する。
+  - **`WEEKDAYS`を`["月","火",...,"日"]`に変更**（従来は日曜始まりの`["日","月",...,"土"]`）。
+  - 前週・次週ナビゲーションに変更（`?month=YYYY-MM`→`?week=YYYY-MM-DD`）。ヘッダー見出しは「開始日 〜 終了日」の範囲表示（週が月をまたぐ場合は年も併記）。
+  - セル数が7つに減った分、日付セルの高さを広げた（`min-h-36`→`min-h-[28rem]`）。月をまたいだ週でも日付が一意に分かるよう、セル見出しを日番号のみから「M/D」表記に変更。
+  - 他ページから`?month=`パラメータへの参照は無かったため、リンク切れの影響なし。
+- 影響: `src/app/admin/submission-bookings/page.tsx`のみ変更。スキーマ変更なし。
+- 未対応: なし。
+
 

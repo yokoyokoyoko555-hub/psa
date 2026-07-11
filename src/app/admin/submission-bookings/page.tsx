@@ -8,36 +8,35 @@ import DaySettingsButton from "./DaySettingsButton";
 
 export const metadata = { title: "提出予約カレンダー | 管理画面" };
 
-const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+// 月曜始まりの週表示。ADR-0064
+const WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"];
 const METHOD_LABELS: Record<string, string> = {
   STORE_DROP_OFF: "店頭持込",
   SHIPPING: "郵送",
 };
 
-function parseMonth(value?: string) {
-  const match = value?.match(/^(\d{4})-(\d{2})$/);
-  if (!match) return new Date();
-  const year = Number(match[1]);
-  const month = Number(match[2]) - 1;
-  if (!Number.isInteger(year) || !Number.isInteger(month)) return new Date();
-  return new Date(year, month, 1);
+/** クエリの週開始日（YYYY-MM-DD）をパースし、その週の月曜0時を返す。不正・未指定なら今週の月曜。 */
+function parseWeekStart(value?: string): Date {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const base = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date();
+  const dow = base.getDay(); // 0=日, 1=月, ..., 6=土
+  const diffToMonday = (dow + 6) % 7; // 月曜からの経過日数
+  const monday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - diffToMonday);
+  return monday;
 }
 
-function toMonthParam(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function toDateKey(date: Date) {
+function toDateParam(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function makeMonthDays(month: Date) {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const start = new Date(first);
-  start.setDate(first.getDate() - first.getDay());
-  return Array.from({ length: 42 }, (_, i) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + i);
+function toDateKey(date: Date) {
+  return toDateParam(date);
+}
+
+function makeWeekDays(weekStart: Date) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + i);
     return date;
   });
 }
@@ -46,22 +45,25 @@ function formatTime(date: Date) {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function formatMonthDay(date: Date) {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 export default async function AdminSubmissionBookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ week?: string }>;
 }) {
   const sp = await searchParams;
-  const month = parseMonth(sp.month);
-  const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
-  const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
-  const prevMonth = new Date(month.getFullYear(), month.getMonth() - 1, 1);
-  const nextMonth = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+  const weekStart = parseWeekStart(sp.week);
+  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7);
+  const prevWeek = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() - 7);
+  const nextWeek = weekEnd;
 
   const [bookings, calendarDays] = await Promise.all([
     prisma.submissionBooking.findMany({
       where: {
-        scheduledAt: { gte: monthStart, lt: monthEnd },
+        scheduledAt: { gte: weekStart, lt: weekEnd },
       },
       include: {
         customer: { select: { nameEncrypted: true, email: true } },
@@ -77,7 +79,7 @@ export default async function AdminSubmissionBookingsPage({
       orderBy: { scheduledAt: "asc" },
     }),
     prisma.submissionCalendarDay.findMany({
-      where: { date: { gte: monthStart, lt: monthEnd } },
+      where: { date: { gte: weekStart, lt: weekEnd } },
     }),
   ]);
 
@@ -88,7 +90,8 @@ export default async function AdminSubmissionBookingsPage({
   }
   const settingsByDate = new Map(calendarDays.map((day) => [toDateKey(new Date(day.date)), day]));
 
-  const days = makeMonthDays(month);
+  const days = makeWeekDays(weekStart);
+  const weekEndDisplay = days[days.length - 1];
   const bookedCount = bookings.filter((b) => b.status === "BOOKED").length;
 
   return (
@@ -96,7 +99,7 @@ export default async function AdminSubmissionBookingsPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">提出予約カレンダー</h1>
-          <p className="text-sm text-gray-500 mt-1">店頭持込・郵送予定の予約を月間表示します</p>
+          <p className="text-sm text-gray-500 mt-1">店頭持込・郵送予定の予約を週間表示します（月曜始まり）</p>
         </div>
         <div className="text-sm text-gray-500">予約中 {bookedCount}件</div>
       </div>
@@ -104,16 +107,18 @@ export default async function AdminSubmissionBookingsPage({
       <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <Link
-            href={`/admin/submission-bookings?month=${toMonthParam(prevMonth)}`}
+            href={`/admin/submission-bookings?week=${toDateParam(prevWeek)}`}
             className="w-9 h-9 rounded-full border border-gray-200 text-gray-600 hover:border-brand-300 flex items-center justify-center"
           >
             ‹
           </Link>
           <h2 className="font-bold text-gray-900">
-            {month.getFullYear()}年 {month.getMonth() + 1}月
+            {weekStart.getFullYear()}年 {formatMonthDay(weekStart)} 〜{" "}
+            {weekEndDisplay.getFullYear() !== weekStart.getFullYear() ? `${weekEndDisplay.getFullYear()}年 ` : ""}
+            {formatMonthDay(weekEndDisplay)}
           </h2>
           <Link
-            href={`/admin/submission-bookings?month=${toMonthParam(nextMonth)}`}
+            href={`/admin/submission-bookings?week=${toDateParam(nextWeek)}`}
             className="w-9 h-9 rounded-full border border-gray-200 text-gray-600 hover:border-brand-300 flex items-center justify-center"
           >
             ›
@@ -133,20 +138,15 @@ export default async function AdminSubmissionBookingsPage({
             const key = toDateKey(date);
             const dayBookings = grouped.get(key) ?? [];
             const daySetting = settingsByDate.get(key);
-            const inMonth = date.getMonth() === month.getMonth();
             return (
               <div
                 key={key}
-                className={`min-h-36 border-r border-b border-gray-100 p-2 ${
-                  daySetting?.isClosed
-                    ? "bg-red-50"
-                    : inMonth
-                    ? "bg-white"
-                    : "bg-gray-50 text-gray-300"
+                className={`min-h-[28rem] border-r border-b border-gray-100 p-2 ${
+                  daySetting?.isClosed ? "bg-red-50" : "bg-white"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold">{date.getDate()}</span>
+                  <span className="text-sm font-bold">{formatMonthDay(date)}</span>
                   <DaySettingsButton
                     date={key}
                     isClosed={daySetting?.isClosed ?? false}

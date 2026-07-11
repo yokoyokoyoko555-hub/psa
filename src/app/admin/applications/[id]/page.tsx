@@ -90,30 +90,10 @@ export default async function AdminApplicationDetailPage({
         address2: application.customer.address2Encrypted ? decrypt(application.customer.address2Encrypted) : undefined,
       };
 
-  // 簡易ステータス（DISPLAY_STATUS）をいつでも可視化できるよう、ステッパーとして常時表示する。ADR-0053
+  // 簡易ステータス（DISPLAY_STATUS）をバッジで常時表示する。ADR-0053/0063
   const isDraft = application.status === "DRAFT";
   const isCancelled = application.status === "CANCELLED";
   const currentDisplayStatus = !isDraft && !isCancelled ? computeDisplayStatus(application) : null;
-
-  const fixedProgressSteps: string[] =
-    application.source === "STORE"
-      ? [DISPLAY_STATUS.APPLIED, DISPLAY_STATUS.INPUT_DONE, DISPLAY_STATUS.PAID, DISPLAY_STATUS.PREPARING_SHIPMENT, DISPLAY_STATUS.SHIPPED]
-      : [DISPLAY_STATUS.APPLIED, DISPLAY_STATUS.RECEIVED, DISPLAY_STATUS.PREPARING_SHIPMENT, DISPLAY_STATUS.SHIPPED];
-
-  const knownDisplayStatusValues: string[] = Object.values(DISPLAY_STATUS);
-  // カスタムのPSA進捗ステータス（固定値のいずれでもない）が現在地の場合は、その名称をステップに差し込む
-  const isCustomPsaProgress = currentDisplayStatus !== null && !knownDisplayStatusValues.includes(currentDisplayStatus);
-
-  const progressSteps: string[] = [
-    ...fixedProgressSteps,
-    isCustomPsaProgress ? currentDisplayStatus! : "PSA進捗",
-    DISPLAY_STATUS.RETURN_PREPARING,
-    DISPLAY_STATUS.RETURNED,
-  ];
-
-  const currentStepIndex = isCustomPsaProgress
-    ? fixedProgressSteps.length
-    : progressSteps.indexOf(currentDisplayStatus ?? "");
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -162,44 +142,6 @@ export default async function AdminApplicationDetailPage({
                 )}
               </div>
             </div>
-
-            {!isDraft && !isCancelled && (
-              <div className="mb-4 pb-4 border-b border-gray-100 overflow-x-auto">
-                <div className="flex items-center w-max">
-                  {progressSteps.map((label, i) => {
-                    const done = i < currentStepIndex;
-                    const current = i === currentStepIndex;
-                    return (
-                      <div key={`${label}-${i}`} className="flex items-center">
-                        <div className="flex flex-col items-center gap-1 w-16">
-                          <span
-                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                              current
-                                ? "bg-brand-600 text-white"
-                                : done
-                                ? "bg-brand-100 text-brand-700"
-                                : "bg-gray-100 text-gray-400"
-                            }`}
-                          >
-                            {done ? "✓" : i + 1}
-                          </span>
-                          <span
-                            className={`text-[11px] text-center leading-tight ${
-                              current ? "font-bold text-brand-700" : done ? "text-gray-600" : "text-gray-400"
-                            }`}
-                          >
-                            {label}
-                          </span>
-                        </div>
-                        {i < progressSteps.length - 1 && (
-                          <span className={`w-4 sm:w-8 h-0.5 shrink-0 ${done ? "bg-brand-300" : "bg-gray-200"}`} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
               <div>
