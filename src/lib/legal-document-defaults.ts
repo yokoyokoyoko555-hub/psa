@@ -1,6 +1,17 @@
 // 規程文書（LegalDocument）の初期値。DBに行が無い場合のみ ensureLegalDocument() が投入する
 // （管理画面で編集済みの内容を上書きすることはない）。本文は src/lib/legal-markdown.tsx の簡易記法。ADR-0057
 
+// 既存3件は専用の見た目の良いURLを持つ。管理画面から新規作成した文書は/legal/{id}で公開する。ADR-0058
+const CORE_LEGAL_DOCUMENT_PATHS: Record<string, string> = {
+  terms: "/terms",
+  privacy: "/privacy",
+  harassment_policy: "/harassment-policy",
+};
+
+export function legalDocumentPath(id: string): string {
+  return CORE_LEGAL_DOCUMENT_PATHS[id] ?? `/legal/${id}`;
+}
+
 export const LEGAL_DOCUMENT_DEFAULTS: Record<
   string,
   { title: string; body: string; establishedAt: string }

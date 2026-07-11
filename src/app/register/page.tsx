@@ -16,7 +16,7 @@ export default async function RegisterPage({
 
   // トークンなし → 新規登録/ログインの認証画面
   if (!token) {
-    return <AuthScreen initialTab="signup" />;
+    return <AuthScreen initialTab="signup" footer={<Footer />} />;
   }
 
   // トークンあり → 検証して登録フォーム

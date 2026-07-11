@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { requestRegistration, loginCustomer, requestPasswordReset } from "@/actions/customer";
-import Footer from "@/components/Footer";
 
 const inputCls =
   "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500";
@@ -18,9 +17,12 @@ const SOCIALS = [
 export default function AuthScreen({
   initialTab = "signup",
   withHeader = true,
+  footer,
 }: {
   initialTab?: "signup" | "login";
   withHeader?: boolean;
+  // Footerは非同期のServer Componentのため、呼び出し元(Server Component)から要素として渡す。
+  footer?: ReactNode;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"signup" | "login">(initialTab);
@@ -254,7 +256,7 @@ export default function AuthScreen({
         </p>
       </div>
 
-      <Footer />
+      {footer}
     </div>
   );
 }

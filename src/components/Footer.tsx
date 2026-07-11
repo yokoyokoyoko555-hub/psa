@@ -1,13 +1,13 @@
 import Link from "next/link";
+import { getFooterLegalDocuments } from "@/actions/legal-document";
 
-const LINKS = [
-  { href: "/terms", label: "利用規約" },
-  { href: "/privacy", label: "個人情報保護方針" },
-  { href: "/harassment-policy", label: "カスタマーハラスメントポリシー" },
-  { href: "/contact", label: "お問い合わせ" },
-];
+// 規程文書へのリンクは表示ON/OFFを管理画面から切り替えられるためDB駆動。それ以外は固定リンク。ADR-0058
+const STATIC_LINKS = [{ href: "/contact", label: "お問い合わせ" }];
 
-export default function Footer() {
+export default async function Footer() {
+  const legalDocuments = await getFooterLegalDocuments();
+  const links = [...legalDocuments.map((d) => ({ href: d.path, label: d.title })), ...STATIC_LINKS];
+
   return (
     <footer className="border-t border-gray-200 bg-gray-50 mt-auto">
       <div className="max-w-6xl mx-auto px-4 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-sm">
@@ -17,7 +17,7 @@ export default function Footer() {
           <span className="text-xs text-gray-400">© {new Date().getFullYear()} K.K.TURUPURUN All rights reserved.</span>
         </div>
         <nav className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          {LINKS.map((l) => (
+          {links.map((l) => (
             <Link key={l.href} href={l.href} className="text-gray-500 hover:text-brand-600 transition">
               {l.label}
             </Link>

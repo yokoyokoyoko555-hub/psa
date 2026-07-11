@@ -658,4 +658,18 @@
 - 影響: `prisma/schema.prisma`（`LegalDocument`モデル追加、非破壊）。新規: `src/actions/legal-document.ts`・`src/lib/legal-markdown.tsx`・`src/lib/legal-document-defaults.ts`・`src/components/LegalDocumentView.tsx`・`src/app/admin/legal-documents/`。置き換え: `src/app/terms/page.tsx`・`src/app/privacy/page.tsx`・`src/app/harassment-policy/page.tsx`（表示内容は既存と同等、privacyのみ内容差し替え）。`src/app/admin/layout.tsx`にナビ追加。
 - 未対応: Markdown記法は独自の最小サブセットのみ（表・リンク・ネストしたリスト等は非対応）。本文の変更履歴（誰がいつ何を変えたか）は`OperationLog`の`after`にタイトルのみ記録され、差分そのものは保存していない。
 
+## ADR-0058: 規程文書に改訂日の複数記録・フッター表示ON/OFF・管理画面からの新規作成/削除を追加
+
+- 日付: 2026-07-10 / 状態: Accepted（実装済）
+- 背景: ADR-0057で規程文書をDB化したが、`revisedAt`は単一の日付（上書き）で複数回の改定履歴を表せなかった。全文スナップショットの変更履歴までは不要という判断のもと、改訂日だけを複数回分記録できればよいとの要望があった。あわせて、利用規約・個人情報保護方針・カスタマーハラスメントポリシー以外の規程（例: 特定商取引法に基づく表記等）を管理画面から追加・削除し、フッターへの表示有無を切り替えたいという要望があった。
+- 決定:
+  - **`LegalDocument.revisedAt`を`DateTime?`から`DateTime[] @default([])`に変更**（型変更のため事前にユーザー確認済み。当時全文書の改訂日は未設定=空のため実質データ損失なし）。本文・タイトルのスナップショットは保持せず、日付のみを配列で保持する。
+  - **`LegalDocument.showInFooter Boolean @default(true)`を追加**。フッターは`getFooterLegalDocuments()`（`showInFooter=true`のみ・制定日昇順）で取得した文書と固定リンク（お問い合わせ）を結合して表示する、DB駆動の構成に変更。
+  - **`createLegalDocument()`/`deleteLegalDocument()`を追加**。新規作成はスラッグ（`/^[a-z0-9][a-z0-9-]*$/`、URLにそのまま使用）・タイトル・制定日を入力し、本文はプレースホルダーで作成後に編集する。削除は`LEGAL_DOCUMENT_DEFAULTS`に無いスラッグ（=管理画面から作成した文書）なら完全に削除され、既定3文書（terms/privacy/harassment_policy）を削除した場合は次回参照時に`ensureLegalDocument()`が初期値を再投入する（意図的な仕様。誤操作からの復旧を兼ねる）。
+  - **`/legal/[id]`を新設**し、既定3文書以外（管理画面から新規作成した文書）の公開ページとして使う。既定3文書は従来通り`/terms`・`/privacy`・`/harassment-policy`の専用ルートを維持（`legalDocumentPath()`で振り分け）。
+  - **`Footer.tsx`を非同期のServer Componentに変更**したことに伴い、`"use client"`な`AuthScreen.tsx`が内部で直接`<Footer />`をimportして描画していた箇所を修正。`AuthScreen`に`footer?: ReactNode`propを追加し、呼び出し元のServer Component（`src/app/page.tsx`・`src/app/login/page.tsx`・`src/app/register/page.tsx`）から`footer={<Footer />}`として渡す形に変更（Client ComponentはServer Componentを直接importできないため。`/login`にも`force-dynamic`を追加）。
+  - **管理画面の「規程管理」に新規作成フォーム・削除ボタン・フッター表示チェックボックス・改訂日の追加/削除UI（バッジ＋×ボタン）を追加**。
+- 影響: `prisma/schema.prisma`（`revisedAt`型変更・`showInFooter`追加）、`src/actions/legal-document.ts`、`src/components/Footer.tsx`（非同期化）、`src/components/AuthScreen.tsx`・`src/app/page.tsx`・`src/app/login/page.tsx`・`src/app/register/page.tsx`（footer prop化）、`src/components/LegalDocumentView.tsx`（revisedAt表示を配列対応）、新規`src/app/legal/[id]/page.tsx`・`src/app/admin/legal-documents/NewLegalDocumentForm.tsx`。
+- 未対応: 新規作成したスラッグのリネーム機能は無い（削除して作り直す運用）。フッターの表示順は`sortOrder`のような明示的な並び替えフィールドを設けず、制定日の昇順固定。
+
 
