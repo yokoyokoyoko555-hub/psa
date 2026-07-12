@@ -37,7 +37,7 @@ export async function savePsaProgressStatus(
   } else {
     await prisma.psaProgressStatus.create({ data });
   }
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/general-settings");
   revalidatePath("/admin/psa-groups");
   return { success: true };
 }
@@ -45,7 +45,7 @@ export async function savePsaProgressStatus(
 export async function deletePsaProgressStatus(id: string): Promise<{ success: boolean; error?: string }> {
   await requireAdmin();
   await prisma.psaProgressStatus.delete({ where: { id } });
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/general-settings");
   revalidatePath("/admin/psa-groups");
   return { success: true };
 }

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getCenteringAccess, getMyMeasurements } from "@/actions/centering";
+import { getStoreSettings } from "@/actions/store-settings";
 import { formatRatio } from "@/lib/centering";
 import CustomerHeader from "@/components/CustomerHeader";
 import { SubscribeButton, ManageSubscriptionButton } from "./CenteringPlanButtons";
@@ -20,10 +21,28 @@ export default async function CenteringPage({
   if (!customer) redirect("/login");
 
   const { subscribed } = await searchParams;
-  const [aiEnabled, measurements] = await Promise.all([
+  const [aiEnabled, measurements, storeSettings] = await Promise.all([
     getCenteringAccess(),
     getMyMeasurements(),
+    getStoreSettings(),
   ]);
+
+  // 精度・操作性の改善が済むまで管理画面のスイッチで一時的に非表示にできる。ADR-0070
+  if (!(storeSettings?.centeringToolEnabled ?? true)) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <CustomerHeader title="センタリング測定" />
+        <main className="max-w-2xl mx-auto px-4 py-8">
+          <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center space-y-2">
+            <p className="font-bold text-gray-900">ただいま調整中です</p>
+            <p className="text-sm text-gray-500">
+              センタリング測定ツールは現在ご利用いただけません。準備が整い次第、改めてご案内いたします。
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

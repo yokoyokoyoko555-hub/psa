@@ -39,6 +39,13 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
           </div>
         </dl>
 
+        <Link
+          href={`/admin/customers/${inquiry.customerId}`}
+          className="inline-block text-sm text-brand-600 hover:underline"
+        >
+          この顧客の申込一覧を見る →
+        </Link>
+
         <div>
           <p className="text-xs text-gray-500 mb-1">内容</p>
           <p className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 rounded-lg p-4">{inquiry.body}</p>

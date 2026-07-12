@@ -777,16 +777,42 @@
 - 影響: `src/app/admin/applications/[id]/page.tsx`のみ変更。スキーマ・クエリ変更なし。
 - 未対応: なし。
 
-## ADR-0068: `/contact`ページに顧客本人の問い合わせ履歴（質問・回答）を表示
+## ADR-0068: 顧客本人の問い合わせ履歴（質問・回答）を新規`/contact/history`ページで表示
 
-- 日付: 2026-07-12 / 状態: Accepted（実装済）
+- 日付: 2026-07-12 / 状態: Accepted（実装済。当初`/contact`へのインライン表示として実装したが、ユーザー確認によりページ分割に変更）
 - 背景: 問い合わせへの回答（`replyToInquiry`）は顧客へのメール送信のみで通知しており（SMTP未設定/失敗時は無送信のまま処理続行、ADR-0018と同方針）、顧客側にメール以外で回答を確認する手段が一つも無かった。一方でユーザーは、頻繁な問い合わせ対応（スタッフの負荷）を避けたいため、マイページトップ等に「お問い合わせ」を目立つ導線（クイックアクションのカード）として追加することは望まず、スレッド返信・既読管理などを備えた本格的なチケット管理機能も不要としている。
 - 決定:
   - **新規`getMyInquiries()`（`actions/inquiry.ts`）を追加**。顧客本人の問い合わせを`customerId`で絞り込み、新しい順に返す（既存の`Inquiry`モデルは1問い合わせ＝1回答のみで、スキーマ変更なし）。
-  - **`/contact`ページ（既存のお問い合わせフォームページ）に、フォームの上へ「これまでのお問い合わせ」セクションを追加**。件名・日時・内容・回答（あれば）・ステータスバッジ（回答待ち／回答済み）を表示する読み取り専用の一覧。**顧客からの追加返信（スレッド化）は不可**（現行スキーマのまま、1問1答を維持）。
-  - **導線は変更しない**（`/contact`への入口は引き続きフッターのリンクのみ。マイページトップに新規カード・クイックアクションは追加しない）。既存のお問い合わせフォーム自体もそのまま流用。
-  - 送信後の成功画面のボタンを「マイページへ」から「お問い合わせ履歴を見る」（`router.refresh()`）に変更し、送信直後に自分の履歴へ気づけるようにした。
-- 影響: `src/actions/inquiry.ts`（新規関数1つ）、`src/app/contact/page.tsx`（履歴セクション追加）、`src/app/contact/ContactForm.tsx`（送信後ボタンの文言・遷移先）。スキーマ変更なし。
+  - **新規ページ`/contact/history`を追加**。件名・日時・内容・回答（あれば）・ステータスバッジ（回答待ち／回答済み）を表示する読み取り専用の一覧。**顧客からの追加返信（スレッド化）は不可**（現行スキーマのまま、1問1答を維持）。
+  - **`/contact`（お問い合わせフォーム）と履歴を分離**。`/contact`のヘッダーに「これまでのお問い合わせ→」リンクを設置し、`/contact/history`のヘッダーには「新しいお問い合わせ→」で相互リンク。
+  - **導線は変更しない**（マイページトップ等に新規カード・クイックアクションは追加しない。入口は引き続き`/contact`へのフッターリンクのみ）。
+  - 送信後の成功画面のボタンを「マイページへ」から「お問い合わせ履歴を見る」（`/contact/history`へ遷移）に変更し、送信直後に自分の履歴へ気づけるようにした。
+- 影響: `src/actions/inquiry.ts`（新規関数1つ）、新規`src/app/contact/history/page.tsx`、`src/app/contact/page.tsx`（履歴リンク追加のみ、フォーム自体は変更なし）、`src/app/contact/ContactForm.tsx`（送信後ボタンの遷移先）。スキーマ変更なし。
 - 未対応: 顧客からの追加返信（同一問い合わせへの再質問）は引き続きサポートしない（新規問い合わせとして送信する運用）。
 
 
+
+## ADR-0069: 管理画面「料金設定」を`/admin/price-setting`へ改名し、料金と無関係な項目を「各種設定」（`/admin/general-settings`）へ分離
+
+- 日付: 2026-07-12 / 状態: Accepted（実装済）
+- 背景: `/admin/settings`ページは元々「料金設定」として作られたが（ADR-0015等）、その後PSA進捗ステータス（ADR-0034）・店舗情報（ADR-0035）・サイドバー表示順（ADR-0059）と、料金とは無関係な管理項目が同じページに次々と追加され、URLと画面名（料金設定）の実態が乖離していた。
+- 決定:
+  - **URLを`/admin/settings`→`/admin/price-setting`に変更**。料金関連（為替レート・PSA日本・PSA US・キャンペーン割引）のみをこのページに残す。
+  - **新規ページ`/admin/general-settings`（各種設定）を新設**し、PSA進捗ステータス・店舗情報（郵送先住所）・サイドバー表示順の3項目を移設。
+  - サイドバーの既定値（`ADMIN_NAV_DEFAULTS`）に新規`general-settings`（🔧・「各種設定」）を追加し、`settings`のhrefを更新。href/iconはコード側で管理するため、DBマイグレーション不要（ADR-0059の設計通り）。
+  - 各Formコンポーネントの`revalidatePath()`呼び出し先を新しいURLに更新（`campaign.ts`/`pricing.ts`→`/admin/price-setting`、`psa-progress.ts`/`store-settings.ts`→`/admin/general-settings`）。
+  - 権限（料金設定はADMINのみ、ADR-0008）は各Server Action側の`requireAdmin()`で担保されており、URL変更による影響なし。
+- 影響: `src/app/admin/settings/`配下の全ファイルを`src/app/admin/price-setting/`（料金系）と`src/app/admin/general-settings/`（新設、非料金系）に分割移動。`src/lib/admin-nav-defaults.ts`・`src/actions/{campaign,pricing,psa-progress,store-settings}.ts`のrevalidatePath先を更新。未使用の`ShippingRuleForm.tsx`/`InsuranceRuleForm.tsx`（ADR-0015以前の旧実装、呼び出し元なし）は`price-setting`配下へそのまま移動（削除はしていない）。スキーマ変更なし。
+- 未対応: なし。
+
+## ADR-0070: 「各種設定」にメールテンプレート・アカウントを統合し、センタリング測定ツールの顧客画面表示ON/OFFスイッチを追加
+
+- 日付: 2026-07-12 / 状態: Accepted（実装済）。ADR-0069を補完。
+- 背景: ADR-0069で新設した「各種設定」（`/admin/general-settings`）に、さらに「メールテンプレート」（`/admin/mail-templates`）と「アカウント」（`/admin/account`）も統合してよいとの指示。また、センタリング測定ツール（ADR-0012/0013）は精度・操作性が実用に耐えないため、機能自体は残しつつ追って改修することとし、それまで顧客画面から一時的に隠せるスイッチが必要になった。
+- 決定:
+  - **メールテンプレート・アカウントをサイドバー独立項目から「各種設定」内のセクションへ統合**。`MailTemplateManager.tsx`/`ChangePasswordForm.tsx`を`general-settings/`へ移動し、旧`/admin/mail-templates`・`/admin/account`ページ自体を削除。`ADMIN_NAV_DEFAULTS`から両エントリを削除（`getAdminNavItems()`は既存動作としてコード側に無いidのDB行を表示しないため、DB操作不要でサイドバーから消える。ADR-0059/0021の既存挙動を利用）。`mail-template.ts`の`revalidatePath`を`/admin/general-settings`に更新。
+  - **`StoreSettings`（id="default"の単一行、ADR-0035で新設済み）に`centeringToolEnabled Boolean @default(true)`を追加**。新規テーブルを作らず、既存の「その他設定の単一行」パターンに相乗り。
+  - **新規`setCenteringToolEnabled()`（`store-settings.ts`、ADMIN限定）と`CenteringToggleForm.tsx`（トグルスイッチUI）を追加**し、「各種設定」にセクションとして設置。
+  - **OFF時の顧客側の挙動**: `mypage/page.tsx`のクイックアクションからセンタリング測定のタイルを非表示。`/mypage/centering`はツールUIの代わりに「ただいま調整中です」の案内のみ表示。`/mypage/centering/measure`への直接アクセスは`/mypage/centering`へリダイレクト。過去の測定結果詳細（`/mypage/centering/[id]`）は対象外（既存データの閲覧は引き続き可能）。機能・データ・Stripeサブスクリプション状態は一切変更しない（表示を止めるだけ）。
+- 影響: `prisma/schema.prisma`（`StoreSettings.centeringToolEnabled`列追加、非破壊）、`src/actions/store-settings.ts`（新規アクション）、新規`general-settings/CenteringToggleForm.tsx`、`general-settings/page.tsx`（5セクション構成に拡張）、`src/lib/admin-nav-defaults.ts`、`src/actions/mail-template.ts`、`src/app/mypage/page.tsx`・`src/app/mypage/centering/page.tsx`・`src/app/mypage/centering/measure/page.tsx`。
+- 未対応: センタリング測定ツール自体の精度・操作性改善は本ADRのスコープ外（別途開発）。

@@ -9,8 +9,8 @@ export const ADMIN_NAV_DEFAULTS = [
   { id: "submission-bookings", href: "/admin/submission-bookings", icon: "📅", label: "提出予約", sortOrder: 6 },
   { id: "psa-groups", href: "/admin/psa-groups", icon: "📦", label: "PSA提出グループ", sortOrder: 7 },
   { id: "card-masters", href: "/admin/card-masters", icon: "🗂️", label: "カード名称マスタ", sortOrder: 8 },
-  { id: "mail-templates", href: "/admin/mail-templates", icon: "✉️", label: "メールテンプレート", sortOrder: 9 },
-  { id: "legal-documents", href: "/admin/legal-documents", icon: "📜", label: "規程管理", sortOrder: 10 },
-  { id: "settings", href: "/admin/settings", icon: "⚙️", label: "料金設定", sortOrder: 11 },
-  { id: "account", href: "/admin/account", icon: "🔑", label: "アカウント", sortOrder: 12 },
+  { id: "legal-documents", href: "/admin/legal-documents", icon: "📜", label: "規程管理", sortOrder: 9 },
+  { id: "settings", href: "/admin/price-setting", icon: "⚙️", label: "料金設定", sortOrder: 10 },
+  { id: "general-settings", href: "/admin/general-settings", icon: "🔧", label: "各種設定", sortOrder: 11 },
+  // メールテンプレート・アカウントは「各種設定」内のセクションへ統合したため、サイドバー項目としては廃止。ADR-0070
 ] as const;

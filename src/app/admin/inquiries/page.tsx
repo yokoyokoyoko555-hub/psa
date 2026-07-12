@@ -52,7 +52,12 @@ export default async function InquiriesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-gray-900">{i.customerName}</p>
+                      <Link
+                        href={`/admin/customers/${i.customerId}`}
+                        className="text-gray-900 hover:text-brand-600 hover:underline"
+                      >
+                        {i.customerName}
+                      </Link>
                       <p className="text-xs text-gray-400">{i.customerEmail}</p>
                     </td>
                     <td className="px-4 py-3 text-gray-700">{i.subject}</td>

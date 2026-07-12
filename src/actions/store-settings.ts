@@ -38,7 +38,25 @@ export async function saveStoreSettings(
     update: { ...parsed.data, updatedBy: user.id },
     create: { id: STORE_SETTINGS_ID, ...parsed.data, updatedBy: user.id },
   });
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/general-settings");
   revalidatePath("/mypage/submission-booking");
+  return { success: true };
+}
+
+/**
+ * センタリング測定ツールを顧客画面に表示するかどうかのスイッチ。精度・操作性の改善が済むまで
+ * 一時的に非表示にできるようにする（機能自体は削除しない）。ADR-0070
+ */
+export async function setCenteringToolEnabled(enabled: boolean): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdmin();
+
+  await prisma.storeSettings.upsert({
+    where: { id: STORE_SETTINGS_ID },
+    update: { centeringToolEnabled: enabled, updatedBy: user.id },
+    create: { id: STORE_SETTINGS_ID, centeringToolEnabled: enabled, updatedBy: user.id },
+  });
+  revalidatePath("/admin/general-settings");
+  revalidatePath("/mypage");
+  revalidatePath("/mypage/centering");
   return { success: true };
 }

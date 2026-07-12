@@ -48,7 +48,7 @@ export async function saveShippingInsuranceRates(
     prisma.shippingInsuranceRate.createMany({ data: rows }),
   ]);
 
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/price-setting");
   return { success: true };
 }
 
@@ -77,7 +77,7 @@ export async function saveUniformFees(input: {
     update: { region: region.data, itemType: itemType.data, proxyFee, handlingFee, freeShipInsQty },
     create: { id, region: region.data, itemType: itemType.data, proxyFee, handlingFee, freeShipInsQty },
   });
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/price-setting");
   return { success: true };
 }
 
@@ -168,14 +168,14 @@ export async function saveCustomServicePrice(
   } else {
     await prisma.customServicePrice.create({ data });
   }
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/price-setting");
   return { success: true };
 }
 
 export async function deleteCustomServicePrice(id: string): Promise<{ success: boolean; error?: string }> {
   await requireAdmin();
   await prisma.customServicePrice.delete({ where: { id } });
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/price-setting");
   return { success: true };
 }
 
@@ -198,6 +198,6 @@ export async function saveExchangeRate(
     update: { ...parsed.data, updatedBy: user.id },
     create: { id: EXCHANGE_RATE_ID, ...parsed.data, updatedBy: user.id },
   });
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/price-setting");
   return { success: true };
 }

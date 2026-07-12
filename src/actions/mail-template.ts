@@ -29,6 +29,6 @@ export async function saveMailTemplate(
     where: { id: parsed.data.id },
     data: { subject: parsed.data.subject, bodyHtml: parsed.data.bodyHtml, enabled: parsed.data.enabled },
   });
-  revalidatePath("/admin/mail-templates");
+  revalidatePath("/admin/general-settings");
   return { success: true };
 }

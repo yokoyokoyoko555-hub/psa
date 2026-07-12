@@ -28,7 +28,17 @@ const SHARED_STEPS = [
 export default function HowToApplyPage() {
   return (
     <div className="min-h-screen bg-gray-50">
-      <CustomerHeader title="申込の流れ" />
+      <CustomerHeader
+        title="申込の流れ"
+        actions={
+          <Link
+            href="/apply"
+            className="shrink-0 bg-brand-600 text-white rounded-full px-4 py-1.5 text-sm font-bold hover:bg-brand-700 transition"
+          >
+            新規申込
+          </Link>
+        }
+      />
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <h1 className="text-xl font-bold text-gray-900 text-center">申込の流れ</h1>

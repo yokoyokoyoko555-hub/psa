@@ -6,19 +6,28 @@ import { updateAdminNavItems } from "@/actions/admin-nav";
 
 type NavRow = { id: string; icon: string; label: string; sortOrder: number };
 
+/** 表示順はドラッグ&ドロップで決める（数値入力欄は「0」に戻って入力しづらいため廃止）。 */
 export default function AdminNavOrderForm({ items }: { items: NavRow[] }) {
   const router = useRouter();
-  const [rows, setRows] = useState<NavRow[]>(items);
+  const [rows, setRows] = useState<NavRow[]>([...items].sort((a, b) => a.sortOrder - b.sortOrder));
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   function updateLabel(id: string, label: string) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)));
   }
 
-  function updateSortOrder(id: string, value: string) {
-    const sortOrder = parseInt(value, 10);
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, sortOrder: Number.isNaN(sortOrder) ? 0 : sortOrder } : r)));
+  function handleDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === index) return;
+    setRows((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIndex, 1);
+      next.splice(index, 0, moved);
+      return next;
+    });
+    setDragIndex(index);
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -26,7 +35,7 @@ export default function AdminNavOrderForm({ items }: { items: NavRow[] }) {
     setMessage("");
     startTransition(async () => {
       const result = await updateAdminNavItems({
-        items: rows.map(({ id, label, sortOrder }) => ({ id, label, sortOrder })),
+        items: rows.map(({ id, label }, index) => ({ id, label, sortOrder: index })),
       });
       if (result.success) {
         setMessage("保存しました");
@@ -37,14 +46,28 @@ export default function AdminNavOrderForm({ items }: { items: NavRow[] }) {
     });
   }
 
-  const sorted = [...rows].sort((a, b) => a.sortOrder - b.sortOrder);
-
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <p className="text-xs text-gray-500">表示名と表示順（小さい順に上から表示）を編集できます。</p>
+      <p className="text-xs text-gray-500">表示名の編集、ドラッグでの並び替え（上から順に表示）ができます。</p>
       <div className="space-y-2">
-        {sorted.map((row) => (
-          <div key={row.id} className="flex items-center gap-3 border border-gray-100 rounded-lg px-3 py-2">
+        {rows.map((row, index) => (
+          <div
+            key={row.id}
+            draggable
+            onDragStart={() => setDragIndex(index)}
+            onDragOver={(e) => handleDragOver(e, index)}
+            onDragEnd={() => setDragIndex(null)}
+            onDrop={(e) => e.preventDefault()}
+            className={`flex items-center gap-3 border rounded-lg px-3 py-2 bg-white transition ${
+              dragIndex === index ? "border-brand-400 opacity-60" : "border-gray-100"
+            }`}
+          >
+            <span
+              className="text-gray-300 text-lg cursor-grab active:cursor-grabbing select-none shrink-0"
+              title="ドラッグして並び替え"
+            >
+              ⠿
+            </span>
             <span className="text-lg w-6 text-center shrink-0">{row.icon}</span>
             <input
               className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -52,15 +75,6 @@ export default function AdminNavOrderForm({ items }: { items: NavRow[] }) {
               onChange={(e) => updateLabel(row.id, e.target.value)}
               maxLength={60}
             />
-            <label className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
-              表示順
-              <input
-                type="number"
-                className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                value={row.sortOrder}
-                onChange={(e) => updateSortOrder(row.id, e.target.value)}
-              />
-            </label>
           </div>
         ))}
       </div>

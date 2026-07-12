@@ -60,13 +60,13 @@ export async function saveCampaign(
   } else {
     await prisma.campaign.create({ data });
   }
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/price-setting");
   return { success: true };
 }
 
 export async function deleteCampaign(id: string): Promise<{ success: boolean; error?: string }> {
   await requireAdmin();
   await prisma.campaign.delete({ where: { id } });
-  revalidatePath("/admin/settings");
+  revalidatePath("/admin/price-setting");
   return { success: true };
 }

@@ -646,6 +646,8 @@ model StoreSettings {
   address    String   @default("")
   storeName  String   @default("") // 例: "トレカビンクス池袋店　PSA鑑定"
   phone      String   @default("")
+  // センタリング測定ツールの精度・操作性が実用に足りないため、開発が整うまで顧客画面から一時的に隠すスイッチ。ADR-0070
+  centeringToolEnabled Boolean @default(true)
   updatedAt  DateTime @updatedAt
   updatedBy  String?
 

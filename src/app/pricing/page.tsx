@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
@@ -156,13 +157,27 @@ export default async function PricingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <CustomerHeader title="料金表" />
+      <CustomerHeader
+        title="料金表"
+        actions={
+          <Link
+            href="/apply"
+            className="shrink-0 bg-brand-600 text-white rounded-full px-4 py-1.5 text-sm font-bold hover:bg-brand-700 transition"
+          >
+            新規申込
+          </Link>
+        }
+      />
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h1 className="text-xl font-bold text-gray-900 mb-2">PSA鑑定代行サービス 料金表</h1>
           <p className="text-sm text-gray-600">
-            下記の鑑定料に加えて、送料・保険料、事務手数料（全申込）、代理入力をご依頼の場合は代理入力料金がかかります。表示価格はすべて消費税込みです。
+            下記の鑑定料に加えて、送料・保険料、事務手数料（全申込）、代理入力をご依頼の場合は代理入力料金がかかります。表示価格はすべて消費税込みです。申込の流れは
+            <Link href="/how-to-apply" className="text-brand-600 hover:underline">
+              こちら
+            </Link>
+            からご確認ください。
           </p>
         </div>
 

@@ -52,7 +52,7 @@ export default function ContactForm({ name, email }: { name: string; email: stri
           担当者より回答をお送りいたします。しばらくお待ちください。
         </p>
         <button
-          onClick={() => router.refresh()}
+          onClick={() => router.push("/contact/history")}
           className="bg-brand-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-brand-700 transition"
         >
           お問い合わせ履歴を見る

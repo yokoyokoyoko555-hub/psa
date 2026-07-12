@@ -49,7 +49,17 @@ export default async function SubmissionBookingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <CustomerHeader title="提出予約" />
+      <CustomerHeader
+        title="提出予約"
+        actions={
+          <Link
+            href="/apply"
+            className="shrink-0 bg-brand-600 text-white rounded-full px-4 py-1.5 text-sm font-bold hover:bg-brand-700 transition"
+          >
+            新規申込
+          </Link>
+        }
+      />
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white border border-gray-200 rounded-xl p-5">

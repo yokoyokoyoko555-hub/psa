@@ -98,6 +98,7 @@ export async function getInquiries() {
       id: i.id,
       subject: i.subject,
       status: i.status,
+      customerId: i.customerId,
       customerName: decrypt(i.customer.nameEncrypted),
       customerEmail: i.customer.email,
       createdAt: i.createdAt,
@@ -127,6 +128,7 @@ export async function getInquiryDetail(id: string) {
     replyText: inquiry.replyText,
     repliedAt: inquiry.repliedAt,
     createdAt: inquiry.createdAt,
+    customerId: inquiry.customerId,
     customerName: decrypt(inquiry.customer.nameEncrypted),
     customerEmail: inquiry.customer.email,
   };

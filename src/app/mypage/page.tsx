@@ -14,7 +14,7 @@ export default async function MypagePage() {
   const customer = await getCustomerSession();
   if (!customer) redirect("/login");
 
-  const [applications, notifications] = await Promise.all([
+  const [applications, notifications, storeSettings] = await Promise.all([
     getMyApplications(),
     prisma.notification.findMany({
       where: {
@@ -25,8 +25,11 @@ export default async function MypagePage() {
       orderBy: { createdAt: "desc" },
       take: 2,
     }),
+    prisma.storeSettings.findUnique({ where: { id: "default" } }),
   ]);
   const latestDraft = applications.find((a) => a.status === "DRAFT");
+  // 精度・操作性の改善が済むまで管理画面のスイッチで一時的に非表示にできる。ADR-0070
+  const centeringToolEnabled = storeSettings?.centeringToolEnabled ?? true;
 
   const SERVICE_LABELS: Record<string, string> = {
     VALUE: "バリュー",
@@ -130,16 +133,18 @@ export default async function MypagePage() {
               <p className="text-gray-500 text-sm">店頭持込・郵送予定の予約</p>
             </div>
           </Link>
-          <Link
-            href="/mypage/centering"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
-          >
-            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">◎</div>
-            <div>
-              <p className="font-bold text-lg text-gray-900">センタリング測定</p>
-              <p className="text-gray-500 text-sm">無料・カメラでセンタリングを測定</p>
-            </div>
-          </Link>
+          {centeringToolEnabled && (
+            <Link
+              href="/mypage/centering"
+              className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+            >
+              <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">◎</div>
+              <div>
+                <p className="font-bold text-lg text-gray-900">センタリング測定</p>
+                <p className="text-gray-500 text-sm">無料・カメラでセンタリングを測定</p>
+              </div>
+            </Link>
+          )}
           <Link
             href="/pricing"
             className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
