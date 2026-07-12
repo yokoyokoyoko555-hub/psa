@@ -59,6 +59,29 @@ export async function createInquiry(
   return { success: true };
 }
 
+/**
+ * 顧客本人の問い合わせ履歴一覧（`/contact`ページで表示）。メール未達時の代替閲覧手段として、
+ * 過去の質問・回答をここで確認できるようにする（スレッド返信は不可・1問1答のまま）。
+ */
+export async function getMyInquiries() {
+  const customer = await getCustomerSession();
+  if (!customer) return [];
+
+  return prisma.inquiry.findMany({
+    where: { customerId: customer.id },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      subject: true,
+      body: true,
+      status: true,
+      replyText: true,
+      repliedAt: true,
+      createdAt: true,
+    },
+  });
+}
+
 /** 管理画面の一覧表示用。未読を上位に表示する。 */
 export async function getInquiries() {
   await requireAdminOrStaff();
