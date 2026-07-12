@@ -6,6 +6,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { getMeasurement } from "@/actions/centering";
 import { formatRatio } from "@/lib/centering";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import { format } from "date-fns";
 
 export const metadata = { title: "測定結果 | トレカビンクス" };
@@ -89,6 +90,7 @@ export default async function MeasurementDetailPage({
           もう一度測定する
         </Link>
       </main>
+      <Footer />
     </div>
   );
 }

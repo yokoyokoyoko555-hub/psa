@@ -5,6 +5,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { getCenteringAccess } from "@/actions/centering";
 import { getStoreSettings } from "@/actions/store-settings";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import MeasureClient from "./MeasureClient";
 
 export const metadata = { title: "センタリング測定 | トレカビンクス" };
@@ -26,6 +27,7 @@ export default async function MeasurePage() {
       <main className="max-w-2xl mx-auto px-4 py-6">
         <MeasureClient aiEnabled={aiEnabled} />
       </main>
+      <Footer />
     </div>
   );
 }

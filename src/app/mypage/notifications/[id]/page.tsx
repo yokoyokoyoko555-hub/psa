@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 
 export default async function NotificationDetailPage({
   params,
@@ -43,6 +44,7 @@ export default async function NotificationDetailPage({
           マイページへ戻る
         </Link>
       </main>
+      <Footer />
     </div>
   );
 }

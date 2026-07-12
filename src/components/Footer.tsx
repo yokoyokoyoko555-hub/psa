@@ -10,7 +10,7 @@ export default async function Footer() {
 
   return (
     <footer className="border-t border-gray-200 bg-gray-50 mt-auto">
-      <div className="max-w-4xl mx-auto px-4 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-sm">
+      <div className="max-w-6xl mx-auto px-4 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-sm">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.jpg" alt="トレカビンクス" className="h-6 w-auto" />

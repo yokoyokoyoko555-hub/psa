@@ -7,6 +7,7 @@ import { getCenteringAccess, getMyMeasurements } from "@/actions/centering";
 import { getStoreSettings } from "@/actions/store-settings";
 import { formatRatio } from "@/lib/centering";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import { SubscribeButton, ManageSubscriptionButton } from "./CenteringPlanButtons";
 import { format } from "date-fns";
 
@@ -40,6 +41,7 @@ export default async function CenteringPage({
             </p>
           </div>
         </main>
+        <Footer />
       </div>
     );
   }
@@ -142,6 +144,7 @@ export default async function CenteringPage({
           測定結果は参考値であり、PSA等の鑑定会社による公式判定を保証するものではありません。
         </p>
       </main>
+      <Footer />
     </div>
   );
 }

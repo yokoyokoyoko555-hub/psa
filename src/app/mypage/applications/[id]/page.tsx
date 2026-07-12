@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getApplicationDetail } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import DifferentialPaymentPanel from "@/components/DifferentialPaymentPanel";
 import { formatMoney, formatMoneyIn, formatMoneyInt } from "@/lib/currency";
 import { format } from "date-fns";
@@ -303,6 +304,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
 
         {!isStoreInput && cardsSection}
       </main>
+      <Footer />
     </div>
   );
 }

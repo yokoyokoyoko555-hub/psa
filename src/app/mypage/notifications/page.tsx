@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 
 export default async function NotificationsPage() {
   const customer = await getCustomerSession();
@@ -58,6 +59,7 @@ export default async function NotificationsPage() {
           </div>
         </section>
       </main>
+      <Footer />
     </div>
   );
 }

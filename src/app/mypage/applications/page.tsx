@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getMyApplications } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import ApplicationCenter, { type AppRow } from "./ApplicationCenter";
 import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel, computeDisplayStatus } from "@/lib/application-status";
 
@@ -51,6 +52,7 @@ export default async function ApplicationsPage() {
       <main className="max-w-4xl mx-auto px-4 py-8">
         <ApplicationCenter apps={rows} />
       </main>
+      <Footer />
     </div>
   );
 }

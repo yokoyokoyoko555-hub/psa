@@ -6,6 +6,7 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import { format } from "date-fns";
 
 export const metadata = { title: "提出予約の詳細 | トレカビンクス" };
@@ -104,6 +105,7 @@ export default async function BookingDetailPage({
           </Link>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

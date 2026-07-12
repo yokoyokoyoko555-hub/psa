@@ -11,6 +11,7 @@ import DeletePaymentMethodButton from "../payment-methods/DeletePaymentMethodBut
 import ProfileSettingsModal from "./ProfileSettingsModal";
 import ChangePasswordForm from "./ChangePasswordForm";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import { logoutCustomer } from "@/actions/customer";
 
 export const metadata = { title: "アカウント設定 | トレカビンクス" };
@@ -128,6 +129,7 @@ export default async function SettingsPage() {
           </div>
         </section>
       </main>
+      <Footer />
     </div>
   );
 }

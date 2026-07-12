@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import CustomerHeader from "@/components/CustomerHeader";
+import Footer from "@/components/Footer";
 import { formatMoney } from "@/lib/currency";
 import { format } from "date-fns";
 
@@ -132,6 +133,7 @@ export default async function SubmissionBookingPage() {
           </div>
         )}
       </main>
+      <Footer />
     </div>
   );
 }
