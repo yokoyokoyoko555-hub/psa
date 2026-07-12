@@ -22,9 +22,9 @@ export default async function MeasurePage() {
   const aiEnabled = await getCenteringAccess();
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader title="センタリング測定" />
-      <main className="max-w-2xl mx-auto px-4 py-6">
+      <main className="flex-1 max-w-2xl mx-auto px-4 py-6">
         <MeasureClient aiEnabled={aiEnabled} />
       </main>
       <Footer />

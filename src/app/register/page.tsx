@@ -23,9 +23,9 @@ export default async function RegisterPage({
   const result = await verifyRegistrationToken(token);
   if (!result.valid || !result.email) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
         <CustomerHeader title="会員登録" />
-        <div className="flex items-center justify-center px-4 py-12">
+        <div className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-md text-center space-y-4">
             <h1 className="text-xl font-bold text-gray-900">リンクが無効です</h1>
             <p className="text-sm text-gray-600">

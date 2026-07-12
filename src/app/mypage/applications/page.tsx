@@ -36,7 +36,7 @@ export default async function ApplicationsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader
         title="申込一覧"
         actions={
@@ -49,7 +49,7 @@ export default async function ApplicationsPage() {
         }
       />
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="flex-1 max-w-4xl mx-auto px-4 py-8">
         <ApplicationCenter apps={rows} />
       </main>
       <Footer />

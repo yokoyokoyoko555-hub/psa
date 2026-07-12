@@ -39,10 +39,10 @@ export default async function BookingDetailPage({
   const isStore = booking.method === "STORE_DROP_OFF";
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader title="提出予約の詳細" />
 
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-5">
+      <main className="flex-1 max-w-2xl mx-auto px-4 py-8 space-y-5">
         <Link href="/mypage/submission-booking" className="text-sm text-gray-500 hover:text-gray-700">
           ← 予約一覧へ戻る
         </Link>

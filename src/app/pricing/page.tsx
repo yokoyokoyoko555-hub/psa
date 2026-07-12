@@ -156,7 +156,7 @@ export default async function PricingPage() {
     pricingSettings.find((s) => s.id === pricingSettingId(region, itemType));
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader
         title="料金表"
         actions={
@@ -169,7 +169,7 @@ export default async function PricingPage() {
         }
       />
 
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <main className="flex-1 max-w-4xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h1 className="text-xl font-bold text-gray-900 mb-2">PSA鑑定代行サービス 料金表</h1>
           <p className="text-sm text-gray-600">
@@ -182,7 +182,7 @@ export default async function PricingPage() {
         </div>
 
         {REGIONS.map(({ region, title, itemTypes }) => (
-          <details key={region} className="bg-white rounded-xl border border-gray-200 p-6" open={region === "PSA_JP"}>
+          <details key={region} className="bg-white rounded-xl border border-gray-200 p-6">
             <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">{title}</summary>
 
             <div className="mt-4 space-y-4">

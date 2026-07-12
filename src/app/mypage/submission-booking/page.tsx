@@ -49,7 +49,7 @@ export default async function SubmissionBookingPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader
         title="提出予約"
         actions={
@@ -62,7 +62,7 @@ export default async function SubmissionBookingPage() {
         }
       />
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main className="flex-1 max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white border border-gray-200 rounded-xl p-5">
           <p className="font-bold text-gray-900">申込ごとに、カードの提出方法と日時を予約してください</p>
           <p className="text-sm text-gray-500 mt-1">
