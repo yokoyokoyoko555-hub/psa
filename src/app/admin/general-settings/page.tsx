@@ -28,7 +28,7 @@ export default async function GeneralSettingsPage() {
       <h1 className="text-2xl font-bold text-gray-900">各種設定</h1>
 
       {/* PSA進捗ステータス（PSA提出グループの一括更新用） */}
-      <details className={groupCls} open>
+      <details className={groupCls}>
         <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">PSA進捗ステータス</summary>
         <div className="mt-4">
           <PsaProgressStatusForm statuses={psaProgressStatuses} />

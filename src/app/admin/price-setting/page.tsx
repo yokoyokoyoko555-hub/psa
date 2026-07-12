@@ -54,7 +54,7 @@ export default async function PriceSettingPage() {
       <h1 className="text-2xl font-bold text-gray-900">料金設定</h1>
 
       {/* 為替レート（PSA US決済のJPY一本化用） */}
-      <details className={groupCls} open>
+      <details className={groupCls}>
         <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">
           為替レート — PSA US決済用
         </summary>
