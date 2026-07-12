@@ -139,6 +139,11 @@ enum InquiryStatus {
   REPLIED
 }
 
+enum InquiryMessageSender {
+  CUSTOMER
+  STAFF
+}
+
 enum SubmissionBookingMethod {
   STORE_DROP_OFF
   SHIPPING
@@ -164,6 +169,7 @@ model User {
   updatedAt        DateTime @updatedAt
 
   operationLogs OperationLog[]
+  inquiryMessages InquiryMessage[]
 
   @@map("users")
 }
@@ -839,13 +845,30 @@ model Inquiry {
   replyText  String?
   repliedAt  DateTime?
   repliedBy  String? // 対応した管理者・スタッフのuserId
+  allowCustomerReply Boolean @default(false)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  messages InquiryMessage[]
 
   @@index([customerId])
   @@map("inquiries")
+}
+
+model InquiryMessage {
+  id        String               @id @default(cuid())
+  inquiryId String
+  sender    InquiryMessageSender
+  body      String
+  userId    String?
+  createdAt DateTime             @default(now())
+
+  inquiry Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([inquiryId])
+  @@map("inquiry_messages")
 }
 
 // ===== SUBMISSION BOOKINGS (持込・郵送予約) =====

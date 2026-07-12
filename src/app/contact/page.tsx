@@ -14,17 +14,17 @@ export default async function ContactPage() {
   if (!profile) redirect("/login");
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader
         title="お問い合わせ"
         actions={
           <Link href="/contact/history" className="text-sm text-brand-600 hover:underline">
-            これまでのお問い合わせ →
+            これまでのお問い合わせ
           </Link>
         }
       />
 
-      <main className="max-w-2xl mx-auto px-4 py-8">
+      <main className="w-full max-w-2xl mx-auto px-4 py-8 flex-1">
         <ContactForm name={profile.name} email={profile.email} />
       </main>
 

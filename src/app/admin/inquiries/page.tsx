@@ -61,7 +61,12 @@ export default async function InquiriesPage() {
                       <p className="text-xs text-gray-400">{i.customerEmail}</p>
                     </td>
                     <td className="px-4 py-3 text-gray-700">{i.subject}</td>
-                    <td className="px-4 py-3 text-gray-500">{format(new Date(i.createdAt), "yyyy/MM/dd HH:mm")}</td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {format(new Date(i.createdAt), "yyyy/MM/dd HH:mm")}
+                      {i.allowCustomerReply && (
+                        <p className="text-xs text-brand-600 mt-1">顧客返信可</p>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/inquiries/${i.id}`}

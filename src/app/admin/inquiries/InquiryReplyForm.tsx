@@ -7,12 +7,15 @@ import { replyToInquiry } from "@/actions/inquiry";
 export default function InquiryReplyForm({
   id,
   initialReplyText,
+  initialAllowCustomerReply,
 }: {
   id: string;
   initialReplyText: string | null;
+  initialAllowCustomerReply: boolean;
 }) {
   const router = useRouter();
-  const [replyText, setReplyText] = useState(initialReplyText ?? "");
+  const [replyText, setReplyText] = useState("");
+  const [allowCustomerReply, setAllowCustomerReply] = useState(initialAllowCustomerReply);
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -20,7 +23,7 @@ export default function InquiryReplyForm({
     e.preventDefault();
     setMessage("");
     startTransition(async () => {
-      const result = await replyToInquiry({ id, replyText: replyText.trim() });
+      const result = await replyToInquiry({ id, replyText: replyText.trim(), allowCustomerReply });
       if (result.success) {
         setMessage("回答を送信しました");
         router.refresh();
@@ -38,13 +41,22 @@ export default function InquiryReplyForm({
         onChange={(e) => setReplyText(e.target.value)}
         placeholder="回答内容を入力してください"
       />
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={allowCustomerReply}
+          onChange={(e) => setAllowCustomerReply(e.target.checked)}
+          className="h-4 w-4"
+        />
+        顧客からの返信を許可する
+      </label>
       {message && <p className="text-sm text-gray-600">{message}</p>}
       <button
         type="submit"
         disabled={isPending || !replyText.trim()}
         className="bg-brand-600 text-white font-bold px-5 py-2.5 rounded-lg hover:bg-brand-700 transition disabled:opacity-50"
       >
-        {isPending ? "送信中..." : initialReplyText ? "回答を更新する" : "回答を送信する"}
+        {isPending ? "送信中..." : initialReplyText ? "追加回答を送信する" : "回答を送信する"}
       </button>
     </form>
   );

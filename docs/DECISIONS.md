@@ -816,3 +816,16 @@
   - **OFF時の顧客側の挙動**: `mypage/page.tsx`のクイックアクションからセンタリング測定のタイルを非表示。`/mypage/centering`はツールUIの代わりに「ただいま調整中です」の案内のみ表示。`/mypage/centering/measure`への直接アクセスは`/mypage/centering`へリダイレクト。過去の測定結果詳細（`/mypage/centering/[id]`）は対象外（既存データの閲覧は引き続き可能）。機能・データ・Stripeサブスクリプション状態は一切変更しない（表示を止めるだけ）。
 - 影響: `prisma/schema.prisma`（`StoreSettings.centeringToolEnabled`列追加、非破壊）、`src/actions/store-settings.ts`（新規アクション）、新規`general-settings/CenteringToggleForm.tsx`、`general-settings/page.tsx`（5セクション構成に拡張）、`src/lib/admin-nav-defaults.ts`、`src/actions/mail-template.ts`、`src/app/mypage/page.tsx`・`src/app/mypage/centering/page.tsx`・`src/app/mypage/centering/measure/page.tsx`。
 - 未対応: センタリング測定ツール自体の精度・操作性改善は本ADRのスコープ外（別途開発）。
+
+## ADR-0071: 問い合わせ履歴を蛇腹化し、管理者が許可した問い合わせのみ顧客返信を可能にする
+
+- 日付: 2026-07-12 / 状態: Accepted（実装済）
+- 背景: `/contact/history`で本文・回答が常時展開され、一覧が縦に伸びすぎていた。また、メール回答後に顧客が同じ問い合わせへ補足返信できる導線が無かった。ただし全問い合わせで返信を許可すると対応が増えすぎるため、管理画面で明示的に許可した問い合わせだけに限定する。
+- 決定:
+  - `Inquiry.allowCustomerReply`を追加し、管理画面の回答フォームに「顧客からの返信を許可する」チェックを追加する。
+  - `InquiryMessage`を追加し、初回問い合わせ・スタッフ回答・顧客追加返信を時系列で保持する。既存の`Inquiry.body`/`replyText`は互換表示・既存画面との整合用に残す。
+  - 顧客履歴はタイトル・日付・ステータスのみを一覧表示し、内容・回答・追加返信は`details/summary`の蛇腹内に表示する。
+  - 顧客の追加返信は、本人の問い合わせかつ`allowCustomerReply=true`の場合のみ許可し、返信後は管理画面で未読扱いに戻す。
+  - フッターは共通コンポーネントのまま、横幅をマイページ本文幅に寄せて過度に横へ伸びない表示にする。
+- 影響: `prisma/schema.prisma`、`src/actions/inquiry.ts`、`src/app/contact/history/*`、`src/app/admin/inquiries/*`、`src/components/Footer.tsx`。DB反映には`prisma db push`が必要。
+- 未対応: 顧客返信時の管理者向けメール通知は行わない（管理画面の未読表示で対応）。

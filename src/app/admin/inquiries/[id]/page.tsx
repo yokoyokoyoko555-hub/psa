@@ -47,8 +47,25 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
         </Link>
 
         <div>
-          <p className="text-xs text-gray-500 mb-1">内容</p>
-          <p className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 rounded-lg p-4">{inquiry.body}</p>
+          <p className="text-xs text-gray-500 mb-2">やり取り</p>
+          <div className="space-y-3">
+            {inquiry.messages.map((message) => (
+              <div
+                key={message.id}
+                className={`rounded-lg border p-4 ${
+                  message.sender === "STAFF" ? "bg-brand-50 border-brand-100" : "bg-gray-50 border-gray-200"
+                }`}
+              >
+                <p className={`text-xs font-bold mb-1 ${message.sender === "STAFF" ? "text-brand-700" : "text-gray-500"}`}>
+                  {message.sender === "STAFF" ? "スタッフ回答" : "顧客"}
+                  <span className="font-normal ml-1">
+                    {format(new Date(message.createdAt), "yyyy/MM/dd HH:mm")}
+                  </span>
+                </p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{message.body}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -61,7 +78,11 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
             </p>
           )}
         </div>
-        <InquiryReplyForm id={inquiry.id} initialReplyText={inquiry.replyText} />
+        <InquiryReplyForm
+          id={inquiry.id}
+          initialReplyText={inquiry.replyText}
+          initialAllowCustomerReply={inquiry.allowCustomerReply}
+        />
       </div>
     </div>
   );

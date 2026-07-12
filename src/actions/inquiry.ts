@@ -42,6 +42,12 @@ export async function createInquiry(
       customerId: customer.id,
       subject: parsed.data.subject,
       body: parsed.data.body,
+      messages: {
+        create: {
+          sender: "CUSTOMER",
+          body: parsed.data.body,
+        },
+      },
     },
   });
 
@@ -77,7 +83,17 @@ export async function getMyInquiries() {
       status: true,
       replyText: true,
       repliedAt: true,
+      allowCustomerReply: true,
       createdAt: true,
+      messages: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          sender: true,
+          body: true,
+          createdAt: true,
+        },
+      },
     },
   });
 }
@@ -102,6 +118,7 @@ export async function getInquiries() {
       customerName: decrypt(i.customer.nameEncrypted),
       customerEmail: i.customer.email,
       createdAt: i.createdAt,
+      allowCustomerReply: i.allowCustomerReply,
     }));
 }
 
@@ -111,7 +128,10 @@ export async function getInquiryDetail(id: string) {
 
   const inquiry = await prisma.inquiry.findUnique({
     where: { id },
-    include: { customer: { select: { nameEncrypted: true, email: true } } },
+    include: {
+      customer: { select: { nameEncrypted: true, email: true } },
+      messages: { orderBy: { createdAt: "asc" } },
+    },
   });
   if (!inquiry) return null;
 
@@ -127,16 +147,19 @@ export async function getInquiryDetail(id: string) {
     status: inquiry.status,
     replyText: inquiry.replyText,
     repliedAt: inquiry.repliedAt,
+    allowCustomerReply: inquiry.allowCustomerReply,
     createdAt: inquiry.createdAt,
     customerId: inquiry.customerId,
     customerName: decrypt(inquiry.customer.nameEncrypted),
     customerEmail: inquiry.customer.email,
+    messages: buildInquiryMessages(inquiry),
   };
 }
 
 const replySchema = z.object({
   id: z.string().min(1),
   replyText: z.string().min(1).max(4000),
+  allowCustomerReply: z.boolean().default(false),
 });
 
 /** 管理画面から問い合わせに回答する。顧客へメール通知を試みる（失敗しても処理は止めない）。 */
@@ -163,6 +186,14 @@ export async function replyToInquiry(
       repliedAt: new Date(),
       repliedBy: user.id,
       status: "REPLIED",
+      allowCustomerReply: parsed.data.allowCustomerReply,
+      messages: {
+        create: {
+          sender: "STAFF",
+          body: parsed.data.replyText,
+          userId: user.id,
+        },
+      },
     },
   });
 
@@ -192,5 +223,95 @@ export async function replyToInquiry(
 
   revalidatePath("/admin/inquiries");
   revalidatePath(`/admin/inquiries/${inquiry.id}`);
+  revalidatePath("/contact/history");
   return { success: true };
+}
+
+const customerReplySchema = z.object({
+  id: z.string().min(1),
+  body: z.string().min(1).max(4000),
+});
+
+/** 顧客が、管理画面で返信許可された問い合わせに追加返信する。 */
+export async function replyToInquiryAsCustomer(
+  input: z.infer<typeof customerReplySchema>
+): Promise<{ success: boolean; error?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const parsed = customerReplySchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: "返信内容を入力してください" };
+  }
+
+  const inquiry = await prisma.inquiry.findFirst({
+    where: {
+      id: parsed.data.id,
+      customerId: customer.id,
+      allowCustomerReply: true,
+    },
+    select: { id: true, subject: true },
+  });
+  if (!inquiry) return { success: false, error: "このお問い合わせには返信できません" };
+
+  await prisma.inquiry.update({
+    where: { id: inquiry.id },
+    data: {
+      status: "UNREAD",
+      messages: {
+        create: {
+          sender: "CUSTOMER",
+          body: parsed.data.body,
+        },
+      },
+    },
+  });
+
+  const hdrs = await headers();
+  await logOperation({
+    customerId: customer.id,
+    ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
+    action: "INQUIRY_CUSTOMER_REPLY",
+    targetType: "inquiries",
+    targetId: inquiry.id,
+    after: { subject: inquiry.subject },
+  });
+
+  revalidatePath("/contact/history");
+  revalidatePath("/admin/inquiries");
+  revalidatePath(`/admin/inquiries/${inquiry.id}`);
+  return { success: true };
+}
+
+type InquiryWithMessages = {
+  id: string;
+  body: string;
+  replyText: string | null;
+  repliedAt: Date | null;
+  createdAt: Date;
+  messages: { id: string; sender: "CUSTOMER" | "STAFF"; body: string; createdAt: Date }[];
+};
+
+function buildInquiryMessages(inquiry: InquiryWithMessages) {
+  if (inquiry.messages.length > 0) return inquiry.messages;
+
+  const messages: InquiryWithMessages["messages"] = [
+    {
+      id: `${inquiry.id}-body`,
+      sender: "CUSTOMER",
+      body: inquiry.body,
+      createdAt: inquiry.createdAt,
+    },
+  ];
+
+  if (inquiry.replyText) {
+    messages.push({
+      id: `${inquiry.id}-reply`,
+      sender: "STAFF",
+      body: inquiry.replyText,
+      createdAt: inquiry.repliedAt ?? inquiry.createdAt,
+    });
+  }
+
+  return messages;
 }
