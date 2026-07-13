@@ -1,11 +1,16 @@
 export const dynamic = "force-dynamic";
 
-import { getDashboardStats } from "@/actions/admin";
+import Link from "next/link";
+import { getDashboardActionItems } from "@/actions/admin";
+import { getDashboardMetrics } from "@/actions/dashboard";
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { decrypt } from "@/lib/crypto";
 import { computeDisplayStatus } from "@/lib/application-status";
+import { formatMoneyIn } from "@/lib/currency";
+import MonthSelector from "./MonthSelector";
+import DashboardCharts from "./DashboardCharts";
 
 // カード単位のステータスは持たない（申込単位のみ）。ADR-0065/0066
 const STATUS_BADGE_CLS: Record<string, string> = {
@@ -21,46 +26,113 @@ const STATUS_BADGE_CLS: Record<string, string> = {
   キャンセル: "bg-gray-100 text-gray-500",
 };
 
-export default async function DashboardPage() {
-  const stats = await getDashboardStats();
+function formatDelta(value: number, unit: "yen" | "count") {
+  const sign = value > 0 ? "+" : "";
+  const body = unit === "yen" ? formatMoneyIn(Math.abs(value), "JPY") : `${Math.abs(value)}件`;
+  return `前月比 ${value < 0 ? "-" : sign}${body}`;
+}
 
-  const recentApplications = await prisma.application.findMany({
-    where: { status: { not: "DRAFT" } },
-    take: 10,
-    orderBy: { createdAt: "desc" },
-    include: {
-      customer: { select: { email: true, nameEncrypted: true } },
-      _count: { select: { cards: true } },
-      payments: { select: { status: true } },
-      psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } },
-    },
-  });
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string; month?: string }>;
+}) {
+  const sp = await searchParams;
+  const now = new Date();
+  const year = Number(sp.year) || now.getFullYear();
+  const month = Number(sp.month) || now.getMonth() + 1;
+
+  const [actionItems, metrics, recentApplications] = await Promise.all([
+    getDashboardActionItems(),
+    getDashboardMetrics(year, month),
+    prisma.application.findMany({
+      where: { status: { not: "DRAFT" } },
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      include: {
+        customer: { select: { email: true, nameEncrypted: true } },
+        _count: { select: { cards: true } },
+        payments: { select: { status: true } },
+        psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } },
+      },
+    }),
+  ]);
+
+  const actionCards = [
+    { label: "代理入力待ち", value: actionItems.proxyInputPending, icon: "📋", href: "/admin/store-requests" },
+    { label: "PSA発送待ち", value: actionItems.psaShippingPending, icon: "📦", href: "/admin/psa-groups" },
+    { label: "顧客返却待ち", value: actionItems.customerReturnPending, icon: "🚚", href: "/admin/psa-groups" },
+    { label: "未回答の問い合わせ", value: actionItems.unansweredInquiries, icon: "💬", href: "/admin/inquiries" },
+  ];
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">ダッシュボード</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">ダッシュボード</h1>
+        <MonthSelector year={year} month={month} />
+      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
-        {[
-          { label: "総申込件数", value: stats.total, color: "bg-brand-500" },
-          { label: "PSA提出待ち", value: stats.psaWaiting, color: "bg-orange-500" },
-          { label: "PSA返却待ち", value: stats.psaReturning, color: "bg-purple-500" },
-          { label: "未払い", value: stats.unpaid, color: "bg-red-500" },
-          { label: "Upcharge件数", value: stats.upchargeCount, color: "bg-yellow-500" },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className={`w-8 h-1 ${stat.color} rounded mb-3`} />
-            <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
-            <p className="text-sm text-gray-500 mt-1">{stat.label}</p>
-          </div>
+      {/* KPI */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm text-gray-500 mb-1">申込数</p>
+          <p className="text-2xl font-bold text-brand-700">{metrics.kpi.count}件</p>
+          <p className="text-xs text-gray-400 mt-1">{formatDelta(metrics.kpi.countDelta, "count")}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm text-gray-500 mb-1">売上</p>
+          <p className="text-2xl font-bold text-brand-700">{formatMoneyIn(metrics.kpi.revenue, "JPY")}</p>
+          <p className="text-xs text-gray-400 mt-1">{formatDelta(metrics.kpi.revenueDelta, "yen")}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm text-gray-500 mb-1">客単価</p>
+          <p className="text-2xl font-bold text-brand-700">{formatMoneyIn(Math.round(metrics.kpi.avgOrderValue), "JPY")}</p>
+          <p className="text-xs text-gray-400 mt-1">{formatDelta(metrics.kpi.avgOrderValueDelta, "yen")}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm text-gray-500 mb-1">利益</p>
+          <p className="text-2xl font-bold text-brand-700">{formatMoneyIn(Math.round(metrics.kpi.profit), "JPY")}</p>
+          <p className="text-xs text-gray-400 mt-1">{formatDelta(metrics.kpi.profitDelta, "yen")}</p>
+        </div>
+      </div>
+
+      {/* Action items */}
+      <div className="mb-2 text-sm font-bold text-gray-700">対応が必要な内容</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        {actionCards.map((c) => (
+          <Link
+            key={c.label}
+            href={c.href}
+            className="bg-white rounded-xl border border-gray-200 p-4 hover:border-brand-300 transition"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xl" aria-hidden="true">{c.icon}</span>
+              <span className={`text-xl font-bold ${c.value > 0 ? "text-amber-600" : "text-gray-300"}`}>
+                {c.value}
+              </span>
+            </div>
+            <p className="text-sm text-gray-700">{c.label}</p>
+          </Link>
         ))}
+      </div>
+
+      {/* Charts */}
+      <div className="mb-8">
+        <DashboardCharts
+          daily={metrics.daily}
+          regionTotals={metrics.regionTotals}
+          sourceTotals={metrics.sourceTotals}
+          month={month}
+        />
       </div>
 
       {/* Recent applications */}
       <div className="bg-white rounded-xl border border-gray-200">
-        <div className="p-5 border-b border-gray-100">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-bold text-gray-900">最近の申込</h2>
+          <Link href="/admin/applications" className="text-sm text-brand-600 hover:underline">
+            もっと見る →
+          </Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

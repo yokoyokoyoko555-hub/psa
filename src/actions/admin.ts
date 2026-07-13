@@ -69,20 +69,31 @@ export async function changeAdminPassword(
   return { success: true };
 }
 
-export async function getDashboardStats() {
+/**
+ * ダッシュボードの「対応が必要な内容」4項目。ADR-0073
+ * 代理入力待ちは`getStoreRequests()`と同じ絞り込み条件（先払い済み・未完了 or 差額未払い）を使う。
+ */
+export async function getDashboardActionItems() {
   await requireAdminOrStaff();
 
-  const [total, psaWaiting, psaReturning, unpaid, upchargeCount] = await Promise.all([
-    prisma.application.count({ where: { status: { not: "CANCELLED" } } }),
+  const [proxyInputPending, psaShippingPending, customerReturnPending, unansweredInquiries] = await Promise.all([
+    prisma.application.count({
+      where: {
+        source: "STORE",
+        payments: { some: { status: "SUCCEEDED" } },
+        OR: [{ status: "DRAFT" }, { status: "SUBMITTED", payments: { some: { status: "PENDING" } } }],
+      },
+    }),
     // PSA提出待ち: グループ割当済みだが未提出（PREPARING）の申込
     prisma.application.count({ where: { psaSubmissionGroup: { status: "PREPARING" } } }),
-    // PSA返却待ち: 提出済み（SUBMITTED）グループの申込
-    prisma.application.count({ where: { psaSubmissionGroup: { status: "SUBMITTED" } } }),
-    prisma.payment.count({ where: { status: "PENDING" } }),
-    prisma.upcharge.count({ where: { status: "PENDING" } }),
+    // 顧客返却待ち: ④受取可能/返送準備中になったが⑤受取完了/返送完了はまだのグループの申込。ADR-0065/0066
+    prisma.application.count({
+      where: { psaSubmissionGroup: { returnReadyAt: { not: null }, returnedAt: null } },
+    }),
+    prisma.inquiry.count({ where: { status: { not: "REPLIED" } } }),
   ]);
 
-  return { total, psaWaiting, psaReturning, unpaid, upchargeCount };
+  return { proxyInputPending, psaShippingPending, customerReturnPending, unansweredInquiries };
 }
 
 /**

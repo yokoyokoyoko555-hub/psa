@@ -840,3 +840,17 @@
   - **UI側でも後戻りとなる選択肢を無効化**（`<option disabled>`＋「（後戻り不可）」表示）。`AdvanceGroupStatusForm`に`sortOrder`を渡すよう`psa-groups/page.tsx`を更新。サーバー側のチェックは維持（UIの無効化はあくまで補助）。
 - 影響: `src/actions/admin.ts`（`advanceGroupStatus`）、`src/app/admin/psa-groups/page.tsx`、`src/app/admin/psa-groups/AdvanceGroupStatusForm.tsx`。スキーマ変更なし。
 - 未対応: `PsaProgressStatus`自体の並び替え（`sortOrder`の変更）は管理画面の別UIで行う想定だが、現状は編集時に手入力する形のまま（ドラッグ&ドロップ化は本ADRのスコープ外）。
+
+## ADR-0073: 管理画面ダッシュボードに月次KPI・対応が必要な内容・日別グラフを追加
+
+- 日付: 2026-07-12 / 状態: Accepted（実装済）
+- 背景: 従来のダッシュボードは「総申込件数・PSA提出待ち・PSA返却待ち・未払い・Upcharge件数」という寄せ集めの数値と、直近10件の生の申込一覧のみで、月次の売上・原価・利益の推移や、スタッフが今すぐ対応すべき件数が一目でわからなかった。
+- 決定:
+  - **`getDashboardStats()`を`getDashboardActionItems()`に置き換え**、「対応が必要な内容」4項目（代理入力待ち・PSA発送待ち・顧客返却待ち・未回答の問い合わせ）を返すようにした。代理入力待ちは`getStoreRequests()`と同じ絞り込み（先払い済み・未完了 or 差額未払い）、顧客返却待ちは`psaSubmissionGroup.returnReadyAt`あり×`returnedAt`なし（ADR-0065/0066）。各カードは該当する管理画面（代理申込／PSA提出グループ／お問い合わせ）へのリンクを兼ねる。
+  - **新規`getDashboardMetrics(year, month)`（`actions/dashboard.ts`）を追加**。対象は「下書き・キャンセルを除く申込」を`submittedAt`（確定日）で月ごとに集計し、売上（`Application.totalAmount`、常にJPY）・件数・客単価・利益（売上－原価）のKPIと前月比、日別の内訳（売上・件数・提出先・入力経路）を返す。**原価はCard.psaCostの合計**（JP=円/US=USDの生値）を、US分は`Application.exchangeRateUsed`（無ければ150円固定）でJPY換算してから合算する。
+  - **ダッシュボードに年・月セレクタ（`MonthSelector.tsx`）を追加**し、`?year=&month=`クエリで対象月を切り替えられるようにした。
+  - **日別グラフ（`DashboardCharts.tsx`）を追加**。「日別売上」「申込件数」はグラデーション棒グラフ、「提出先別」「入力経路別」はその月の構成比をドーナツ＋凡例で表示する、4パターン切替式。色はブランドカラー（`brand-600`〜`brand-300`）を使用。
+  - **グラフ描画にChart.jsをCDN経由（`next/script`+`cdnjs.cloudflare.com`）で読み込む**。理由: このプロジェクトのローカル`node_modules`がGoogleドライブ同期で破損しており（[[project-node-modules-drive-issue]]参照）、`npm install`での新規パッケージ追加が現時点でできないため。ローンチ前のnode_modules修復後、`chart.js`/`react-chartjs-2`を正式なnpm依存として追加し、CDN読み込みから移行することを推奨する。
+  - **「最近の申込」を直近5件に絞り、「もっと見る→」で`/admin/applications`へ**（従来は10件表示のみでリンクなし）。
+- 影響: `src/actions/admin.ts`（`getDashboardStats`→`getDashboardActionItems`に置換、破壊的だが呼び出し元はダッシュボードのみ）、新規`src/actions/dashboard.ts`、`src/app/admin/dashboard/page.tsx`（全面書き換え）、新規`src/app/admin/dashboard/{MonthSelector,DashboardCharts}.tsx`。スキーマ変更なし。
+- 未対応: Chart.jsのCDN読み込みは暫定対応（上記の通りnpm依存への移行が望ましい）。原価集計は`Card.psaCost`のみを対象とし、送料・保険料・代理入力料金・事務手数料それぞれの原価（未track）は含めていない。
