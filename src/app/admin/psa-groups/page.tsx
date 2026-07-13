@@ -123,7 +123,7 @@ export default async function PsaGroupsPage() {
                 <AdvanceGroupStatusForm
                   groupId={group.id}
                   currentStatus={group.status}
-                  statusOptions={progressStatuses.map((s) => ({ id: s.id, name: s.name }))}
+                  statusOptions={progressStatuses.map((s) => ({ id: s.id, name: s.name, sortOrder: s.sortOrder }))}
                 />
                 <ReturnStatusButtons
                   groupId={group.id}

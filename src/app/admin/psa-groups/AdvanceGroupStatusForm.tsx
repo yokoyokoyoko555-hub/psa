@@ -4,7 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { advanceGroupStatus } from "@/actions/admin";
 
-/** 発送完了後のグループに対し、管理画面で登録済みのPSA進捗ステータス名を一括反映する。ADR-0034 */
+/**
+ * 発送完了後のグループに対し、管理画面で登録済みのPSA進捗ステータス名を一括反映する。ADR-0034
+ * sortOrderが現在地より小さい（＝後戻りになる）選択肢は選べないようにする。ADR-0072
+ */
 export default function AdvanceGroupStatusForm({
   groupId,
   currentStatus,
@@ -12,10 +15,11 @@ export default function AdvanceGroupStatusForm({
 }: {
   groupId: string;
   currentStatus: string;
-  statusOptions: { id: string; name: string }[];
+  statusOptions: { id: string; name: string; sortOrder: number }[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const currentSortOrder = statusOptions.find((s) => s.name === currentStatus)?.sortOrder;
   const [selected, setSelected] = useState(
     statusOptions.find((s) => s.name === currentStatus)?.name ?? statusOptions[0]?.name ?? ""
   );
@@ -48,9 +52,15 @@ export default function AdvanceGroupStatusForm({
         onChange={(e) => setSelected(e.target.value)}
         className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-900"
       >
-        {statusOptions.map((s) => (
-          <option key={s.id} value={s.name}>{s.name}</option>
-        ))}
+        {statusOptions.map((s) => {
+          const isBackward = currentSortOrder !== undefined && s.sortOrder < currentSortOrder;
+          return (
+            <option key={s.id} value={s.name} disabled={isBackward}>
+              {s.name}
+              {isBackward ? "（後戻り不可）" : ""}
+            </option>
+          );
+        })}
       </select>
       <button
         onClick={handleUpdate}

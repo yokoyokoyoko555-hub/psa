@@ -829,3 +829,14 @@
   - フッターは共通コンポーネントのまま、横幅をマイページ本文幅に寄せて過度に横へ伸びない表示にする。
 - 影響: `prisma/schema.prisma`、`src/actions/inquiry.ts`、`src/app/contact/history/*`、`src/app/admin/inquiries/*`、`src/components/Footer.tsx`。DB反映には`prisma db push`が必要。
 - 未対応: 顧客返信時の管理者向けメール通知は行わない（管理画面の未読表示で対応）。
+
+## ADR-0072: PSA進捗ステータスの後戻り防止バリデーションを追加
+
+- 日付: 2026-07-12 / 状態: Accepted（実装済）
+- 背景: `advanceGroupStatus()`（PSA提出グループのカスタム進捗ステータス一括反映）は、選択したステータス名をそのまま`PsaSubmissionGroup.status`へ書き込むだけで、順序チェックが無かった（ADR-0034の「未対応」として持ち越し）。管理画面の「PSA進捗ステータス」設定には既に表示順を決める`sortOrder`列があり、これを進捗の前後関係として使える状態だった。
+- 決定:
+  - **`sortOrder`を進捗の前後関係として扱う**。`advanceGroupStatus()`で、選択先ステータスの`sortOrder`が現在のステータスの`sortOrder`より小さい場合はサーバー側で拒否する。
+  - **現在値の前後判定ができない場合はチェックをスキップ**。`group.status`が`SUBMITTED`（まだカスタム進捗未設定の初期状態）、または無効化済みで現行の`PsaProgressStatus`一覧に存在しない名前の場合は、後戻りチェックを行わず自由に選ばせる（誤ってブロックしないための安全側の設計）。
+  - **UI側でも後戻りとなる選択肢を無効化**（`<option disabled>`＋「（後戻り不可）」表示）。`AdvanceGroupStatusForm`に`sortOrder`を渡すよう`psa-groups/page.tsx`を更新。サーバー側のチェックは維持（UIの無効化はあくまで補助）。
+- 影響: `src/actions/admin.ts`（`advanceGroupStatus`）、`src/app/admin/psa-groups/page.tsx`、`src/app/admin/psa-groups/AdvanceGroupStatusForm.tsx`。スキーマ変更なし。
+- 未対応: `PsaProgressStatus`自体の並び替え（`sortOrder`の変更）は管理画面の別UIで行う想定だが、現状は編集時に手入力する形のまま（ドラッグ&ドロップ化は本ADRのスコープ外）。

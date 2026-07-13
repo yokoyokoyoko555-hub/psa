@@ -167,6 +167,9 @@ export async function submitPsaGroup(groupId: string, params: z.infer<typeof sub
 /**
  * PSA提出グループのステータスを、管理画面で登録済みのPSA進捗ステータス名へ一括更新する。
  * PREPARING（提出準備中）のグループには使えない（先にsubmitPsaGroupで発送完了にする必要がある）。ADR-0034
+ * `PsaProgressStatus.sortOrder`を進捗の前後関係として扱い、後戻り（sortOrderが現在地より小さい値への変更）
+ * を拒否する。SUBMITTED直後（まだカスタム進捗未設定）や、現在値が無効化済みステータス名で前後判定
+ * できない場合は、後戻りチェックをスキップして自由に選ばせる。ADR-0034/0072
  */
 export async function advanceGroupStatus(
   groupId: string,
@@ -179,6 +182,18 @@ export async function advanceGroupStatus(
   if (!group) return { success: false, error: "グループが見つかりません" };
   if (group.status === "PREPARING") {
     return { success: false, error: "先に発送完了（提出）を行ってください" };
+  }
+
+  const statuses = await prisma.psaProgressStatus.findMany({ where: { isActive: true } });
+  const target = statuses.find((s) => s.name === statusName);
+  if (!target) return { success: false, error: "選択したステータスが見つかりません" };
+
+  const current = statuses.find((s) => s.name === group.status);
+  if (current && target.sortOrder < current.sortOrder) {
+    return {
+      success: false,
+      error: `進捗を後戻りさせることはできません（現在「${current.name}」→選択「${target.name}」）`,
+    };
   }
 
   await prisma.psaSubmissionGroup.update({
