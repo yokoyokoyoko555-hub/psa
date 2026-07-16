@@ -793,7 +793,12 @@ export async function saveDraft(
   return { success: true, draftId: app.id };
 }
 
-/** 下書きの内容を取得（再開用） */
+/**
+ * 下書きの内容を取得（再開用）。
+ * 決済画面まで進んだものの支払わずに離脱した申込は、`createApplication`で既に実カード
+ * （`Card`テーブル）が作成済みで`draftData`は空になっている。その場合は実カードから
+ * 復元する（`draftData`優先、無ければ実カードにフォールバック）。
+ */
 export async function getDraft(id: string): Promise<{
   draftId: string;
   region: ServiceRegion;
@@ -807,16 +812,37 @@ export async function getDraft(id: string): Promise<{
   if (!customer) return null;
   const app = await prisma.application.findFirst({
     where: { id, customerId: customer.id, status: "DRAFT", source: "CUSTOMER" },
+    include: { cards: { orderBy: [{ lineNo: "asc" }, { createdAt: "asc" }] } },
   });
   if (!app) return null;
   const data = (app.draftData as DraftData | null) ?? { cards: [], returnSel: "registered" };
+
+  let cards = data.cards ?? [];
+  if (cards.length === 0 && app.cards.length > 0) {
+    cards = app.cards.map((c) => ({
+      tcgTitle: c.tcgTitle,
+      releaseYear: c.releaseYear ?? "",
+      cardNumber: c.cardNumber ?? "",
+      cardName: c.cardName,
+      rarity: c.rarity ?? "",
+      language: c.language,
+      quantity: c.quantity,
+      declaredValue: c.declaredValue,
+      customServiceLevelId: c.customServiceLevelId ?? "",
+    }));
+  }
+
+  // 全カード同一タイアならそれを既定値に、混在（またはカード未復元）なら先頭カードのタイアで
+  // サービス選択ステップのゲートだけ満たす（各カードの料金計算はカード自身のタイアを使うため影響しない）。
+  const customServiceLevelId = app.customServiceLevelId ?? cards.find((c) => c.customServiceLevelId)?.customServiceLevelId ?? null;
+
   return {
     draftId: app.id,
     region: app.region,
     itemType: app.itemType,
-    customServiceLevelId: app.customServiceLevelId,
+    customServiceLevelId,
     returnMethod: app.returnMethod,
-    cards: data.cards ?? [],
+    cards,
     returnSel: data.returnSel ?? "registered",
   };
 }
