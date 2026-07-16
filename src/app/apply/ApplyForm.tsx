@@ -841,6 +841,8 @@ export default function ApplyForm({
                   return;
                 }
                 setError("");
+                // 最初のカード入力欄には、ここで選んだサービスレベルを既定値として反映する。ADR-0076
+                setDraft((d) => ({ ...d, customServiceLevelId: d.customServiceLevelId ?? customServiceLevelId }));
                 goStep("cards");
               }}
               className="w-full bg-brand-600 text-white font-bold py-4 rounded-xl hover:bg-brand-700 transition"
