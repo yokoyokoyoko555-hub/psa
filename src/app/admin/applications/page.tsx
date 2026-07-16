@@ -5,7 +5,7 @@ import { decrypt } from "@/lib/crypto";
 import { format } from "date-fns";
 import Link from "next/link";
 import { formatMoneyIn } from "@/lib/currency";
-import { ITEM_TYPE_LABELS, resolveServiceLevel, computeDisplayStatus } from "@/lib/application-status";
+import { ITEM_TYPE_LABELS, resolveServiceLevel, computeListDisplayStatus } from "@/lib/application-status";
 
 const STATUS_BADGE_CLS: Record<string, string> = {
   申込完了: "bg-blue-50 text-blue-700",
@@ -55,6 +55,9 @@ export default async function AdminApplicationsPage({
         _count: { select: { cards: true } },
         payments: { select: { status: true } },
         psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } },
+        groupMemberships: {
+          include: { psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } } },
+        },
         submissionBooking: { select: { status: true, method: true, scheduledAt: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -70,7 +73,10 @@ export default async function AdminApplicationsPage({
       regionLabel: REGION_SHORT_LABELS[app.region] ?? app.region,
       itemTypeLabel: app.region === "PSA_US" ? (ITEM_TYPE_LABELS[app.itemType] ?? app.itemType) : "-",
       serviceLevelLabel: resolveServiceLevel(app),
-      statusLabel: app.status === "CANCELLED" ? "キャンセル" : computeDisplayStatus(app),
+      statusLabel: (() => {
+        const raw = app.status === "CANCELLED" ? "キャンセル" : computeListDisplayStatus(app);
+        return raw === "MULTIPLE" ? "複数グループ" : raw;
+      })(),
     }))
     .sort((a, b) => {
       if (!sortCol) return 0;

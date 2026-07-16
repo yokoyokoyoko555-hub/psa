@@ -16,15 +16,29 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
   COMIC_MAGAZINE: "コミック・マガジン",
 };
 
+/**
+ * カード単位（サービスレベル別）の新規グループは、提出先・アイテム種別・サービスレベルが
+ * 作成時に既に確定しているため、申込番号(Sub#)・提出日だけの簡易フォームを出す。
+ * 申込単位（旧方式）のグループはこの3項目を提出時に選ぶ従来の挙動のまま。ADR-0076
+ */
 export default function SubmitGroupForm({
   groupId,
+  legacy,
+  fixedRegion,
+  fixedItemType,
+  fixedServiceLevelName,
   customServicePrices,
 }: {
   groupId: string;
+  legacy: boolean;
+  fixedRegion?: ServiceRegion | null;
+  fixedItemType?: ItemType | null;
+  fixedServiceLevelName?: string | null;
   customServicePrices: CustomServicePrice[];
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
   const [customServiceLevelId, setCustomServiceLevelId] = useState("");
@@ -50,71 +64,90 @@ export default function SubmitGroupForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const tier = tierOptions.find((t) => t.id === customServiceLevelId);
-    if (!tier) return;
+    if (legacy) {
+      const tier = tierOptions.find((t) => t.id === customServiceLevelId);
+      if (!tier) return;
+    }
     const fd = new FormData(e.currentTarget);
     setLoading(true);
-    await submitPsaGroup(groupId, {
-      region,
-      itemType,
-      customServiceLevelId: tier.id,
-      customServiceLevelName: tier.name,
+    setError("");
+    const tier = tierOptions.find((t) => t.id === customServiceLevelId);
+    const result = await submitPsaGroup(groupId, {
+      ...(legacy && tier
+        ? { region, itemType, customServiceLevelId: tier.id, customServiceLevelName: tier.name }
+        : {}),
       psaSubmissionId: fd.get("psaSubmissionId") as string,
       submittedAt: new Date(fd.get("submittedAt") as string),
     });
-    router.refresh();
     setLoading(false);
+    if (result.success) {
+      router.refresh();
+    } else {
+      setError(result.error ?? "登録に失敗しました");
+    }
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex gap-3 flex-wrap items-end border-t border-gray-100 pt-4">
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">提出先</label>
-        <select
-          value={region}
-          onChange={(e) => handleRegionChange(e.target.value as ServiceRegion)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-        >
-          {(["PSA_JP", "PSA_US"] as ServiceRegion[]).map((r) => (
-            <option key={r} value={r}>
-              {REGION_LABELS[r]}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">アイテム種別</label>
-        <select
-          value={itemType}
-          onChange={(e) => handleItemTypeChange(e.target.value as ItemType)}
-          disabled={itemTypeOptions.length === 1}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 disabled:text-gray-500"
-        >
-          {itemTypeOptions.map((it) => (
-            <option key={it} value={it}>
-              {ITEM_TYPE_LABELS[it]}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">サービスレベル</label>
-        <select
-          value={customServiceLevelId}
-          onChange={(e) => setCustomServiceLevelId(e.target.value)}
-          required
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-        >
-          <option value="" disabled>
-            選択してください
-          </option>
-          {tierOptions.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {legacy ? (
+        <>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">提出先</label>
+            <select
+              value={region}
+              onChange={(e) => handleRegionChange(e.target.value as ServiceRegion)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              {(["PSA_JP", "PSA_US"] as ServiceRegion[]).map((r) => (
+                <option key={r} value={r}>
+                  {REGION_LABELS[r]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">アイテム種別</label>
+            <select
+              value={itemType}
+              onChange={(e) => handleItemTypeChange(e.target.value as ItemType)}
+              disabled={itemTypeOptions.length === 1}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 disabled:text-gray-500"
+            >
+              {itemTypeOptions.map((it) => (
+                <option key={it} value={it}>
+                  {ITEM_TYPE_LABELS[it]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">サービスレベル</label>
+            <select
+              value={customServiceLevelId}
+              onChange={(e) => setCustomServiceLevelId(e.target.value)}
+              required
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="" disabled>
+                選択してください
+              </option>
+              {tierOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-gray-600">
+          <p className="text-xs text-gray-500 mb-1">提出先・アイテム種別・サービスレベル</p>
+          <p className="font-medium">
+            {fixedRegion ? REGION_LABELS[fixedRegion] : "—"} / {fixedItemType ? ITEM_TYPE_LABELS[fixedItemType] : "—"} /{" "}
+            {fixedServiceLevelName ?? "—"}
+          </p>
+        </div>
+      )}
       <div>
         <label className="block text-xs text-gray-500 mb-1">申込番号（Sub#）</label>
         <input
@@ -135,9 +168,10 @@ export default function SubmitGroupForm({
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       </div>
+      {error && <p className="text-sm text-red-600 basis-full">{error}</p>}
       <button
         type="submit"
-        disabled={loading || !customServiceLevelId}
+        disabled={loading || (legacy && !customServiceLevelId)}
         className="bg-purple-600 text-white font-bold px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition text-sm"
       >
         {loading ? "送信中..." : "PSAへ提出済として登録"}

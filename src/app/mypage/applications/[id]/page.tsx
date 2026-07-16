@@ -10,7 +10,7 @@ import DifferentialPaymentPanel from "@/components/DifferentialPaymentPanel";
 import { formatMoney, formatMoneyIn, formatMoneyInt } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { computeDisplayStatus, DISPLAY_STATUS } from "@/lib/application-status";
+import { computeDisplayStatus, DISPLAY_STATUS, getApplicationGroups } from "@/lib/application-status";
 
 const SERVICE_LABELS: Record<string, string> = {
   VALUE: "バリュー",
@@ -72,7 +72,16 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   const isStoreInput = application.source === "STORE";
   const isDraft = application.status === "DRAFT";
   const isCancelled = application.status === "CANCELLED";
-  const displayStatus = !isDraft && !isCancelled ? computeDisplayStatus(application) : null;
+  // 1申込が複数のPSA提出グループ（サービスレベル別）にまたがる場合は、グループごとに1行表示する。ADR-0076
+  const groups = getApplicationGroups(application);
+  const statusEntries =
+    !isDraft && !isCancelled
+      ? (groups.length > 0 ? groups : [null]).map((g) => ({
+          label: g?.customServiceLevelName ?? null,
+          status: computeDisplayStatus({ ...application, psaSubmissionGroup: g }),
+        }))
+      : [];
+  const displayStatus = statusEntries.length === 1 ? statusEntries[0].status : null;
 
   // 鑑定料をサービスレベルごとの内訳に分解する（代理入力は複数サービスレベルが混在しうるため）。ADR-0050
   const psaFeeGroups = Object.values(
@@ -148,19 +157,35 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-gray-900">{isStoreInput ? "請求内容の確認" : "申込概要"}</h2>
-            {(isDraft || isCancelled || displayStatus) && (
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  isCancelled
-                    ? "bg-gray-100 text-gray-600"
-                    : displayStatus === DISPLAY_STATUS.RETURNED || displayStatus === DISPLAY_STATUS.STORE_PICKUP_DONE
-                    ? "bg-green-100 text-green-700"
-                    : "bg-brand-100 text-brand-700"
-                }`}
-              >
-                {isDraft ? DISPLAY_STATUS.DRAFT : isCancelled ? "キャンセル" : displayStatus}
-              </span>
-            )}
+            <div className="flex flex-col items-end gap-1">
+              {isDraft || isCancelled || displayStatus ? (
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    isCancelled
+                      ? "bg-gray-100 text-gray-600"
+                      : displayStatus === DISPLAY_STATUS.RETURNED || displayStatus === DISPLAY_STATUS.STORE_PICKUP_DONE
+                      ? "bg-green-100 text-green-700"
+                      : "bg-brand-100 text-brand-700"
+                  }`}
+                >
+                  {isDraft ? DISPLAY_STATUS.DRAFT : isCancelled ? "キャンセル" : displayStatus}
+                </span>
+              ) : (
+                statusEntries.map((entry, i) => (
+                  <span
+                    key={i}
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      entry.status === DISPLAY_STATUS.RETURNED || entry.status === DISPLAY_STATUS.STORE_PICKUP_DONE
+                        ? "bg-green-100 text-green-700"
+                        : "bg-brand-100 text-brand-700"
+                    }`}
+                  >
+                    {entry.label ? `${entry.label}: ` : ""}
+                    {entry.status}
+                  </span>
+                ))
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             {!isStoreInput && (

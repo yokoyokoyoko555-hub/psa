@@ -84,11 +84,29 @@ export async function getDashboardActionItems() {
         OR: [{ status: "DRAFT" }, { status: "SUBMITTED", payments: { some: { status: "PENDING" } } }],
       },
     }),
-    // PSA提出待ち: グループ割当済みだが未提出（PREPARING）の申込
-    prisma.application.count({ where: { psaSubmissionGroup: { status: "PREPARING" } } }),
-    // 顧客返却待ち: ④受取可能/返送準備中になったが⑤受取完了/返送完了はまだのグループの申込。ADR-0065/0066
+    // PSA提出待ち: グループ割当済みだが未提出（PREPARING）の申込。
+    // 1申込が複数グループ（サービスレベル別）にまたがりうるため、旧来の単一リレーションと
+    // 中間テーブル（ADR-0076）の両方を見る。
     prisma.application.count({
-      where: { psaSubmissionGroup: { returnReadyAt: { not: null }, returnedAt: null } },
+      where: {
+        OR: [
+          { psaSubmissionGroup: { status: "PREPARING" } },
+          { groupMemberships: { some: { psaSubmissionGroup: { status: "PREPARING" } } } },
+        ],
+      },
+    }),
+    // 顧客返却待ち: ④受取可能/返送準備中になったが⑤受取完了/返送完了はまだのグループの申込。ADR-0065/0066/0076
+    prisma.application.count({
+      where: {
+        OR: [
+          { psaSubmissionGroup: { returnReadyAt: { not: null }, returnedAt: null } },
+          {
+            groupMemberships: {
+              some: { psaSubmissionGroup: { returnReadyAt: { not: null }, returnedAt: null } },
+            },
+          },
+        ],
+      },
     }),
     prisma.inquiry.count({ where: { status: { not: "REPLIED" } } }),
   ]);
@@ -126,22 +144,116 @@ export async function markApplicationReceived(applicationId: string) {
   return { success: true };
 }
 
-/** 申込単位でPSA提出グループを作成し、選択した申込を割り当てる。ADR-0021 */
-export async function createPsaSubmissionGroup(applicationIds: string[]) {
-  await requireAdminOrStaff();
-  if (applicationIds.length === 0) return null;
+export type UngroupedCardBundle = {
+  key: string;
+  applicationId: string;
+  applicationNo: string;
+  customerName: string;
+  region: ServiceRegion;
+  itemType: ItemType;
+  customServiceLevelId: string | null;
+  serviceLevelName: string;
+  cardIds: string[];
+  totalQuantity: number;
+};
 
+/**
+ * グループ未割当のカードを「申込×サービスレベル」の束にまとめて返す。PSAはサービスレベルごとに
+ * 申請が分かれるため、1申込内に複数サービスレベルのカードがあっても束ごとに別のグループへ割り当てられる。ADR-0076
+ */
+export async function getUngroupedCardBundles(): Promise<UngroupedCardBundle[]> {
+  await requireAdminOrStaff();
+
+  const cards = await prisma.card.findMany({
+    where: {
+      psaSubmissionGroupId: null,
+      application: {
+        psaSubmissionGroupId: null,
+        status: { not: "CANCELLED" },
+        payments: { some: { status: "SUCCEEDED" } },
+      },
+    },
+    include: {
+      application: { include: { customer: { select: { nameEncrypted: true } } } },
+    },
+    orderBy: { application: { createdAt: "asc" } },
+  });
+
+  const bundles = new Map<string, UngroupedCardBundle>();
+  for (const card of cards) {
+    const app = card.application;
+    const customServiceLevelId = card.customServiceLevelId ?? app.customServiceLevelId ?? null;
+    const serviceLevelName = card.customServiceLevelName ?? app.customServiceLevelName ?? "サービス未選択";
+    const key = `${app.id}|${customServiceLevelId ?? "none"}`;
+    const existing = bundles.get(key);
+    if (existing) {
+      existing.cardIds.push(card.id);
+      existing.totalQuantity += card.quantity;
+    } else {
+      bundles.set(key, {
+        key,
+        applicationId: app.id,
+        applicationNo: app.applicationNo,
+        customerName: decrypt(app.customer.nameEncrypted),
+        region: app.region,
+        itemType: app.itemType,
+        customServiceLevelId,
+        serviceLevelName,
+        cardIds: [card.id],
+        totalQuantity: card.quantity,
+      });
+    }
+  }
+  return [...bundles.values()];
+}
+
+/**
+ * 選択したカード群からPSA提出グループを作成する。カード単位（サービスレベル別）で割り当てるため、
+ * 1申込のカードが複数グループにまたがってもよい。既存の「申込単位」グループ（ADR-0021）はそのまま
+ * 従来通り動作し、新規作成分のみこちらのカード単位方式を使う。ADR-0076
+ */
+export async function createPsaSubmissionGroup(
+  cardIds: string[]
+): Promise<{ success: boolean; error?: string; groupId?: string }> {
+  await requireAdminOrStaff();
+  if (cardIds.length === 0) return { success: false, error: "カードが選択されていません" };
+
+  const cards = await prisma.card.findMany({
+    where: { id: { in: cardIds } },
+    include: { application: true },
+  });
+  if (cards.length !== cardIds.length) return { success: false, error: "カードが見つかりません" };
+
+  const regions = new Set(cards.map((c) => c.application.region));
+  const itemTypes = new Set(cards.map((c) => c.application.itemType));
+  const tiers = new Set(cards.map((c) => c.customServiceLevelId ?? c.application.customServiceLevelId ?? "none"));
+  if (regions.size > 1 || itemTypes.size > 1 || tiers.size > 1) {
+    return { success: false, error: "提出先・アイテム種別・サービスレベルが揃っていないカードが含まれています" };
+  }
+
+  const first = cards[0];
+  const applicationIds = [...new Set(cards.map((c) => c.applicationId))];
   const groupNo = await generateGroupNo();
+
   const group = await prisma.$transaction(async (tx) => {
-    const g = await tx.psaSubmissionGroup.create({ data: { groupNo } });
-    await tx.application.updateMany({
-      where: { id: { in: applicationIds } },
-      data: { psaSubmissionGroupId: g.id },
+    const g = await tx.psaSubmissionGroup.create({
+      data: {
+        groupNo,
+        region: first.application.region,
+        itemType: first.application.itemType,
+        customServiceLevelId: first.customServiceLevelId ?? first.application.customServiceLevelId,
+        customServiceLevelName: first.customServiceLevelName ?? first.application.customServiceLevelName,
+      },
+    });
+    await tx.card.updateMany({ where: { id: { in: cardIds } }, data: { psaSubmissionGroupId: g.id } });
+    await tx.psaSubmissionGroupApplication.createMany({
+      data: applicationIds.map((applicationId) => ({ applicationId, psaSubmissionGroupId: g.id })),
     });
     return g;
   });
 
-  return group;
+  revalidatePath("/admin/psa-groups");
+  return { success: true, groupId: group.id };
 }
 
 export type PsaGroupCardLine = {
@@ -153,29 +265,13 @@ export type PsaGroupCardLine = {
   quantity: number;
 };
 
-/**
- * グループ内の全カードを、申込の追加順→申込内の入力順で並べ、グループ全体を通した連番を振る。
- * 同一顧客・同一カード名の複数枚は1行（quantityで表現）、別顧客は別行にする。
- * 全カードに`groupLineNo`が確定済み（＝提出済）ならその値で並べ、未確定ならこの場で仮採番する（プレビュー）。ADR-0075
- */
-async function computeGroupCardLines(groupId: string): Promise<{ lines: PsaGroupCardLine[]; finalized: boolean }> {
-  const applications = await prisma.application.findMany({
-    where: { psaSubmissionGroupId: groupId },
-    orderBy: { createdAt: "asc" },
-    include: {
-      customer: { select: { nameEncrypted: true } },
-      cards: { orderBy: [{ lineNo: "asc" }, { createdAt: "asc" }] },
-    },
-  });
+type CardLineEntry = {
+  card: { id: string; groupLineNo: number | null; cardName: string; quantity: number };
+  applicationNo: string;
+  customerName: string;
+};
 
-  const entries = applications.flatMap((app) =>
-    app.cards.map((card) => ({
-      card,
-      applicationNo: app.applicationNo,
-      customerName: decrypt(app.customer.nameEncrypted),
-    }))
-  );
-
+function buildCardLines(entries: CardLineEntry[]): { lines: PsaGroupCardLine[]; finalized: boolean } {
   const finalized = entries.length > 0 && entries.every((e) => e.card.groupLineNo != null);
   const ordered = finalized
     ? [...entries].sort((a, b) => (a.card.groupLineNo as number) - (b.card.groupLineNo as number))
@@ -193,42 +289,140 @@ async function computeGroupCardLines(groupId: string): Promise<{ lines: PsaGroup
   return { lines, finalized };
 }
 
+/**
+ * グループ内の全カードを、申込の追加順→申込内の入力順で並べ、グループ全体を通した連番を振る。
+ * 同一顧客・同一カード名の複数枚は1行（quantityで表現）、別顧客は別行にする。
+ * 全カードに`groupLineNo`が確定済み（＝提出済）ならその値で並べ、未確定ならこの場で仮採番する（プレビュー）。
+ * 新規作成グループはカード直結（`Card.psaSubmissionGroupId`）、既存の申込単位グループ（ADR-0021）は
+ * `Application.psaSubmissionGroupId`経由で参照する（両方式が共存する）。ADR-0075/0076
+ */
+async function computeGroupCardLines(groupId: string): Promise<{ lines: PsaGroupCardLine[]; finalized: boolean }> {
+  const directCards = await prisma.card.findMany({
+    where: { psaSubmissionGroupId: groupId },
+    orderBy: [{ application: { createdAt: "asc" } }, { lineNo: "asc" }, { createdAt: "asc" }],
+    include: {
+      application: { select: { applicationNo: true, customer: { select: { nameEncrypted: true } } } },
+    },
+  });
+
+  if (directCards.length > 0) {
+    const entries: CardLineEntry[] = directCards.map((card) => ({
+      card,
+      applicationNo: card.application.applicationNo,
+      customerName: decrypt(card.application.customer.nameEncrypted),
+    }));
+    return buildCardLines(entries);
+  }
+
+  const applications = await prisma.application.findMany({
+    where: { psaSubmissionGroupId: groupId },
+    orderBy: { createdAt: "asc" },
+    include: {
+      customer: { select: { nameEncrypted: true } },
+      cards: { orderBy: [{ lineNo: "asc" }, { createdAt: "asc" }] },
+    },
+  });
+
+  const entries: CardLineEntry[] = applications.flatMap((app) =>
+    app.cards.map((card) => ({
+      card,
+      applicationNo: app.applicationNo,
+      customerName: decrypt(app.customer.nameEncrypted),
+    }))
+  );
+
+  return buildCardLines(entries);
+}
+
 /** PSA提出グループ管理画面用。提出前は速報値（プレビュー）、提出後は確定値（`Card.groupLineNo`）を返す。 */
 export async function getPsaGroupCardLines(groupId: string): Promise<{ lines: PsaGroupCardLine[]; finalized: boolean }> {
   await requireAdminOrStaff();
   return computeGroupCardLines(groupId);
 }
 
+/**
+ * 提出準備中（PREPARING）のグループに限り、行番号一覧の並びをドラッグ&ドロップの手動並び替えで保存する。
+ * 提出（`submitPsaGroup`）済みのグループは固定のため変更不可。ADR-0075
+ */
+export async function saveGroupCardOrder(
+  groupId: string,
+  cardIdsInOrder: string[]
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdminOrStaff();
+
+  const group = await prisma.psaSubmissionGroup.findUnique({ where: { id: groupId }, select: { status: true } });
+  if (!group) return { success: false, error: "グループが見つかりません" };
+  if (group.status !== "PREPARING") {
+    return { success: false, error: "提出済みのグループは並び替えできません" };
+  }
+
+  const { lines: current } = await computeGroupCardLines(groupId);
+  const currentIds = new Set(current.map((l) => l.cardId));
+  const isSamePermutation =
+    cardIdsInOrder.length === current.length && cardIdsInOrder.every((id) => currentIds.has(id));
+  if (!isSamePermutation) {
+    return { success: false, error: "カードの構成が変わっています。画面を更新してください" };
+  }
+
+  await prisma.$transaction(
+    cardIdsInOrder.map((cardId, i) => prisma.card.update({ where: { id: cardId }, data: { groupLineNo: i + 1 } }))
+  );
+
+  revalidatePath("/admin/psa-groups");
+  return { success: true };
+}
+
 const submitPsaGroupSchema = z.object({
-  region: z.nativeEnum(ServiceRegion),
-  itemType: z.nativeEnum(ItemType),
-  customServiceLevelId: z.string().min(1),
-  customServiceLevelName: z.string().min(1),
+  // 申込単位（旧方式）のグループのみ必須。カード単位（新方式）は作成時に既に確定済みのため不要。ADR-0076
+  region: z.nativeEnum(ServiceRegion).optional(),
+  itemType: z.nativeEnum(ItemType).optional(),
+  customServiceLevelId: z.string().min(1).optional(),
+  customServiceLevelName: z.string().min(1).optional(),
   psaSubmissionId: z.string().min(1),
   submittedAt: z.coerce.date(),
 });
 
 /**
- * グループに提出先・アイテム種別・サービスレベル・申込番号(Sub#)・提出日を記録する（紐づけ）。ADR-0021/0051
+ * グループに申込番号(Sub#)・提出日を記録する（紐づけ）。ADR-0021/0051
+ * 申込単位（旧方式）のグループは提出先・アイテム種別・サービスレベルもここで確定させる（従来通り）。
+ * カード単位（新方式）のグループは作成時に既に確定済みのため、それらの入力は不要・無視する。ADR-0076
  * あわせて、この時点の並び順でグループ内全カードの`groupLineNo`を確定・保存する（以降固定）。ADR-0075
  */
-export async function submitPsaGroup(groupId: string, params: z.infer<typeof submitPsaGroupSchema>) {
+export async function submitPsaGroup(
+  groupId: string,
+  params: z.infer<typeof submitPsaGroupSchema>
+): Promise<{ success: boolean; error?: string }> {
   await requireAdminOrStaff();
   const parsed = submitPsaGroupSchema.parse(params);
 
+  const groupBefore = await prisma.psaSubmissionGroup.findUnique({
+    where: { id: groupId },
+    select: { applications: { select: { id: true } } },
+  });
+  if (!groupBefore) return { success: false, error: "グループが見つかりません" };
+  const isLegacy = groupBefore.applications.length > 0;
+
+  if (isLegacy && (!parsed.region || !parsed.itemType || !parsed.customServiceLevelId || !parsed.customServiceLevelName)) {
+    return { success: false, error: "提出先・アイテム種別・サービスレベルを選択してください" };
+  }
+
   const { lines } = await computeGroupCardLines(groupId);
 
-  const group = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     for (const line of lines) {
       await tx.card.update({ where: { id: line.cardId }, data: { groupLineNo: line.lineNo } });
     }
-    return tx.psaSubmissionGroup.update({
+    await tx.psaSubmissionGroup.update({
       where: { id: groupId },
       data: {
-        region: parsed.region,
-        itemType: parsed.itemType,
-        customServiceLevelId: parsed.customServiceLevelId,
-        customServiceLevelName: parsed.customServiceLevelName,
+        ...(isLegacy
+          ? {
+              region: parsed.region,
+              itemType: parsed.itemType,
+              customServiceLevelId: parsed.customServiceLevelId,
+              customServiceLevelName: parsed.customServiceLevelName,
+            }
+          : {}),
         psaSubmissionId: parsed.psaSubmissionId,
         submittedAt: parsed.submittedAt,
         status: "SUBMITTED",
@@ -237,7 +431,7 @@ export async function submitPsaGroup(groupId: string, params: z.infer<typeof sub
   });
 
   revalidatePath("/admin/psa-groups");
-  return group;
+  return { success: true };
 }
 
 /**

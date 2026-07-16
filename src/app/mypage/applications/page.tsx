@@ -7,7 +7,7 @@ import { getMyApplications } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import ApplicationCenter, { type AppRow } from "./ApplicationCenter";
-import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel, computeDisplayStatus } from "@/lib/application-status";
+import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel, computeListDisplayStatus } from "@/lib/application-status";
 
 export default async function ApplicationsPage() {
   const customer = await getCustomerSession();
@@ -29,7 +29,13 @@ export default async function ApplicationsPage() {
       itemType: app.region === "PSA_US" ? (ITEM_TYPE_LABELS[app.itemType] ?? app.itemType) : null,
       createdAt: new Date(app.createdAt).toISOString(),
       status: app.status,
-      displayStatus: app.status === "DRAFT" ? null : computeDisplayStatus(app),
+      displayStatus:
+        app.status === "DRAFT"
+          ? null
+          : (() => {
+              const raw = computeListDisplayStatus(app);
+              return raw === "MULTIPLE" ? "複数グループ" : raw;
+            })(),
       source: app.source,
       isDraft: app.status === "DRAFT",
     };

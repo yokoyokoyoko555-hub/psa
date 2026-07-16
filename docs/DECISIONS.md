@@ -879,3 +879,17 @@
   - PSA鑑定結果自体（グレード・証明書番号）を記録する管理画面機能は今回スコープ外（意図的に見送り）。返却時の照合は運用（鑑定書番号の若い順と本一覧を突き合わせる）に委ねる。
 - 影響: `prisma/schema.prisma`（`Card.groupLineNo`列追加、非破壊）、`src/actions/admin.ts`（`computeGroupCardLines`/`getPsaGroupCardLines`追加、`submitPsaGroup`修正）、`src/app/admin/psa-groups/{page.tsx,GroupCardLines.tsx}`。
 - 未対応: 現物への番号貼付・返却時の照合はいずれも手作業（システム側での鑑定結果取り込みは無し）。プレビュー表示後に申込構成が変わると仮番号がずれる可能性があるため、現物への貼付は提出直前に行う運用が前提。
+
+## ADR-0076: PSA提出グループをカード単位（サービスレベル別）に変更し、自己入力でも1申込内で複数サービスレベルを選べるように
+
+- 日付: 2026-07-16 / 状態: Accepted（実装済）
+- 背景: 代理入力（STORE）は元々カードごとに異なるサービスレベルを選べる仕組み（`Card.customServiceLevelId`、ADR-0038）だったが、PSA提出グループは申込単位（ADR-0021）で1つの提出先・アイテム種別・サービスレベルしか持てなかった。PSAは実際にはサービスレベルごとに別々の申請（Sub#）が必要なため、1申込内にサービスレベルが混在すると提出グループの管理が実態と合わなくなっていた。また自己入力（CUSTOMER）は`Application.customServiceLevelId`が申込全体で1つだけのため、そもそも1回の申込で複数サービスレベルを選べなかった。
+- 決定:
+  - **PSA提出グループの新規作成をカード単位に変更**。`Card.psaSubmissionGroupId`（ADR-0021で未使用のまま残置されていたカラム）を復活させ、`createPsaSubmissionGroup`はカードID配列を受け取ってグループを作る。グループ未割当一覧は「申込×サービスレベル」の束（`getUngroupedCardBundles`）単位で表示し、同じ申込でもサービスレベルが違えば別々の束として選べる。作成時に提出先・アイテム種別・サービスレベルが揃っているか検証し、グループのそれら3項目をこの時点で確定する（以降`submitPsaGroup`での選択は不要になる）。
+  - **既存の申込単位グループ（ADR-0021、`Application.psaSubmissionGroupId`／`PsaSubmissionGroup.applications`）はそのまま維持**し、新規作成分のみ上記のカード単位方式に切り替える（過去データは触らない）。`computeGroupCardLines`（ADR-0075の行番号一覧）と`submitPsaGroup`は両方式を判定して分岐する（`group.applications.length > 0`なら旧方式）。
+  - **新規中間テーブル`PsaSubmissionGroupApplication`を追加**（申込×グループの多対多）。1申込のカードが複数グループ（サービスレベル別）に分かれた場合、申込側から全ての所属グループを辿れるようにするため。カード単位のステータス管理はしない方針（[[feedback-status-management-scope]]）は維持し、ステータスは引き続き**グループ単位**で判定する。`src/lib/application-status.ts`に`getApplicationGroups()`（新旧両リレースを集約）と`computeListDisplayStatus()`（一覧表示用。複数グループにまたがる場合は`"MULTIPLE"`を返し、呼び出し元で「複数グループ」表示に切り替える）を追加。詳細ページ（管理画面・顧客画面とも）は複数グループの場合、グループごとに1行ステータスを表示する。
+  - **ダッシュボードの「PSA発送待ち」「顧客返却待ち」集計**（`getDashboardActionItems`）を、旧来の単一リレーションと中間テーブルの両方を見るよう修正（新方式のみに属する申込が集計から漏れないように）。
+  - **自己入力（`/apply`）でもカードごとに異なるサービスレベルを選択可能に**。`ApplyForm.tsx`のカード入力フォームに代理入力と同じ「カードごとのサービスレベル選択」欄を追加し、`Card.customServiceLevelId/Name`をカードごとに保存する。申告金額上限チェックもカードごとの選択タイアで判定する。料金計算・確定処理・下書き保存は代理入力と同じ`cardServiceLevels`方式（`calculateFees`に元々あった、代理入力専用だった複数タイア対応パス）に統一。申込側のサービスレベル表示は代理入力と同じスナップショット方式（全カード同一タイアならそのタイア名、混在なら`customServiceLevelId=null`＋タイア名を「/」で連結）を踏襲。**通常サービスとオートグラフの混在は代理入力と同様、UIの`serviceMode`トグルで区別されているため引き続き起きない**（新たな制約は追加していない）。
+  - PSA鑑定結果（グレード・証明書番号）の個別入力機能は導入しない（ADR-0075と同じ判断）。
+- 影響: `prisma/schema.prisma`（新規`PsaSubmissionGroupApplication`モデル追加、非破壊）、`src/actions/admin.ts`（`createPsaSubmissionGroup`/`computeGroupCardLines`/`submitPsaGroup`/`getDashboardActionItems`修正、`getUngroupedCardBundles`追加）、`src/actions/application.ts`（`createApplication`/`previewFees`/`draftCardSchema`をカード単位タイア対応に変更）、`src/lib/application-status.ts`（`getApplicationGroups`/`computeListDisplayStatus`追加）、`src/app/admin/psa-groups/*`、`src/app/admin/applications/{page,[id]/page}.tsx`、`src/app/mypage/applications/{page,[id]/page}.tsx`、`src/app/admin/dashboard/page.tsx`、`src/app/apply/ApplyForm.tsx`。
+- 未対応: 一覧画面（管理・顧客とも）で複数グループにまたがる申込は簡易ステータスを「複数グループ」とだけ表示し、詳細ページでのみグループごとの内訳を見られる（一覧上での正確なステータス集約は行っていない）。ローカル環境にDBが無いため、実画面での動作確認（特に自己入力の複数サービスレベル申込・決済フロー）はできていない。

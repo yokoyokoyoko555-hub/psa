@@ -24,6 +24,7 @@ export type InitialDraft = {
     language?: string;
     quantity: number;
     declaredValue: number;
+    customServiceLevelId?: string;
   }[];
   returnSel: string;
 };
@@ -139,9 +140,12 @@ interface CardItem {
   language: string;
   quantity: number;
   declaredValue: number;
+  // カードごとに選択したサービスレベル（CustomServicePrice.id）。自己入力でも複数レベルにまたがる
+  // 申込に対応するため、カード単位で持つ（代理入力と同じ考え方）。ADR-0076
+  customServiceLevelId: string | null;
 }
 
-function emptyCard(): CardItem {
+function emptyCard(defaultTierId: string | null): CardItem {
   return {
     tcgTitle: "",
     releaseYear: "",
@@ -151,6 +155,7 @@ function emptyCard(): CardItem {
     language: "", // 初期値は空欄（未入力時はサーバー側で「日本語」を補完）。ADR-0033
     quantity: 0, // 初期値は空欄。ADR-0033
     declaredValue: 0,
+    customServiceLevelId: defaultTierId,
   };
 }
 
@@ -216,9 +221,10 @@ export default function ApplyForm({
       language: c.language ?? "日本語",
       quantity: c.quantity,
       declaredValue: c.declaredValue,
+      customServiceLevelId: c.customServiceLevelId || initialDraft?.customServiceLevelId || null,
     }))
   );
-  const [draft, setDraft] = useState<CardItem>(emptyCard());
+  const [draft, setDraft] = useState<CardItem>(emptyCard(initialDraft?.customServiceLevelId ?? null));
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   // 返送先住所（"registered"＝登録住所 / それ以外は住所帳のID）
@@ -254,11 +260,7 @@ export default function ApplyForm({
     ? customServicePrices.filter((p) => p.region === region && p.category === "AUTOGRAPH" && p.isActive)
     : [];
   const autographActive = activeAutographTiers.length > 0;
-  // 選択中タイアはカテゴリを問わずidで検索する（通常/デュアルサービスどちらもありうるため）。
-  const selectedCustomTier = customServicePrices.find((p) => p.id === customServiceLevelId);
-  const cap = selectedCustomTier?.maxDeclaredValue ?? null;
   const hasSelectedService = !!customServiceLevelId;
-  const isDualServiceSelected = selectedCustomTier?.category === "AUTOGRAPH";
   const tierOptionsToShow = serviceMode === "DUAL" ? activeAutographTiers : customTierOptions;
   const fieldLabels = CARD_FIELD_LABELS[itemType];
 
@@ -267,7 +269,7 @@ export default function ApplyForm({
   }
 
   function clearDraft() {
-    setDraft(emptyCard());
+    setDraft(emptyCard(customServiceLevelId));
     setEditingIndex(null);
     setError("");
   }
@@ -275,6 +277,10 @@ export default function ApplyForm({
   function saveDraft() {
     setError("");
     const fieldLabels = CARD_FIELD_LABELS[itemType];
+    if (!draft.customServiceLevelId) {
+      setError("サービスレベルを選択してください");
+      return;
+    }
     if (!draft.tcgTitle.trim() || !draft.cardName.trim()) {
       setError(`タイトルと${fieldLabels.nameLabel}は必須です`);
       return;
@@ -291,9 +297,12 @@ export default function ApplyForm({
       setError("申告金額を入力してください");
       return;
     }
-    if (cap !== null && draft.declaredValue > cap) {
+    // 申告金額上限は、そのカードが選んだサービスレベル自身の上限で判定する。ADR-0076
+    const draftTier = customServicePrices.find((p) => p.id === draft.customServiceLevelId);
+    const draftCap = draftTier?.maxDeclaredValue ?? null;
+    if (draftCap !== null && draft.declaredValue > draftCap) {
       setError(
-        `申告金額が選択中のサービス上限（${formatMoneyInt(cap, region)}）を超えています。上位サービスを選択してください。`
+        `申告金額が選択中のサービス上限（${formatMoneyInt(draftCap, region)}）を超えています。上位サービスを選択してください。`
       );
       return;
     }
@@ -324,6 +333,21 @@ export default function ApplyForm({
 
   const cardCount = cards.reduce((s, c) => s + c.quantity, 0);
   const totalDeclaredValue = cards.reduce((s, c) => s + c.declaredValue * c.quantity, 0);
+  // カードごとのサービスレベルをまとめて渡す（自己入力でも複数レベルにまたがる申込に対応）。ADR-0076
+  const cardServiceLevels = cards
+    .filter((c) => c.customServiceLevelId)
+    .map((c) => ({ customServiceLevelId: c.customServiceLevelId as string, quantity: c.quantity }));
+  // 確認画面の鑑定料内訳をタイアごとにグループ化する（代理入力の内訳表示と同じ考え方）。ADR-0076
+  const feeGroups = Object.values(
+    cards.reduce<Record<string, { name: string; quantity: number; feeTotal: number }>>((acc, c) => {
+      const tier = customServicePrices.find((p) => p.id === c.customServiceLevelId);
+      const key = tier?.name ?? "サービス未選択";
+      if (!acc[key]) acc[key] = { name: key, quantity: 0, feeTotal: 0 };
+      acc[key].quantity += c.quantity;
+      acc[key].feeTotal += (tier?.pricePerCard ?? 0) * c.quantity;
+      return acc;
+    }, {})
+  );
 
   // 料金はサーバー(calculateFees)と同じ計算で取得し、請求額とプレビューを一致させる
   const [fees, setFees] = useState<FeeBreakdown | null>(null);
@@ -332,7 +356,7 @@ export default function ApplyForm({
     previewFees({
       region,
       itemType,
-      customServiceLevelId: customServiceLevelId ?? undefined,
+      cardServiceLevels,
       returnMethod,
       cardCount,
       totalDeclaredValue,
@@ -342,9 +366,9 @@ export default function ApplyForm({
     return () => {
       cancelled = true;
     };
-  }, [region, itemType, customServiceLevelId, returnMethod, cardCount, totalDeclaredValue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [region, itemType, cards, returnMethod, cardCount, totalDeclaredValue]);
 
-  const psaFeeTotal = fees?.psaFeeTotal ?? 0;
   const shippingInsuranceFee = (fees?.shippingFee ?? 0) + (fees?.insuranceFee ?? 0);
   const handlingFee = fees?.handlingFee ?? 0;
   const discountAmount = fees?.discountAmount ?? 0;
@@ -370,6 +394,7 @@ export default function ApplyForm({
           d.cards.map((c: CardItem) => ({
             ...c,
             language: c.language ?? "日本語",
+            customServiceLevelId: c.customServiceLevelId ?? d.customServiceLevelId ?? null,
           }))
         );
       if (typeof d.maxStep === "number") setMaxStep(Math.min(d.maxStep, 3));
@@ -460,6 +485,7 @@ export default function ApplyForm({
           language: c.language,
           quantity: c.quantity,
           declaredValue: c.declaredValue,
+          customServiceLevelId: c.customServiceLevelId ?? "",
         })),
       });
       if (res.success && res.draftId) setDraftId(res.draftId);
@@ -481,6 +507,10 @@ export default function ApplyForm({
     }
     if (!hasSelectedService) {
       setError("サービスを選択してください");
+      return;
+    }
+    if (cards.some((c) => !c.customServiceLevelId)) {
+      setError("サービスレベルが未選択のカードがあります。カード情報の入力へ戻って選択してください。");
       return;
     }
     const normalizedShippingPhone = shippingPhone.trim();
@@ -508,6 +538,7 @@ export default function ApplyForm({
           declaredValue: c.declaredValue,
           quantity: c.quantity,
           damageImageKeys: [],
+          customServiceLevelId: c.customServiceLevelId!,
         })),
         returnAddress:
           returnSel !== "registered" && selectedAddr
@@ -823,8 +854,8 @@ export default function ApplyForm({
         {step === "cards" && (
           <div className="space-y-6">
             <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
-              選択中: <strong>{REGION_LABELS[region]}{region === "PSA_US" ? ` / ${ITEM_TYPE_LABELS[itemType]}` : ""} / {selectedCustomTier?.name}</strong>
-              {cap !== null && <>（申告金額上限 {formatMoneyInt(cap, region)}/{fieldLabels.quantityUnit}）</>}
+              提出先: <strong>{REGION_LABELS[region]}{region === "PSA_US" ? ` / ${ITEM_TYPE_LABELS[itemType]}` : ""}</strong>
+              {" "}／ {fieldLabels.entryLabel}ごとにサービスレベルを選べます（下の入力フォームで選択）。
             </div>
 
             {/* Card entry form */}
@@ -832,6 +863,24 @@ export default function ApplyForm({
               <h2 className="font-bold text-gray-800">
                 {editingIndex !== null ? `${fieldLabels.entryLabel}を編集` : `${fieldLabels.entryLabel}情報入力`}
               </h2>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">サービスレベル *</label>
+                <select
+                  className={inputCls}
+                  value={draft.customServiceLevelId ?? ""}
+                  onChange={(e) => setDraftField("customServiceLevelId", e.target.value || null)}
+                >
+                  <option value="" disabled>
+                    選択してください
+                  </option>
+                  {tierOptionsToShow.map((tier) => (
+                    <option key={tier.id} value={tier.id}>
+                      {tier.name}（{formatMoney(tier.pricePerCard, region)}/{fieldLabels.quantityUnit}・上限
+                      {tier.maxDeclaredValue === null ? "なし" : formatMoneyInt(tier.maxDeclaredValue, region)}）
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">{fieldLabels.releaseYearLabel}</label>
@@ -941,7 +990,7 @@ export default function ApplyForm({
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-bold text-gray-800">
                   アイテム（{cards.length}）
-                  {isDualServiceSelected && (
+                  {serviceMode === "DUAL" && (
                     <span className="ml-2 text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5 align-middle">
                       🖊 デュアルサービス選択中
                     </span>
@@ -969,6 +1018,8 @@ export default function ApplyForm({
                           {c.rarity ? `（${c.rarity}）` : ""}
                         </p>
                         <p className="text-xs text-gray-400">
+                          {customServicePrices.find((p) => p.id === c.customServiceLevelId)?.name ?? "サービス未選択"}
+                          {" / "}
                           {c.quantity}
                           {fieldLabels.quantityUnit} / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
                         </p>
@@ -1120,8 +1171,6 @@ export default function ApplyForm({
                 <span className="font-medium">提出先:</span> {REGION_LABELS[region]}
                 {region === "PSA_US" && <> / <span className="font-medium">アイテム種別:</span> {ITEM_TYPE_LABELS[itemType]}</>}
                 {" / "}
-                <span className="font-medium">サービス:</span>{" "}
-                {selectedCustomTier?.name} /{" "}
                 <span className="font-medium">返却:</span>{" "}
                 {returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}
               </div>
@@ -1139,6 +1188,9 @@ export default function ApplyForm({
                     <span>
                       {i + 1}. {c.releaseYear ? `${c.releaseYear} ` : ""}
                       {c.cardName}（{c.tcgTitle}）× {c.quantity}{fieldLabels.quantityUnit}
+                      <span className="text-xs text-gray-400 ml-1">
+                        {customServicePrices.find((p) => p.id === c.customServiceLevelId)?.name ?? ""}
+                      </span>
                     </span>
                     <span className="text-gray-500">
                       申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
@@ -1149,19 +1201,19 @@ export default function ApplyForm({
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">
-                  鑑定料（{selectedCustomTier?.name ?? ""}）
-                  {selectedCustomTier && (
+              {feeGroups.map((g) => (
+                <div key={g.name} className="flex justify-between">
+                  <span className="text-gray-500">
+                    鑑定料（{g.name}）
                     <span className="text-xs text-gray-400">
                       {" "}
-                      {formatMoney(selectedCustomTier.pricePerCard, region)}×{cardCount}
+                      {formatMoney(g.quantity > 0 ? g.feeTotal / g.quantity : 0, region)}×{g.quantity}
                       {fieldLabels.quantityUnit}
                     </span>
-                  )}
-                </span>
-                <span>{formatMoney(psaFeeTotal, region)}</span>
-              </div>
+                  </span>
+                  <span>{formatMoney(g.feeTotal, region)}</span>
+                </div>
+              ))}
               <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoneyIn(shippingInsuranceFee, "JPY")}</span></div>
               {handlingFee > 0 && (
                 <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>{formatMoneyIn(handlingFee, "JPY")}</span></div>

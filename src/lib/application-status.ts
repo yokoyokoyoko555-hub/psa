@@ -120,3 +120,37 @@ export function computeDisplayStatus(app: {
   if (app.receivedAt) return DISPLAY_STATUS.RECEIVED;
   return DISPLAY_STATUS.APPLIED;
 }
+
+type PsaGroupLike = { status: string; submittedAt: Date | null; returnReadyAt: Date | null; returnedAt: Date | null };
+
+/**
+ * 1申込が複数のPSA提出グループ（サービスレベル別）に同時に属せるようになったため（ADR-0076）、
+ * 旧来の単一リレーション（`psaSubmissionGroup`）と新しい中間テーブル（`groupMemberships`）の両方から
+ * 所属グループを集約する。カード単位のステータス管理はしない方針は維持し、グループ単位のまま扱う。
+ */
+export function getApplicationGroups<G extends PsaGroupLike>(app: {
+  psaSubmissionGroup: G | null;
+  groupMemberships: { psaSubmissionGroup: G }[];
+}): G[] {
+  const groups: G[] = [];
+  if (app.psaSubmissionGroup) groups.push(app.psaSubmissionGroup);
+  for (const m of app.groupMemberships) groups.push(m.psaSubmissionGroup);
+  return groups;
+}
+
+/**
+ * 一覧表示用。複数グループにまたがる場合は単一のステータス文言に集約できないため`"MULTIPLE"`を返す
+ * （呼び出し元で「複数グループ」等の専用表示に切り替える）。1グループ以下なら通常通り`computeDisplayStatus()`。ADR-0076
+ */
+export function computeListDisplayStatus<G extends PsaGroupLike>(app: {
+  source: string;
+  receivedAt: Date | null;
+  returnMethod: string;
+  psaSubmissionGroup: G | null;
+  groupMemberships: { psaSubmissionGroup: G }[];
+  payments: { status: string }[];
+}): DisplayStatus | "MULTIPLE" {
+  const groups = getApplicationGroups(app);
+  if (groups.length > 1) return "MULTIPLE";
+  return computeDisplayStatus({ ...app, psaSubmissionGroup: groups[0] ?? null });
+}

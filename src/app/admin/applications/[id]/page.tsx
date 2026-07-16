@@ -10,7 +10,14 @@ import MarkReceivedButton from "@/components/MarkReceivedButton";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { formatMoney, formatMoneyInt, formatMoneyIn } from "@/lib/currency";
-import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel, computeDisplayStatus, DISPLAY_STATUS } from "@/lib/application-status";
+import {
+  REGION_LABELS,
+  ITEM_TYPE_LABELS,
+  resolveServiceLevel,
+  computeDisplayStatus,
+  DISPLAY_STATUS,
+  getApplicationGroups,
+} from "@/lib/application-status";
 
 // PSA提出フォームは英語1行のため、言語は英語表記でコピーする。
 // 自由記述化（ADR-0023）後は代表的な入力のみ変換し、それ以外はそのまま出力する。
@@ -57,6 +64,8 @@ export default async function AdminApplicationDetailPage({
       agreement: true,
       submissionBooking: true,
       psaSubmissionGroup: true,
+      // カード単位（サービスレベル別）のグループにまたがる場合の追加所属。ADR-0076
+      groupMemberships: { include: { psaSubmissionGroup: true } },
     },
   });
 
@@ -93,14 +102,23 @@ export default async function AdminApplicationDetailPage({
   // 簡易ステータス（DISPLAY_STATUS）をバッジで常時表示する。ADR-0053/0063
   const isDraft = application.status === "DRAFT";
   const isCancelled = application.status === "CANCELLED";
-  const currentDisplayStatus = !isDraft && !isCancelled ? computeDisplayStatus(application) : null;
+  // 1申込が複数のPSA提出グループ（サービスレベル別）にまたがる場合は、グループごとに1行表示する。ADR-0076
+  const allGroups = getApplicationGroups(application);
+  const statusEntries =
+    !isDraft && !isCancelled
+      ? (allGroups.length > 0 ? allGroups : [null]).map((g) => ({
+          label: g?.customServiceLevelName ?? null,
+          status: computeDisplayStatus({ ...application, psaSubmissionGroup: g }),
+        }))
+      : [];
+  const currentDisplayStatus = statusEntries.length === 1 ? statusEntries[0].status : null;
   // 現物が既に手元にある（自己入力=受取済み／代理入力=支払完了）のにPSA提出グループが未割当＝
   // 次にスタッフがやるべきアクション。ADR-0067
   const hasCardsInHand =
     application.source === "STORE"
       ? !application.payments.some((p) => p.status === "PENDING")
       : Boolean(application.receivedAt);
-  const needsGroupAssignment = !isDraft && !isCancelled && hasCardsInHand && !application.psaSubmissionGroup;
+  const needsGroupAssignment = !isDraft && !isCancelled && hasCardsInHand && allGroups.length === 0;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -127,17 +145,35 @@ export default async function AdminApplicationDetailPage({
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <span
-                  className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    isCancelled
-                      ? "bg-gray-100 text-gray-600"
-                      : currentDisplayStatus === DISPLAY_STATUS.RETURNED || currentDisplayStatus === DISPLAY_STATUS.STORE_PICKUP_DONE
-                      ? "bg-green-100 text-green-700"
-                      : "bg-brand-100 text-brand-700"
-                  }`}
-                >
-                  {isDraft ? DISPLAY_STATUS.DRAFT : isCancelled ? "キャンセル" : currentDisplayStatus}
-                </span>
+                {isDraft || isCancelled || currentDisplayStatus ? (
+                  <span
+                    className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      isCancelled
+                        ? "bg-gray-100 text-gray-600"
+                        : currentDisplayStatus === DISPLAY_STATUS.RETURNED || currentDisplayStatus === DISPLAY_STATUS.STORE_PICKUP_DONE
+                        ? "bg-green-100 text-green-700"
+                        : "bg-brand-100 text-brand-700"
+                    }`}
+                  >
+                    {isDraft ? DISPLAY_STATUS.DRAFT : isCancelled ? "キャンセル" : currentDisplayStatus}
+                  </span>
+                ) : (
+                  <div className="flex flex-col items-end gap-1">
+                    {statusEntries.map((entry, i) => (
+                      <span
+                        key={i}
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          entry.status === DISPLAY_STATUS.RETURNED || entry.status === DISPLAY_STATUS.STORE_PICKUP_DONE
+                            ? "bg-green-100 text-green-700"
+                            : "bg-brand-100 text-brand-700"
+                        }`}
+                      >
+                        {entry.label ? `${entry.label}: ` : ""}
+                        {entry.status}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {application.status !== "DRAFT" && application.status !== "CANCELLED" && (
                   application.receivedAt ? (
                     <span className="text-xs text-gray-500">
@@ -386,37 +422,37 @@ export default async function AdminApplicationDetailPage({
             {needsGroupAssignment && (
               <p className="text-sm text-amber-700 mb-3">受取済みです。PSA提出グループへ割り当ててください。</p>
             )}
-            {application.psaSubmissionGroup ? (
-              <dl className="space-y-2 text-sm">
-                <div>
-                  <dt className="text-gray-500 text-xs">グループ番号</dt>
-                  <dd className="font-mono">{application.psaSubmissionGroup.groupNo}</dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500 text-xs">提出先</dt>
-                  <dd className="font-medium text-gray-900">
-                    {application.psaSubmissionGroup.region
-                      ? (REGION_LABELS[application.psaSubmissionGroup.region] ?? application.psaSubmissionGroup.region)
-                      : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500 text-xs">アイテム種別</dt>
-                  <dd className="font-medium text-gray-900">
-                    {application.psaSubmissionGroup.itemType
-                      ? (ITEM_TYPE_LABELS[application.psaSubmissionGroup.itemType] ?? application.psaSubmissionGroup.itemType)
-                      : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500 text-xs">サービスレベル</dt>
-                  <dd className="font-medium text-gray-900">{application.psaSubmissionGroup.customServiceLevelName ?? "—"}</dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500 text-xs">申込番号（Sub#）</dt>
-                  <dd className="font-mono font-bold">{application.psaSubmissionGroup.psaSubmissionId ?? "—"}</dd>
-                </div>
-              </dl>
+            {allGroups.length > 0 ? (
+              <div className="space-y-4">
+                {allGroups.map((group) => (
+                  <dl key={group.id} className="space-y-2 text-sm border-b border-gray-100 last:border-b-0 pb-4 last:pb-0">
+                    <div>
+                      <dt className="text-gray-500 text-xs">グループ番号</dt>
+                      <dd className="font-mono">{group.groupNo}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-500 text-xs">提出先</dt>
+                      <dd className="font-medium text-gray-900">
+                        {group.region ? (REGION_LABELS[group.region] ?? group.region) : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-500 text-xs">アイテム種別</dt>
+                      <dd className="font-medium text-gray-900">
+                        {group.itemType ? (ITEM_TYPE_LABELS[group.itemType] ?? group.itemType) : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-500 text-xs">サービスレベル</dt>
+                      <dd className="font-medium text-gray-900">{group.customServiceLevelName ?? "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-gray-500 text-xs">申込番号（Sub#）</dt>
+                      <dd className="font-mono font-bold">{group.psaSubmissionId ?? "—"}</dd>
+                    </div>
+                  </dl>
+                ))}
+              </div>
             ) : (
               !needsGroupAssignment && <p className="text-sm text-gray-500">未割当です。</p>
             )}

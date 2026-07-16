@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { decrypt } from "@/lib/crypto";
-import { computeDisplayStatus } from "@/lib/application-status";
+import { computeListDisplayStatus } from "@/lib/application-status";
 import { formatMoneyIn } from "@/lib/currency";
 import MonthSelector from "./MonthSelector";
 import DashboardCharts from "./DashboardCharts";
@@ -54,6 +54,9 @@ export default async function DashboardPage({
         _count: { select: { cards: true } },
         payments: { select: { status: true } },
         psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } },
+        groupMemberships: {
+          include: { psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } } },
+        },
       },
     }),
   ]);
@@ -147,7 +150,8 @@ export default async function DashboardPage({
             </thead>
             <tbody className="divide-y divide-gray-100">
               {recentApplications.map((app) => {
-                const statusLabel = app.status === "CANCELLED" ? "キャンセル" : computeDisplayStatus(app);
+                const rawStatus = app.status === "CANCELLED" ? "キャンセル" : computeListDisplayStatus(app);
+                const statusLabel = rawStatus === "MULTIPLE" ? "複数グループ" : rawStatus;
                 return (
                   <tr key={app.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs text-gray-500">{app.applicationNo}</td>

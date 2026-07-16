@@ -394,6 +394,8 @@ model Application {
   agreement Agreement?
   submissionBooking SubmissionBooking?
   psaSubmissionGroup PsaSubmissionGroup? @relation(fields: [psaSubmissionGroupId], references: [id])
+  // カード単位（サービスレベル別）のPSA提出グループ所属。1申込が複数グループにまたがる場合に使う。ADR-0076
+  groupMemberships PsaSubmissionGroupApplication[]
 
   @@map("applications")
 }
@@ -508,10 +510,28 @@ model PsaSubmissionGroup {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  cards        Card[] // 旧: カード単位グループ（未使用・後方互換で残置）。ADR-0021 で申込単位へ移行
-  applications Application[] // 申込単位のグループ割当
+  // カード単位（サービスレベル別）のグループ割当。新規作成グループはこちらを使う。ADR-0076でADR-0021の未使用状態から復活
+  cards        Card[]
+  applications Application[] // 旧: 申込単位のグループ割当（既存グループの後方互換。新規作成では使わない）。ADR-0021/0076
+  applicationMemberships PsaSubmissionGroupApplication[] // 新: 1申込が複数グループ（サービスレベル別）にまたがる場合の中間テーブル。ADR-0076
 
   @@map("psa_submission_groups")
+}
+
+// 申込×PSA提出グループの中間テーブル。1申込のカードが複数サービスレベルに分かれ、
+// 別々のPsaSubmissionGroupへ割り当てられた場合に、申込側から「どのグループに属しているか」を
+// 複数持てるようにする（ステータス表示はカード単位ではなく、このグループ単位のまま維持）。ADR-0076
+model PsaSubmissionGroupApplication {
+  id                   String   @id @default(cuid())
+  applicationId        String
+  psaSubmissionGroupId String
+  createdAt            DateTime @default(now())
+
+  application        Application        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  psaSubmissionGroup PsaSubmissionGroup @relation(fields: [psaSubmissionGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, psaSubmissionGroupId])
+  @@map("psa_submission_group_applications")
 }
 
 // 管理画面で自由に追加・編集・削除できるPSA進捗ステータス（「PSA受領済み」以降の可変ステージ名）。
