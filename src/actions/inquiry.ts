@@ -83,7 +83,7 @@ export async function getMyInquiries() {
       status: true,
       replyText: true,
       repliedAt: true,
-      allowCustomerReply: true,
+      resolved: true,
       createdAt: true,
       messages: {
         orderBy: { createdAt: "asc" },
@@ -98,7 +98,7 @@ export async function getMyInquiries() {
   });
 }
 
-/** 管理画面の一覧表示用。未読を上位に表示する。 */
+/** 管理画面の一覧表示用。未読を上位に表示し、終了済みは下に沈める。 */
 export async function getInquiries() {
   await requireAdminOrStaff();
 
@@ -109,7 +109,10 @@ export async function getInquiries() {
 
   const statusPriority: Record<string, number> = { UNREAD: 0, READ: 1, REPLIED: 2 };
   return [...inquiries]
-    .sort((a, b) => statusPriority[a.status] - statusPriority[b.status])
+    .sort((a, b) => {
+      if (a.resolved !== b.resolved) return a.resolved ? 1 : -1;
+      return statusPriority[a.status] - statusPriority[b.status];
+    })
     .map((i) => ({
       id: i.id,
       subject: i.subject,
@@ -118,7 +121,7 @@ export async function getInquiries() {
       customerName: decrypt(i.customer.nameEncrypted),
       customerEmail: i.customer.email,
       createdAt: i.createdAt,
-      allowCustomerReply: i.allowCustomerReply,
+      resolved: i.resolved,
     }));
 }
 
@@ -147,7 +150,7 @@ export async function getInquiryDetail(id: string) {
     status: inquiry.status,
     replyText: inquiry.replyText,
     repliedAt: inquiry.repliedAt,
-    allowCustomerReply: inquiry.allowCustomerReply,
+    resolved: inquiry.resolved,
     createdAt: inquiry.createdAt,
     customerId: inquiry.customerId,
     customerName: decrypt(inquiry.customer.nameEncrypted),
@@ -159,7 +162,7 @@ export async function getInquiryDetail(id: string) {
 const replySchema = z.object({
   id: z.string().min(1),
   replyText: z.string().min(1).max(4000),
-  allowCustomerReply: z.boolean().default(false),
+  resolved: z.boolean().default(false),
 });
 
 /** 管理画面から問い合わせに回答する。顧客へメール通知を試みる（失敗しても処理は止めない）。 */
@@ -175,9 +178,24 @@ export async function replyToInquiry(
 
   const current = await prisma.inquiry.findUnique({
     where: { id: parsed.data.id },
-    include: { customer: { select: { nameEncrypted: true, email: true } } },
+    include: {
+      customer: { select: { nameEncrypted: true, email: true } },
+      messages: { select: { id: true } },
+    },
   });
   if (!current) return { success: false, error: "お問い合わせが見つかりません" };
+
+  // messagesテーブル導入前の古い問い合わせ（実レコード0件）は、body/replyTextへ移す前に
+  // 新しい回答だけ追加すると最初のやり取りが表示から消えるため、先に移行してから追加する。
+  const backfillMessages =
+    current.messages.length === 0
+      ? [
+          { sender: "CUSTOMER" as const, body: current.body, createdAt: current.createdAt },
+          ...(current.replyText
+            ? [{ sender: "STAFF" as const, body: current.replyText, createdAt: current.repliedAt ?? current.createdAt }]
+            : []),
+        ]
+      : [];
 
   const inquiry = await prisma.inquiry.update({
     where: { id: parsed.data.id },
@@ -186,13 +204,16 @@ export async function replyToInquiry(
       repliedAt: new Date(),
       repliedBy: user.id,
       status: "REPLIED",
-      allowCustomerReply: parsed.data.allowCustomerReply,
+      resolved: parsed.data.resolved,
       messages: {
-        create: {
-          sender: "STAFF",
-          body: parsed.data.replyText,
-          userId: user.id,
-        },
+        create: [
+          ...backfillMessages,
+          {
+            sender: "STAFF",
+            body: parsed.data.replyText,
+            userId: user.id,
+          },
+        ],
       },
     },
   });
@@ -232,7 +253,7 @@ const customerReplySchema = z.object({
   body: z.string().min(1).max(4000),
 });
 
-/** 顧客が、管理画面で返信許可された問い合わせに追加返信する。 */
+/** 顧客が、終了していない自分の問い合わせに追加返信する。 */
 export async function replyToInquiryAsCustomer(
   input: z.infer<typeof customerReplySchema>
 ): Promise<{ success: boolean; error?: string }> {
@@ -248,7 +269,7 @@ export async function replyToInquiryAsCustomer(
     where: {
       id: parsed.data.id,
       customerId: customer.id,
-      allowCustomerReply: true,
+      resolved: false,
     },
     select: { id: true, subject: true },
   });
@@ -272,6 +293,36 @@ export async function replyToInquiryAsCustomer(
     customerId: customer.id,
     ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
     action: "INQUIRY_CUSTOMER_REPLY",
+    targetType: "inquiries",
+    targetId: inquiry.id,
+    after: { subject: inquiry.subject },
+  });
+
+  revalidatePath("/contact/history");
+  revalidatePath("/admin/inquiries");
+  revalidatePath(`/admin/inquiries/${inquiry.id}`);
+  return { success: true };
+}
+
+/** 顧客が自分の問い合わせを自己解決したとして終了する（本文入力不要）。 */
+export async function resolveInquiryAsCustomer(id: string): Promise<{ success: boolean; error?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+  if (!id) return { success: false, error: "お問い合わせが見つかりません" };
+
+  const inquiry = await prisma.inquiry.findFirst({
+    where: { id, customerId: customer.id },
+    select: { id: true, subject: true },
+  });
+  if (!inquiry) return { success: false, error: "お問い合わせが見つかりません" };
+
+  await prisma.inquiry.update({ where: { id: inquiry.id }, data: { resolved: true } });
+
+  const hdrs = await headers();
+  await logOperation({
+    customerId: customer.id,
+    ipAddress: getClientIp({ headers: hdrs } as unknown as Request),
+    action: "INQUIRY_RESOLVE_BY_CUSTOMER",
     targetType: "inquiries",
     targetId: inquiry.id,
     after: { subject: inquiry.subject },

@@ -7,15 +7,15 @@ import { replyToInquiry } from "@/actions/inquiry";
 export default function InquiryReplyForm({
   id,
   initialReplyText,
-  initialAllowCustomerReply,
+  initialResolved,
 }: {
   id: string;
   initialReplyText: string | null;
-  initialAllowCustomerReply: boolean;
+  initialResolved: boolean;
 }) {
   const router = useRouter();
   const [replyText, setReplyText] = useState("");
-  const [allowCustomerReply, setAllowCustomerReply] = useState(initialAllowCustomerReply);
+  const [resolved, setResolved] = useState(initialResolved);
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
 
@@ -23,7 +23,7 @@ export default function InquiryReplyForm({
     e.preventDefault();
     setMessage("");
     startTransition(async () => {
-      const result = await replyToInquiry({ id, replyText: replyText.trim(), allowCustomerReply });
+      const result = await replyToInquiry({ id, replyText: replyText.trim(), resolved });
       if (result.success) {
         setMessage("回答を送信しました");
         router.refresh();
@@ -44,11 +44,11 @@ export default function InquiryReplyForm({
       <label className="flex items-center gap-2 text-sm text-gray-700">
         <input
           type="checkbox"
-          checked={allowCustomerReply}
-          onChange={(e) => setAllowCustomerReply(e.target.checked)}
+          checked={resolved}
+          onChange={(e) => setResolved(e.target.checked)}
           className="h-4 w-4"
         />
-        顧客からの返信を許可する
+        このお問合せを終了する
       </label>
       {message && <p className="text-sm text-gray-600">{message}</p>}
       <button

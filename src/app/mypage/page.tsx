@@ -9,6 +9,7 @@ import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+import { REGION_LABELS, ITEM_TYPE_LABELS, SERVICE_LABELS } from "@/lib/application-status";
 
 export default async function MypagePage() {
   const customer = await getCustomerSession();
@@ -30,22 +31,6 @@ export default async function MypagePage() {
   const latestDraft = applications.find((a) => a.status === "DRAFT");
   // 精度・操作性の改善が済むまで管理画面のスイッチで一時的に非表示にできる。ADR-0070
   const centeringToolEnabled = storeSettings?.centeringToolEnabled ?? true;
-
-  const SERVICE_LABELS: Record<string, string> = {
-    VALUE: "バリュー",
-    VALUE_BULK: "バリューバルク",
-    VALUE_PLUS: "バリュープラス",
-    VALUE_MAX: "バリューマックス",
-    REGULAR: "レギュラー",
-    EXPRESS: "エクスプレス",
-    SUPER_EXPRESS: "スーパー・エクスプレス",
-    WALK_THROUGH: "ウォーク・スルー",
-    PREMIUM_1: "プレミアム 1",
-    PREMIUM_2: "プレミアム 2",
-    PREMIUM_3: "プレミアム 3",
-    PREMIUM_5: "プレミアム 5",
-    PREMIUM_10: "プレミアム 10",
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -165,10 +150,27 @@ export default async function MypagePage() {
               <div className="p-6">
                 <p className="text-gray-700 mb-4">この申込の続きから再開します。</p>
                 <div className="border border-gray-200 rounded-xl p-5">
-                  <p className="text-gray-900">
-                    {SERVICE_LABELS[latestDraft.serviceLevel] ?? latestDraft.serviceLevel}
-                  </p>
-                  <p className="text-gray-500 text-sm mt-1">
+                  <div className="grid grid-cols-3 gap-4 text-sm mb-3">
+                    <div>
+                      <p className="text-gray-500">提出先</p>
+                      <p className="font-medium text-gray-900">
+                        {REGION_LABELS[latestDraft.region] ?? latestDraft.region}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">アイテム</p>
+                      <p className="font-medium text-gray-900">
+                        {ITEM_TYPE_LABELS[latestDraft.itemType] ?? latestDraft.itemType}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">サービス</p>
+                      <p className="font-medium text-gray-900">
+                        {latestDraft.customServiceLevelName ?? SERVICE_LABELS[latestDraft.serviceLevel] ?? "サービス未選択"}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-gray-500 text-sm">
                     {format(new Date(latestDraft.createdAt), "yyyy年M月d日", { locale: ja })}
                   </p>
                   <p className="text-red-500 text-sm mt-1">下書き</p>

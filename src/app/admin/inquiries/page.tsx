@@ -43,9 +43,11 @@ export default async function InquiriesPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {inquiries.map((i) => {
-                const statusInfo = STATUS_LABELS[i.status] ?? { label: i.status, color: "bg-gray-100 text-gray-600" };
+                const statusInfo = i.resolved
+                  ? { label: "完了", color: "bg-gray-100 text-gray-600" }
+                  : STATUS_LABELS[i.status] ?? { label: i.status, color: "bg-gray-100 text-gray-600" };
                 return (
-                  <tr key={i.id} className={i.status === "UNREAD" ? "bg-red-50/30" : "hover:bg-gray-50"}>
+                  <tr key={i.id} className={i.status === "UNREAD" && !i.resolved ? "bg-red-50/30" : "hover:bg-gray-50"}>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
                         {statusInfo.label}
@@ -63,9 +65,6 @@ export default async function InquiriesPage() {
                     <td className="px-4 py-3 text-gray-700">{i.subject}</td>
                     <td className="px-4 py-3 text-gray-500">
                       {format(new Date(i.createdAt), "yyyy/MM/dd HH:mm")}
-                      {i.allowCustomerReply && (
-                        <p className="text-xs text-brand-600 mt-1">顧客返信可</p>
-                      )}
                     </td>
                     <td className="px-4 py-3">
                       <Link

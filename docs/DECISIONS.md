@@ -854,3 +854,28 @@
   - **「最近の申込」を直近5件に絞り、「もっと見る→」で`/admin/applications`へ**（従来は10件表示のみでリンクなし）。
 - 影響: `src/actions/admin.ts`（`getDashboardStats`→`getDashboardActionItems`に置換、破壊的だが呼び出し元はダッシュボードのみ）、新規`src/actions/dashboard.ts`、`src/app/admin/dashboard/page.tsx`（全面書き換え）、新規`src/app/admin/dashboard/{MonthSelector,DashboardCharts}.tsx`。スキーマ変更なし。
 - 未対応: Chart.jsのCDN読み込みは暫定対応（上記の通りnpm依存への移行が望ましい）。原価集計は`Card.psaCost`のみを対象とし、送料・保険料・代理入力料金・事務手数料それぞれの原価（未track）は含めていない。
+
+## ADR-0074: お問い合わせの「顧客返信を許可する」を廃止し、管理者・顧客双方が使える「終了する」に置き換え
+
+- 日付: 2026-07-16 / 状態: Accepted（実装済）
+- 背景: ADR-0071で導入した「管理者が個別に許可した問い合わせのみ顧客が追加返信できる」仕組みは、許可し忘れると顧客が返信できず、かつ「対応終了」を示す手段が無かった。運用上は「終了していない問い合わせは基本的に顧客が返信できる」「解決したら終了する」という発想の方がシンプルなため、許可制から終了制に転換する。
+- 決定:
+  - `Inquiry.allowCustomerReply`を`resolved`（Boolean、既定false）にリネーム。DBのenumは変更しない（`status`のUNREAD/READ/REPLIEDはそのまま既読管理に使用し、「完了」は`resolved`から画面表示のみで導出する）。
+  - 顧客の追加返信可否は`resolved === false`で判定するよう変更（`replyToInquiryAsCustomer`）。以前のような管理者の個別許可は不要になった。
+  - 管理画面の回答フォーム（`InquiryReplyForm`）のチェックボックスを「顧客からの返信を許可する」から「このお問合せを終了する」に変更。回答送信と同時に`resolved`を保存する。
+  - 顧客側（`/contact/history`）にも、本文入力不要でワンクリックで終了できる`resolveInquiryAsCustomer`アクションと「解決したのでこの問い合わせを終了する」ボタンを追加（顧客が自己解決した場合用）。
+  - `resolved === true`の問い合わせは、管理画面・顧客画面どちらも状態バッジを「完了」表示にし、顧客画面では返信フォームの代わりに「このお問い合わせは終了しました」の注記を表示する。管理画面の一覧（`getInquiries`）は終了済みを下位に沈める。
+  - ついでに、`InquiryMessage`テーブル導入前（ADR-0071以前）に作られた問い合わせでレコードが0件のものは、`replyToInquiry`で新しい回答を追加する際に旧`body`/`replyText`を先に`InquiryMessage`へ移してから追加するよう修正（従来は初回の追加回答で最初のやり取りが画面から消える不具合があった）。
+- 影響: `prisma/schema.prisma`、`src/actions/inquiry.ts`、`src/app/admin/inquiries/{page,InquiryReplyForm,[id]/page}.tsx`、`src/app/contact/history/ContactHistoryList.tsx`。`allowCustomerReply`カラムのリネームのため`prisma db push`実行時に既存の値はリセットされる（検証環境はテストデータのみのため実害なし）。
+
+## ADR-0075: PSA提出グループにグループ全体を通したカード行番号（`groupLineNo`）を追加
+
+- 日付: 2026-07-16 / 状態: Accepted（実装済）
+- 背景: 別々の顧客が同名カードを持ち込み、同じPSA提出グループにまとめて提出すると、PSAからは名称単位でまとめて返却されることがある（例: 田中さんのルフィ2枚＋鈴木さんのルフィ1枚→PSAからはルフィ計3枚として返る）。`Card`は元々`applicationId`単位で別レコードのため顧客の取り違えは起きないが、「どの現物がどの行か」を現物側（鑑定書番号の若い順）と突き合わせる手段が無かった。PSA鑑定結果（グレード・証明書番号）を個別入力する管理画面機能は運用上の手間（自動化できない）を理由に見送り、代わりに**提出前に現物へ貼るライン番号を用意し、返却時は鑑定書番号の若い順との手作業照合で判別する**方針とした。
+- 決定:
+  - `Card.groupLineNo Int?`を追加。PSA提出グループ内の申込の追加順（`createdAt`昇順）→各申込内の`lineNo`昇順で並べた、グループ全体を通した連番。**同一顧客・同一カード名の複数枚は1行（`quantity`枚数表記）にまとめ、別の顧客は必ず別行にする**（カードの個体ごとには分けない。同一顧客の複数枚同士の判別までは業務上不要なため）。
+  - `submitPsaGroup`（「PSAへ提出済として登録」）実行時にこの並び順で`groupLineNo`を確定・保存する。以降は固定され、提出後に申込構成が変わっても番号はずれない。
+  - 管理画面PSA提出グループ一覧に`GroupCardLines`コンポーネントを追加し、行番号・顧客名・カード名・枚数・申込番号の一覧を表示。未提出（PREPARING）中はその場で仮採番したプレビュー、提出後は`groupLineNo`の確定値を表示し、ラベルで区別する。現物へのライン番号貼付用にコピー可能なテキストも用意した（`CopyButton`）。
+  - PSA鑑定結果自体（グレード・証明書番号）を記録する管理画面機能は今回スコープ外（意図的に見送り）。返却時の照合は運用（鑑定書番号の若い順と本一覧を突き合わせる）に委ねる。
+- 影響: `prisma/schema.prisma`（`Card.groupLineNo`列追加、非破壊）、`src/actions/admin.ts`（`computeGroupCardLines`/`getPsaGroupCardLines`追加、`submitPsaGroup`修正）、`src/app/admin/psa-groups/{page.tsx,GroupCardLines.tsx}`。
+- 未対応: 現物への番号貼付・返却時の照合はいずれも手作業（システム側での鑑定結果取り込みは無し）。プレビュー表示後に申込構成が変わると仮番号がずれる可能性があるため、現物への貼付は提出直前に行う運用が前提。

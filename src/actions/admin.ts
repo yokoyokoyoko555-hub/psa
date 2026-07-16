@@ -144,6 +144,61 @@ export async function createPsaSubmissionGroup(applicationIds: string[]) {
   return group;
 }
 
+export type PsaGroupCardLine = {
+  cardId: string;
+  lineNo: number;
+  applicationNo: string;
+  customerName: string;
+  cardName: string;
+  quantity: number;
+};
+
+/**
+ * グループ内の全カードを、申込の追加順→申込内の入力順で並べ、グループ全体を通した連番を振る。
+ * 同一顧客・同一カード名の複数枚は1行（quantityで表現）、別顧客は別行にする。
+ * 全カードに`groupLineNo`が確定済み（＝提出済）ならその値で並べ、未確定ならこの場で仮採番する（プレビュー）。ADR-0075
+ */
+async function computeGroupCardLines(groupId: string): Promise<{ lines: PsaGroupCardLine[]; finalized: boolean }> {
+  const applications = await prisma.application.findMany({
+    where: { psaSubmissionGroupId: groupId },
+    orderBy: { createdAt: "asc" },
+    include: {
+      customer: { select: { nameEncrypted: true } },
+      cards: { orderBy: [{ lineNo: "asc" }, { createdAt: "asc" }] },
+    },
+  });
+
+  const entries = applications.flatMap((app) =>
+    app.cards.map((card) => ({
+      card,
+      applicationNo: app.applicationNo,
+      customerName: decrypt(app.customer.nameEncrypted),
+    }))
+  );
+
+  const finalized = entries.length > 0 && entries.every((e) => e.card.groupLineNo != null);
+  const ordered = finalized
+    ? [...entries].sort((a, b) => (a.card.groupLineNo as number) - (b.card.groupLineNo as number))
+    : entries;
+
+  const lines = ordered.map((e, i) => ({
+    cardId: e.card.id,
+    lineNo: finalized ? (e.card.groupLineNo as number) : i + 1,
+    applicationNo: e.applicationNo,
+    customerName: e.customerName,
+    cardName: e.card.cardName,
+    quantity: e.card.quantity,
+  }));
+
+  return { lines, finalized };
+}
+
+/** PSA提出グループ管理画面用。提出前は速報値（プレビュー）、提出後は確定値（`Card.groupLineNo`）を返す。 */
+export async function getPsaGroupCardLines(groupId: string): Promise<{ lines: PsaGroupCardLine[]; finalized: boolean }> {
+  await requireAdminOrStaff();
+  return computeGroupCardLines(groupId);
+}
+
 const submitPsaGroupSchema = z.object({
   region: z.nativeEnum(ServiceRegion),
   itemType: z.nativeEnum(ItemType),
@@ -153,22 +208,32 @@ const submitPsaGroupSchema = z.object({
   submittedAt: z.coerce.date(),
 });
 
-/** グループに提出先・アイテム種別・サービスレベル・申込番号(Sub#)・提出日を記録する（紐づけ）。ADR-0021/0051 */
+/**
+ * グループに提出先・アイテム種別・サービスレベル・申込番号(Sub#)・提出日を記録する（紐づけ）。ADR-0021/0051
+ * あわせて、この時点の並び順でグループ内全カードの`groupLineNo`を確定・保存する（以降固定）。ADR-0075
+ */
 export async function submitPsaGroup(groupId: string, params: z.infer<typeof submitPsaGroupSchema>) {
   await requireAdminOrStaff();
   const parsed = submitPsaGroupSchema.parse(params);
 
-  const group = await prisma.psaSubmissionGroup.update({
-    where: { id: groupId },
-    data: {
-      region: parsed.region,
-      itemType: parsed.itemType,
-      customServiceLevelId: parsed.customServiceLevelId,
-      customServiceLevelName: parsed.customServiceLevelName,
-      psaSubmissionId: parsed.psaSubmissionId,
-      submittedAt: parsed.submittedAt,
-      status: "SUBMITTED",
-    },
+  const { lines } = await computeGroupCardLines(groupId);
+
+  const group = await prisma.$transaction(async (tx) => {
+    for (const line of lines) {
+      await tx.card.update({ where: { id: line.cardId }, data: { groupLineNo: line.lineNo } });
+    }
+    return tx.psaSubmissionGroup.update({
+      where: { id: groupId },
+      data: {
+        region: parsed.region,
+        itemType: parsed.itemType,
+        customServiceLevelId: parsed.customServiceLevelId,
+        customServiceLevelName: parsed.customServiceLevelName,
+        psaSubmissionId: parsed.psaSubmissionId,
+        submittedAt: parsed.submittedAt,
+        status: "SUBMITTED",
+      },
+    });
   });
 
   revalidatePath("/admin/psa-groups");

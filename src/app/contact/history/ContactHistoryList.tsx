@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { replyToInquiryAsCustomer } from "@/actions/inquiry";
+import { replyToInquiryAsCustomer, resolveInquiryAsCustomer } from "@/actions/inquiry";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -20,7 +20,7 @@ type InquiryItem = {
   status: string;
   replyText: string | null;
   repliedAt: Date | null;
-  allowCustomerReply: boolean;
+  resolved: boolean;
   createdAt: Date;
   messages: InquiryMessage[];
 };
@@ -30,6 +30,7 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   READ: { label: "確認中", className: "bg-yellow-100 text-yellow-700" },
   REPLIED: { label: "回答済み", className: "bg-green-100 text-green-700" },
 };
+const RESOLVED_STATUS = { label: "完了", className: "bg-gray-100 text-gray-600" };
 
 export default function ContactHistoryList({ inquiries }: { inquiries: InquiryItem[] }) {
   if (inquiries.length === 0) {
@@ -54,7 +55,9 @@ function ContactHistoryItem({ inquiry }: { inquiry: InquiryItem }) {
   const [replyBody, setReplyBody] = useState("");
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
-  const status = STATUS_LABELS[inquiry.status] ?? { label: inquiry.status, className: "bg-gray-100 text-gray-600" };
+  const status = inquiry.resolved
+    ? RESOLVED_STATUS
+    : STATUS_LABELS[inquiry.status] ?? { label: inquiry.status, className: "bg-gray-100 text-gray-600" };
   const messages = buildMessages(inquiry);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -68,6 +71,18 @@ function ContactHistoryItem({ inquiry }: { inquiry: InquiryItem }) {
         router.refresh();
       } else {
         setMessage(result.error ?? "返信に失敗しました");
+      }
+    });
+  }
+
+  function handleResolve() {
+    setMessage("");
+    startTransition(async () => {
+      const result = await resolveInquiryAsCustomer(inquiry.id);
+      if (result.success) {
+        router.refresh();
+      } else {
+        setMessage(result.error ?? "終了に失敗しました");
       }
     });
   }
@@ -109,25 +124,39 @@ function ContactHistoryItem({ inquiry }: { inquiry: InquiryItem }) {
           ))}
         </div>
 
-        {inquiry.allowCustomerReply && inquiry.replyText && (
-          <form onSubmit={handleSubmit} className="space-y-2">
-            <label className="block text-xs font-medium text-gray-600">この回答へ返信する</label>
-            <textarea
-              value={replyBody}
-              onChange={(e) => setReplyBody(e.target.value)}
-              maxLength={4000}
-              className="w-full min-h-28 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="返信内容を入力してください"
-            />
+        {inquiry.resolved ? (
+          <p className="text-sm text-gray-400 border-t border-gray-100 pt-4">このお問い合わせは終了しました</p>
+        ) : (
+          <div className="space-y-4">
+            {inquiry.replyText && (
+              <form onSubmit={handleSubmit} className="space-y-2">
+                <label className="block text-xs font-medium text-gray-600">この回答へ返信する</label>
+                <textarea
+                  value={replyBody}
+                  onChange={(e) => setReplyBody(e.target.value)}
+                  maxLength={4000}
+                  className="w-full min-h-28 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  placeholder="返信内容を入力してください"
+                />
+                <button
+                  type="submit"
+                  disabled={isPending || !replyBody.trim()}
+                  className="bg-brand-600 text-white font-bold px-5 py-2.5 rounded-lg hover:bg-brand-700 transition disabled:opacity-50"
+                >
+                  {isPending ? "送信中..." : "返信する"}
+                </button>
+              </form>
+            )}
             {message && <p className="text-sm text-gray-600">{message}</p>}
             <button
-              type="submit"
-              disabled={isPending || !replyBody.trim()}
-              className="bg-brand-600 text-white font-bold px-5 py-2.5 rounded-lg hover:bg-brand-700 transition disabled:opacity-50"
+              type="button"
+              onClick={handleResolve}
+              disabled={isPending}
+              className="text-sm text-gray-500 hover:text-gray-700 underline disabled:opacity-50"
             >
-              {isPending ? "送信中..." : "返信する"}
+              解決したのでこの問い合わせを終了する
             </button>
-          </form>
+          </div>
         )}
       </div>
     </details>

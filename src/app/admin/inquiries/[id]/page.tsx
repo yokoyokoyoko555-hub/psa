@@ -22,7 +22,12 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">{inquiry.subject}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-gray-900">{inquiry.subject}</h1>
+            {inquiry.resolved && (
+              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">完了</span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 mt-1">
             {format(new Date(inquiry.createdAt), "yyyy年M月d日 HH:mm", { locale: ja })}
           </p>
@@ -81,7 +86,7 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
         <InquiryReplyForm
           id={inquiry.id}
           initialReplyText={inquiry.replyText}
-          initialAllowCustomerReply={inquiry.allowCustomerReply}
+          initialResolved={inquiry.resolved}
         />
       </div>
     </div>

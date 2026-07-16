@@ -8,6 +8,8 @@ import CreateGroupForm from "./CreateGroupForm";
 import SubmitGroupForm from "./SubmitGroupForm";
 import AdvanceGroupStatusForm from "./AdvanceGroupStatusForm";
 import ReturnStatusButtons from "./ReturnStatusButtons";
+import GroupCardLines from "./GroupCardLines";
+import { getPsaGroupCardLines } from "@/actions/admin";
 import type { ServiceRegion } from "@prisma/client";
 
 const REGION_LABELS: Record<ServiceRegion, string> = {
@@ -56,6 +58,12 @@ export default async function PsaGroupsPage() {
     prisma.psaProgressStatus.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     prisma.customServicePrice.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
   ]);
+
+  const groupCardLines = new Map(
+    await Promise.all(
+      groups.map(async (g) => [g.id, await getPsaGroupCardLines(g.id)] as const)
+    )
+  );
 
   return (
     <div className="p-8">
@@ -114,6 +122,11 @@ export default async function PsaGroupsPage() {
                 </div>
               ))}
             </div>
+
+            {(() => {
+              const cardLines = groupCardLines.get(group.id);
+              return cardLines ? <GroupCardLines lines={cardLines.lines} finalized={cardLines.finalized} /> : null;
+            })()}
 
             {group.status === "PREPARING" && (
               <SubmitGroupForm groupId={group.id} customServicePrices={customServicePrices} />

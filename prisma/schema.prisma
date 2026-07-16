@@ -414,6 +414,8 @@ model Card {
 
   // カード情報
   lineNo        Int? // 申込内の入力順（1始まり）。お客様が店頭提出時にカードへ付けるライン番号と対応。ADR-0062
+  groupLineNo   Int? // PSA提出グループ全体を通した連番（1始まり）。同一顧客の同名カードは1行にまとめ、
+  // 別顧客は別行にする。「PSAへ提出済として登録」実行時に確定・保存し、以降固定。ADR-0075
   tcgTitle      String // タイトル（セット名など）
   releaseYear   String? // 発行年（トレカ/パック）または発行年月の自由記述（コミック・マガジン）。ADR-0033
   cardName      String // カード名（パックはパック名、コミック・マガジンは巻数・号として使用）。ADR-0033
@@ -845,7 +847,7 @@ model Inquiry {
   replyText  String?
   repliedAt  DateTime?
   repliedBy  String? // 対応した管理者・スタッフのuserId
-  allowCustomerReply Boolean @default(false)
+  resolved   Boolean       @default(false) // 終了フラグ。管理者・顧客どちらからも設定可。ADR-0074
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
