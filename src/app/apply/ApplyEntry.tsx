@@ -7,6 +7,7 @@ import StoreRequestForm from "./StoreRequestForm";
 import type { ShippingRule, InsuranceRule, CustomServicePrice, PricingSetting } from "@prisma/client";
 import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
+import type { TermsDocument } from "./termsDocument";
 
 type Props = {
   customerId: string;
@@ -18,6 +19,7 @@ type Props = {
   profile: CustomerProfile | null;
   addresses: Address[];
   initialDraft?: InitialDraft | null;
+  termsDocument: TermsDocument | null;
 };
 
 export default function ApplyEntry(props: Props) {
@@ -67,6 +69,7 @@ export default function ApplyEntry(props: Props) {
             addresses={props.addresses}
             pricingSettings={props.pricingSettings}
             stripePublishableKey={props.stripePublishableKey}
+            termsDocument={props.termsDocument}
           />
         </main>
       </div>

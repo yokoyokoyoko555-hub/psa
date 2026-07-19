@@ -6,6 +6,7 @@ import { getCustomerProfile } from "@/actions/customer";
 import { getMyAddresses } from "@/actions/address";
 import { getDraft } from "@/actions/application";
 import { ensureTradingCardCustomPrices } from "@/actions/pricing";
+import { getLegalDocument } from "@/actions/legal-document";
 import ApplyEntry from "./ApplyEntry";
 import { prisma } from "@/lib/prisma";
 
@@ -22,14 +23,16 @@ export default async function ApplyPage({
 
   await ensureTradingCardCustomPrices(); // 旧ServicePrice→CustomServicePrice(category=TRADING_CARD)の初回移行。ADR-0026
 
-  const [shippingRules, insuranceRules, customServicePrices, pricingSettings, profile, addresses] = await Promise.all([
-    prisma.shippingRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.insuranceRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.customServicePrice.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.pricingSetting.findMany(),
-    getCustomerProfile(),
-    getMyAddresses(),
-  ]);
+  const [shippingRules, insuranceRules, customServicePrices, pricingSettings, profile, addresses, termsDocument] =
+    await Promise.all([
+      prisma.shippingRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+      prisma.insuranceRule.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+      prisma.customServicePrice.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
+      prisma.pricingSetting.findMany(),
+      getCustomerProfile(),
+      getMyAddresses(),
+      getLegalDocument("terms"), // 自己入力・代理入力どちらも同じ制定済みの利用規約を表示・同意対象にする。ADR-0077
+    ]);
 
   return (
     <ApplyEntry
@@ -42,6 +45,7 @@ export default async function ApplyPage({
       profile={profile}
       addresses={addresses}
       initialDraft={initialDraft}
+      termsDocument={termsDocument}
     />
   );
 }

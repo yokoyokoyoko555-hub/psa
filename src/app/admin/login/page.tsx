@@ -1,13 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { getSession, signIn } from "next-auth/react";
 
 export default function AdminLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<"credentials" | "2fa">("credentials");
   const [totpCode, setTotpCode] = useState("");
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    getSession().then((session) => {
+      if (session?.user) {
+        window.location.replace("/admin/dashboard");
+        return;
+      }
+      setCheckingSession(false);
+    });
+  }, []);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -28,6 +39,10 @@ export default function AdminLoginPage() {
       // TODO: 2FA対応 - ここでtwoFactorEnabledをチェックして2FA画面へ
       window.location.assign("/admin/dashboard");
     }
+  }
+
+  if (checkingSession) {
+    return <div className="min-h-screen bg-gray-900" />;
   }
 
   return (

@@ -8,6 +8,8 @@ import type { FeeBreakdown } from "@/lib/fee-calculator";
 import { formatMoney, formatMoneyIn, formatMoneyInt, currencySymbol } from "@/lib/currency";
 import { getStripeClient, type StripeClientLike, type StripeCardElementLike } from "@/lib/stripe-client";
 import PaymentDoneScreen from "@/components/PaymentDoneScreen";
+import { renderLegalMarkdown } from "@/lib/legal-markdown";
+import type { TermsDocument } from "./termsDocument";
 
 export type InitialDraft = {
   draftId: string;
@@ -120,16 +122,11 @@ const CARD_FIELD_LABELS: Record<
   },
 };
 
-const AGREEMENT_VERSION = "v1.0";
-const AGREEMENT_TEXT = `PSA鑑定受付代行サービス利用規約
-
-1. 本サービスはカードのPSA鑑定を代行するサービスです。
-2. お申込み後のキャンセルはお受けできません。
-3. PSAからUpchargeが発生した場合、登録済みのカードへ追加請求を行います。
-4. 鑑定中の紛失・破損は保険適用範囲内で対応します。
-5. PSAグレードの結果に関して当社は責任を負いません。
-6. 個人情報は鑑定業務にのみ使用します。
-7. カードの郵送時の事故については責任を負いかねます。`;
+/** 制定済み利用規約(LegalDocument"terms")のバージョン識別子。改訂があれば最新改訂日、無ければ制定日。ADR-0077 */
+function termsVersion(doc: TermsDocument): string {
+  const latest = doc.revisedAt.length > 0 ? doc.revisedAt[doc.revisedAt.length - 1] : doc.establishedAt;
+  return new Date(latest).toISOString().slice(0, 10);
+}
 
 interface CardItem {
   tcgTitle: string;
@@ -168,6 +165,7 @@ type Props = {
   profile: CustomerProfile | null;
   addresses: Address[];
   initialDraft?: InitialDraft | null;
+  termsDocument: TermsDocument | null;
 };
 
 const STEPS = [
@@ -187,6 +185,7 @@ export default function ApplyForm({
   profile,
   addresses,
   initialDraft,
+  termsDocument,
 }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<StepKey>(initialDraft ? "cards" : "service");
@@ -348,6 +347,18 @@ export default function ApplyForm({
       return acc;
     }, {})
   );
+  // Step2の保存済みカード一覧を、サービスレベルごとにまとめて表示するための束（並び順は料金設定のsortOrder順）。ADR-0076
+  const cardGroups = (() => {
+    const map = new Map<string, { tier: CustomServicePrice | undefined; items: { card: CardItem; index: number }[] }>();
+    cards.forEach((c, index) => {
+      const key = c.customServiceLevelId ?? "none";
+      if (!map.has(key)) {
+        map.set(key, { tier: customServicePrices.find((p) => p.id === c.customServiceLevelId), items: [] });
+      }
+      map.get(key)!.items.push({ card: c, index });
+    });
+    return [...map.values()].sort((a, b) => (a.tier?.sortOrder ?? 999) - (b.tier?.sortOrder ?? 999));
+  })();
 
   // 料金はサーバー(calculateFees)と同じ計算で取得し、請求額とプレビューを一致させる
   const [fees, setFees] = useState<FeeBreakdown | null>(null);
@@ -375,6 +386,44 @@ export default function ApplyForm({
   const campaignName = fees?.campaignName ?? null;
   const taxAmount = fees?.taxAmount ?? 0;
   const totalAmount = fees?.totalAmount ?? 0;
+
+  // 料金内訳（確認・同意ステップとお支払いステップの両方で表示する）。ADR-0077
+  const feeBreakdown = (
+    <>
+      {feeGroups.map((g) => (
+        <div key={g.name} className="flex justify-between">
+          <span className="text-gray-500">
+            鑑定料（{g.name}）
+            <span className="text-xs text-gray-400">
+              {" "}
+              {formatMoney(g.quantity > 0 ? g.feeTotal / g.quantity : 0, region)}×{g.quantity}
+              {fieldLabels.quantityUnit}
+            </span>
+          </span>
+          <span>{formatMoney(g.feeTotal, region)}</span>
+        </div>
+      ))}
+      <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoneyIn(shippingInsuranceFee, "JPY")}</span></div>
+      {handlingFee > 0 && (
+        <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>{formatMoneyIn(handlingFee, "JPY")}</span></div>
+      )}
+      {discountAmount > 0 && (
+        <div className="flex justify-between text-brand-700">
+          <span>キャンペーン割引{campaignName ? `（${campaignName}）` : ""}</span>
+          <span>-{formatMoneyIn(discountAmount, "JPY")}</span>
+        </div>
+      )}
+      {region === "PSA_US" && fees?.exchangeRateUsed && (
+        <p className="text-xs text-gray-400">
+          為替レート: $1 = {formatMoneyIn(fees.exchangeRateUsed, "JPY")}（申込時点）
+        </p>
+      )}
+      <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-2 mt-2">
+        <span>合計</span><span>{formatMoneyIn(totalAmount, "JPY")}</span>
+      </div>
+      <p className="text-xs text-gray-500 text-right">（内消費税 {formatMoneyIn(taxAmount, "JPY")}）</p>
+    </>
+  );
 
   // 一時保存（localStorage）からの復元。意図的に effect 内で state を設定する。
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -505,6 +554,10 @@ export default function ApplyForm({
       setError("利用規約に同意してください");
       return;
     }
+    if (!termsDocument) {
+      setError("利用規約の読み込みに失敗しました。時間をおいて再度お試しください。");
+      return;
+    }
     if (!hasSelectedService) {
       setError("サービスを選択してください");
       return;
@@ -555,8 +608,8 @@ export default function ApplyForm({
               }
             : undefined,
         shippingPhone: normalizedShippingPhone,
-        agreementText: AGREEMENT_TEXT,
-        agreementVersion: AGREEMENT_VERSION,
+        agreementText: termsDocument.body,
+        agreementVersion: termsVersion(termsDocument),
         ipAddress: "client",
         userAgent: navigator.userAgent,
       });
@@ -1007,37 +1060,52 @@ export default function ApplyForm({
                   上のフォームから{fieldLabels.entryLabel}を追加してください
                 </p>
               ) : (
-                <div className="divide-y divide-gray-100">
-                  {cards.map((c, i) => (
-                    <div key={i} className="px-4 py-3 flex items-center gap-3">
-                      <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
-                        {i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 truncate">
-                          {c.releaseYear ? `${c.releaseYear} ` : ""}
-                          {c.tcgTitle} {c.cardNumber} {c.cardName}
-                          {c.rarity ? `（${c.rarity}）` : ""}
+                <div className="divide-y divide-gray-200">
+                  {cardGroups.map((group) => (
+                    <div key={group.tier?.id ?? "none"}>
+                      <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
+                        <p className="text-xs font-bold text-gray-600">
+                          {group.tier?.name ?? "サービス未選択"}（{group.items.length}件）
                         </p>
-                        <p className="text-xs text-gray-400">
-                          {customServicePrices.find((p) => p.id === c.customServiceLevelId)?.name ?? "サービス未選択"}
-                          {" / "}
-                          {c.quantity}
-                          {fieldLabels.quantityUnit} / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
+                        <p className="text-xs text-gray-500">
+                          {formatMoneyInt(
+                            group.items.reduce((s, { card }) => s + card.declaredValue * card.quantity, 0),
+                            region
+                          )}
                         </p>
                       </div>
-                      <button
-                        onClick={() => editCard(i)}
-                        className="text-brand-600 hover:text-brand-800 text-sm font-medium"
-                      >
-                        編集
-                      </button>
-                      <button
-                        onClick={() => deleteCard(i)}
-                        className="text-red-500 hover:text-red-700 text-sm font-medium"
-                      >
-                        削除
-                      </button>
+                      <div className="divide-y divide-gray-100">
+                        {group.items.map(({ card: c, index: i }) => (
+                          <div key={i} className="px-4 py-3 flex items-center gap-3">
+                            <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
+                              {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-gray-900 truncate">
+                                {c.releaseYear ? `${c.releaseYear} ` : ""}
+                                {c.tcgTitle} {c.cardNumber} {c.cardName}
+                                {c.rarity ? `（${c.rarity}）` : ""}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {c.quantity}
+                                {fieldLabels.quantityUnit} / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => editCard(i)}
+                              className="text-brand-600 hover:text-brand-800 text-sm font-medium"
+                            >
+                              編集
+                            </button>
+                            <button
+                              onClick={() => deleteCard(i)}
+                              className="text-red-500 hover:text-red-700 text-sm font-medium"
+                            >
+                              削除
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1203,45 +1271,24 @@ export default function ApplyForm({
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
-              {feeGroups.map((g) => (
-                <div key={g.name} className="flex justify-between">
-                  <span className="text-gray-500">
-                    鑑定料（{g.name}）
-                    <span className="text-xs text-gray-400">
-                      {" "}
-                      {formatMoney(g.quantity > 0 ? g.feeTotal / g.quantity : 0, region)}×{g.quantity}
-                      {fieldLabels.quantityUnit}
-                    </span>
-                  </span>
-                  <span>{formatMoney(g.feeTotal, region)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between"><span className="text-gray-500">送料・保険料</span><span>{formatMoneyIn(shippingInsuranceFee, "JPY")}</span></div>
-              {handlingFee > 0 && (
-                <div className="flex justify-between"><span className="text-gray-500">事務手数料</span><span>{formatMoneyIn(handlingFee, "JPY")}</span></div>
-              )}
-              {discountAmount > 0 && (
-                <div className="flex justify-between text-brand-700">
-                  <span>キャンペーン割引{campaignName ? `（${campaignName}）` : ""}</span>
-                  <span>-{formatMoneyIn(discountAmount, "JPY")}</span>
-                </div>
-              )}
-              {region === "PSA_US" && fees?.exchangeRateUsed && (
-                <p className="text-xs text-gray-400">
-                  為替レート: $1 = {formatMoneyIn(fees.exchangeRateUsed, "JPY")}（申込時点）
-                </p>
-              )}
-              <div className="flex justify-between font-bold text-gray-900 border-t border-gray-100 pt-2 mt-2">
-                <span>合計</span><span>{formatMoneyIn(totalAmount, "JPY")}</span>
-              </div>
-              <p className="text-xs text-gray-500 text-right">（内消費税 {formatMoneyIn(taxAmount, "JPY")}）</p>
+              <h3 className="font-bold text-gray-800 mb-1">料金内訳</h3>
+              {feeBreakdown}
             </div>
 
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-              <h3 className="font-bold text-gray-800">利用規約</h3>
-              <pre className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto">
-                {AGREEMENT_TEXT}
-              </pre>
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-gray-800">利用規約</h3>
+                <Link href="/terms" target="_blank" className="text-xs text-brand-600 hover:underline">
+                  全文を別ページで見る →
+                </Link>
+              </div>
+              <div className="text-xs text-gray-600 bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                {termsDocument ? (
+                  renderLegalMarkdown(termsDocument.body)
+                ) : (
+                  <p className="text-gray-400">利用規約を読み込めませんでした。</p>
+                )}
+              </div>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
                 利用規約に同意します
@@ -1264,6 +1311,11 @@ export default function ApplyForm({
             <PaymentDoneScreen applicationId={createdApplicationId || null} />
           ) : (
           <div className="space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-2 text-sm">
+              <h3 className="font-bold text-gray-800 mb-1">料金内訳</h3>
+              {feeBreakdown}
+            </div>
+
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <div>
                 <h2 className="font-bold text-gray-900">お支払い</h2>

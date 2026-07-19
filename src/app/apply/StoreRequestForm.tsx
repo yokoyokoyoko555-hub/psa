@@ -10,6 +10,8 @@ import type { Address } from "@/actions/address";
 import { formatMoneyIn } from "@/lib/currency";
 import StripeCardPayment from "@/components/StripeCardPayment";
 import PaymentDoneScreen from "@/components/PaymentDoneScreen";
+import { renderLegalMarkdown } from "@/lib/legal-markdown";
+import type { TermsDocument } from "./termsDocument";
 
 const REGION_LABELS: Record<ServiceRegion, string> = {
   PSA_JP: "PSA 日本",
@@ -25,23 +27,26 @@ const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   AUTOGRAPH: "オートグラフ",
 };
 
-const AGREEMENT_TEXT = `PSA鑑定受付代行サービス（代理入力・先払い）利用規約
+// 代理入力（先払い→後日確定分請求）特有の流れの説明。利用規約の同意対象ではなく、単なる案内文。ADR-0077
+const PROXY_FLOW_NOTE = [
+  "代理入力では、お客様に入力いただくのは代理入力する枚数・申込総数・返送先・電話番号・クレジットカード情報のみです。",
+  "お申込み時には、代理入力する枚数×代理入力費用（消費税込み）を先にお支払いいただきます。事務手数料は、実際のサービスが確定した際に別途ご請求します。",
+  "お支払い後、カードのお預け（店頭持込・郵送）をご予約ください。",
+  "当社で代理入力が完了次第、ご提出いただいたカードの内容に応じた鑑定料を別途メールにてご請求いたします。",
+];
 
-1. 代理入力では、お客様に入力いただくのは代理入力する枚数・申込総数・返送先・電話番号・クレジットカード情報のみです。
-2. お申込み時には、代理入力する枚数×代理入力費用（消費税込み）を先にお支払いいただきます。事務手数料は、実際のサービスが確定した際に別途ご請求します。
-3. お支払い後、カードのお預け（店頭持込・郵送）をご予約ください。
-4. 当社で代理入力が完了次第、ご提出いただいたカードの内容に応じた鑑定料を別途メールにてご請求いたします。
-5. お申込み後のキャンセルはお受けできません。
-6. PSAからUpchargeが発生した場合、追加請求をご案内します。
-7. 鑑定中の紛失・破損は保険適用範囲内で対応します。
-8. PSAグレードの結果に関して当社は責任を負いません。`;
-const AGREEMENT_VERSION = "store-v3.0";
+/** 制定済み利用規約(LegalDocument"terms")のバージョン識別子。改訂があれば最新改訂日、無ければ制定日。ADR-0077 */
+function termsVersion(doc: TermsDocument): string {
+  const latest = doc.revisedAt.length > 0 ? doc.revisedAt[doc.revisedAt.length - 1] : doc.establishedAt;
+  return new Date(latest).toISOString().slice(0, 10);
+}
 
 type Props = {
   profile: CustomerProfile | null;
   addresses: Address[];
   pricingSettings: PricingSetting[];
   stripePublishableKey: string;
+  termsDocument: TermsDocument | null;
 };
 
 function getProfileAddress(profile: CustomerProfile | null) {
@@ -62,7 +67,7 @@ function getProfileAddress(profile: CustomerProfile | null) {
   };
 }
 
-export default function StoreRequestForm({ profile, addresses, pricingSettings, stripePublishableKey }: Props) {
+export default function StoreRequestForm({ profile, addresses, pricingSettings, stripePublishableKey, termsDocument }: Props) {
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
   // 代理入力数（同一カードは1としてカウント）。実際のサービスレベル・鑑定料はカードお預け後にスタッフが確定する。ADR-0026
@@ -117,6 +122,10 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
       setError("利用規約に同意してください");
       return;
     }
+    if (!termsDocument) {
+      setError("利用規約の読み込みに失敗しました。時間をおいて再度お試しください。");
+      return;
+    }
     if (!selectedAddress) {
       setError("発送先情報を登録してください");
       return;
@@ -146,8 +155,8 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
           address2: selectedAddress.address2 || undefined,
         },
         shippingPhone: shippingPhone.trim(),
-        agreementText: AGREEMENT_TEXT,
-        agreementVersion: AGREEMENT_VERSION,
+        agreementText: termsDocument.body,
+        agreementVersion: termsVersion(termsDocument),
         ipAddress: "",
         userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
       });
@@ -410,10 +419,28 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-        <h3 className="font-bold text-gray-800">利用規約</h3>
-        <pre className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto">
-          {AGREEMENT_TEXT}
-        </pre>
+        <h3 className="font-bold text-gray-800">代理入力・先払いの流れ</h3>
+        <ul className="text-xs text-gray-600 list-disc pl-4 space-y-1">
+          {PROXY_FLOW_NOTE.map((line, i) => (
+            <li key={i}>{line}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">利用規約</h3>
+          <Link href="/terms" target="_blank" className="text-xs text-brand-600 hover:underline">
+            全文を別ページで見る →
+          </Link>
+        </div>
+        <div className="text-xs text-gray-600 bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+          {termsDocument ? (
+            renderLegalMarkdown(termsDocument.body)
+          ) : (
+            <p className="text-gray-400">利用規約を読み込めませんでした。</p>
+          )}
+        </div>
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
           利用規約に同意します

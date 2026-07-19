@@ -252,6 +252,13 @@ export async function createApplication(
           },
         });
 
+    // 決済未完了で離脱した既存の下書きを再送信する場合、前回の`createApplication`で作成済みの
+    // カード・同意書が残っている（Agreement.applicationIdはunique）。重複作成を避けるため先に削除する。
+    if (existingDraftId) {
+      await tx.card.deleteMany({ where: { applicationId: existingDraftId } });
+      await tx.agreement.deleteMany({ where: { applicationId: existingDraftId } });
+    }
+
     // カード作成（顧客入力のため代行手数料は0）
     // 原価: 明示設定があればそれを、未設定(0)なら鑑定料×80%で代替（全itemType共通。ADR-0026）。
     // カードごとに選択したタイアで価格を計算する（自己入力でも複数レベルにまたがる申込に対応）。ADR-0038/0076
