@@ -168,8 +168,9 @@ type Props = {
   termsDocument: TermsDocument | null;
 };
 
+// サービスレベルはカードごとに選ぶため（ADR-0076）、独立した「サービス選択」ステップは廃止し
+// 提出先・アイテム種別・デュアルサービス切替は「カード情報」ステップの先頭に統合した。ADR-0077
 const STEPS = [
-  { key: "service", label: "サービス選択" },
   { key: "cards", label: "カード情報" },
   { key: "shipping", label: "発送先" },
   { key: "confirm", label: "確認・同意" },
@@ -188,8 +189,8 @@ export default function ApplyForm({
   termsDocument,
 }: Props) {
   const router = useRouter();
-  const [step, setStep] = useState<StepKey>(initialDraft ? "cards" : "service");
-  const [maxStep, setMaxStep] = useState(initialDraft ? 1 : 0); // 到達済みの最大ステップindex
+  const [step, setStep] = useState<StepKey>("cards");
+  const [maxStep, setMaxStep] = useState(0); // 到達済みの最大ステップindex
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.draftId ?? null);
 
   const [region, setRegion] = useState<ServiceRegion>(initialDraft?.region ?? "PSA_JP");
@@ -259,7 +260,6 @@ export default function ApplyForm({
     ? customServicePrices.filter((p) => p.region === region && p.category === "AUTOGRAPH" && p.isActive)
     : [];
   const autographActive = activeAutographTiers.length > 0;
-  const hasSelectedService = !!customServiceLevelId;
   const tierOptionsToShow = serviceMode === "DUAL" ? activeAutographTiers : customTierOptions;
   const fieldLabels = CARD_FIELD_LABELS[itemType];
 
@@ -315,7 +315,13 @@ export default function ApplyForm({
     } else {
       setCards((prev) => [...prev, draft]);
     }
-    clearDraft();
+    // 次に追加するカードの既定値として、直近で選んだサービスレベルを覚えておく（独立した
+    // 「サービス選択」ステップを廃止したため、この記憶が唯一の既定値の出どころになる）。ADR-0077
+    const nextDefaultTier = draft.customServiceLevelId;
+    setCustomServiceLevelId(nextDefaultTier);
+    setDraft(emptyCard(nextDefaultTier));
+    setEditingIndex(null);
+    setError("");
   }
 
   function editCard(i: number) {
@@ -516,29 +522,27 @@ export default function ApplyForm({
 
   async function handleSaveAndExit() {
     saveDraftToStorage();
-    // サービス選択済みならサーバーにも下書き保存（端末をまたいで再開可能に）
-    if (hasSelectedService) {
-      const res = await saveDraftServer({
-        draftId: draftId ?? undefined,
-        region,
-        itemType,
-        customServiceLevelId: customServiceLevelId ?? undefined,
-        returnMethod,
-        returnSel,
-        cards: cards.map((c) => ({
-          tcgTitle: c.tcgTitle,
-          releaseYear: c.releaseYear,
-          cardNumber: c.cardNumber,
-          cardName: c.cardName,
-          rarity: c.rarity,
-          language: c.language,
-          quantity: c.quantity,
-          declaredValue: c.declaredValue,
-          customServiceLevelId: c.customServiceLevelId ?? "",
-        })),
-      });
-      if (res.success && res.draftId) setDraftId(res.draftId);
-    }
+    // サーバーにも下書き保存（端末をまたいで再開可能に）
+    const res = await saveDraftServer({
+      draftId: draftId ?? undefined,
+      region,
+      itemType,
+      customServiceLevelId: customServiceLevelId ?? undefined,
+      returnMethod,
+      returnSel,
+      cards: cards.map((c) => ({
+        tcgTitle: c.tcgTitle,
+        releaseYear: c.releaseYear,
+        cardNumber: c.cardNumber,
+        cardName: c.cardName,
+        rarity: c.rarity,
+        language: c.language,
+        quantity: c.quantity,
+        declaredValue: c.declaredValue,
+        customServiceLevelId: c.customServiceLevelId ?? "",
+      })),
+    });
+    if (res.success && res.draftId) setDraftId(res.draftId);
     router.push("/mypage");
   }
 
@@ -556,10 +560,6 @@ export default function ApplyForm({
     }
     if (!termsDocument) {
       setError("利用規約の読み込みに失敗しました。時間をおいて再度お試しください。");
-      return;
-    }
-    if (!hasSelectedService) {
-      setError("サービスを選択してください");
       return;
     }
     if (cards.some((c) => !c.customServiceLevelId)) {
@@ -768,8 +768,8 @@ export default function ApplyForm({
           </div>
         )}
 
-        {/* STEP 1: Service */}
-        {step === "service" && (
+        {/* STEP 1: Cards（提出先・アイテム種別・デュアルサービス切替はこの先頭にまとめる。ADR-0077） */}
+        {step === "cards" && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h2 className="font-bold text-gray-800">鑑定提出先</h2>
@@ -856,62 +856,6 @@ export default function ApplyForm({
                 </div>
               </div>
             )}
-
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <h2 className="font-bold text-gray-800">サービスレベル</h2>
-              <p className="text-xs text-gray-500">
-                申告金額の上限に応じてサービスを選んでください。選択後にカードを入力します。
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {tierOptionsToShow.map((tier) => (
-                  <button
-                    key={tier.id}
-                    onClick={() => setCustomServiceLevelId(tier.id)}
-                    className={`border-2 rounded-xl p-4 text-left transition ${
-                      customServiceLevelId === tier.id
-                        ? "border-brand-500 bg-brand-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <p className="font-bold text-gray-900">{tier.name}</p>
-                    <p className="text-brand-600 font-medium">{formatMoney(tier.pricePerCard, region)}/枚</p>
-                    <p className="text-xs text-gray-500">
-                      申告価格上限{" "}
-                      {tier.maxDeclaredValue === null ? "なし" : formatMoneyInt(tier.maxDeclaredValue, region)}
-                    </p>
-                  </button>
-                ))}
-              </div>
-              {tierOptionsToShow.length === 0 && (
-                <p className="text-sm text-gray-500">このアイテム種別のサービスは現在準備中です。</p>
-              )}
-            </div>
-
-            <button
-              onClick={() => {
-                if (!hasSelectedService) {
-                  setError("サービスレベルを選択してください");
-                  return;
-                }
-                setError("");
-                // 最初のカード入力欄には、ここで選んだサービスレベルを既定値として反映する。ADR-0076
-                setDraft((d) => ({ ...d, customServiceLevelId: d.customServiceLevelId ?? customServiceLevelId }));
-                goStep("cards");
-              }}
-              className="w-full bg-brand-600 text-white font-bold py-4 rounded-xl hover:bg-brand-700 transition"
-            >
-              {fieldLabels.entryLabel}情報の入力へ
-            </button>
-          </div>
-        )}
-
-        {/* STEP 2: Cards */}
-        {step === "cards" && (
-          <div className="space-y-6">
-            <div className="bg-brand-50 border border-brand-200 rounded-xl p-4 text-sm text-brand-800">
-              提出先: <strong>{REGION_LABELS[region]}{region === "PSA_US" ? ` / ${ITEM_TYPE_LABELS[itemType]}` : ""}</strong>
-              {" "}／ {fieldLabels.entryLabel}ごとにサービスレベルを選べます（下の入力フォームで選択）。
-            </div>
 
             {/* Card entry form */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
