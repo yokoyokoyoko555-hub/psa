@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<"credentials" | "2fa">("credentials");
@@ -28,7 +26,7 @@ export default function AdminLoginPage() {
       setLoading(false);
     } else {
       // TODO: 2FA対応 - ここでtwoFactorEnabledをチェックして2FA画面へ
-      router.push("/admin/dashboard");
+      window.location.assign("/admin/dashboard");
     }
   }
 
@@ -92,7 +90,7 @@ export default function AdminLoginPage() {
               <button
                 onClick={() => {
                   // TODO: TOTP検証
-                  router.push("/admin/dashboard");
+                  window.location.assign("/admin/dashboard");
                 }}
                 disabled={totpCode.length !== 6}
                 className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
