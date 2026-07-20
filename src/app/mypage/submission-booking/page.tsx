@@ -21,9 +21,10 @@ export default async function SubmissionBookingPage() {
   if (!customer) redirect("/login");
 
   // 支払い済み（SUCCEEDED な決済あり）のみ予約対象。STORE/CUSTOMER 共通（代理申込も先払い化）。ADR-0020
-  // STORE は先払い後も status=DRAFT のため status では絞らず決済で判定する。
   // 自己入力は受取完了済み（当社が実物を受け取り済み）で除外。代理入力はカードが既に店舗にあるため
-  // 受取完了は出ず、支払完了（差額決済含め全額支払済み＝PENDINGな決済が無い）の時点で除外する。ADR-0034/0054
+  // 受取完了は出ず、明細入力・確定（completeStoreApplication）でstatusがDRAFTから進んだ時点で除外する。
+  // ※「PENDINGな決済が無い」を代理入力の除外条件にしていた旧実装は、先払い直後（差額請求がまだ
+  // 発生していない状態）もPENDINGが無いため誤って除外してしまうバグがあった。ADR-0034/0054
   const applicationsRaw = await prisma.application.findMany({
     where: {
       customerId: customer.id,
@@ -31,7 +32,7 @@ export default async function SubmissionBookingPage() {
       payments: { some: { status: "SUCCEEDED" } },
       receivedAt: null,
       NOT: {
-        AND: [{ source: "STORE" }, { payments: { none: { status: "PENDING" } } }],
+        AND: [{ source: "STORE" }, { status: { not: "DRAFT" } }],
       },
     },
     include: {

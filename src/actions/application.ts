@@ -488,7 +488,7 @@ export async function confirmApplicationPayment(
 const storeRequestSchema = z.object({
   region: z.nativeEnum(ServiceRegion),
   itemType: z.nativeEnum(ItemType).default("TRADING_CARD"), // PSA_JPは常にTRADING_CARDへサーバー側で補正。ADR-0023
-  // 代理入力数（同一カードは1としてカウント）。実際のサービスレベル・鑑定料は
+  // 代理入力種類（同一カードは1としてカウント）。実際のサービスレベル・鑑定料は
   // カードお預け後にスタッフが明細を確定し、別途メールで請求する（このステップでは選択しない）。ADR-0026
   agencyQuantity: z.number().int().min(1).max(500),
   // 申込総数（あくまで当社の総量把握のための参考値。料金計算には使わない）。ADR-0037
@@ -503,11 +503,11 @@ const storeRequestSchema = z.object({
 });
 
 /**
- * 代理申込（当社入力）の依頼を顧客が作成し、代理入力費用（代理入力数×代理入力料。内税）を先払いする。
+ * 代理申込（当社入力）の依頼を顧客が作成し、代理入力費用（代理入力種類×代理入力料。内税）を先払いする。
  * ADR-0020 / ADR-0026
  * 事務手数料はここでは請求しない（サービス単位×事務手数料のため、実際のサービスレベルが確定する
  * completeStoreApplication 側で計算・請求する）。
- * カード明細・サービスレベルは入れず、代理入力数・提出先・返却方法・同意のみ。先払い決済後にカードお預け予約へ進む。
+ * カード明細・サービスレベルは入れず、代理入力種類・提出先・返却方法・同意のみ。先払い決済後にカードお預け予約へ進む。
  * 店舗到着後にスタッフが明細・サービスレベルを確定し、鑑定料・事務手数料は別途メールで請求する（本実装の対象外）。
  * 返り値の clientSecret で顧客がカード決済し、confirmStorePrepayPayment で確定する。
  */

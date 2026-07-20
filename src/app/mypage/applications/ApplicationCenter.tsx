@@ -69,9 +69,10 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
   const [busy, setBusy] = useState(false);
 
   const submitted = rows.filter((a) => !a.isDraft);
-  // 作業中には代理入力(STORE)を含めない（代理入力は先払い後の予約・確認フローで案内済みのため）
+  // 代理入力(STORE)は先払い後もスタッフの明細確定までstatus=DRAFTのままのため、
+  // 予約前に離脱すると申込一覧から二度と辿れなくなっていたバグを修正。作業中に含める。
   const drafts = rows
-    .filter((a) => a.isDraft && a.source !== "STORE")
+    .filter((a) => a.isDraft)
     .sort((a, b) =>
       order === "asc"
         ? a.createdAt.localeCompare(b.createdAt)

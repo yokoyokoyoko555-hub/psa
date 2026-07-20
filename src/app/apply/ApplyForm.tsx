@@ -89,7 +89,7 @@ const CARD_FIELD_LABELS: Record<
     secondaryLabel: "言語",
     secondaryPlaceholder: "例: 日本語",
     nameLabel: "パック名",
-    namePlaceholder: "例: ブースターパック",
+    namePlaceholder: "例: ロマンスドーン",
     quantityLabel: "枚数",
     quantityUnit: "枚",
     showCardNumberRarity: false,
@@ -895,7 +895,7 @@ export default function ApplyForm({
                   <label className="block text-xs text-gray-500 mb-1">タイトル *</label>
                   <input
                     className={inputCls}
-                    placeholder="例: ワンピースカードゲーム"
+                    placeholder="例: ワンピース"
                     value={draft.tcgTitle}
                     onChange={(e) => setDraftField("tcgTitle", e.target.value)}
                   />
@@ -952,6 +952,7 @@ export default function ApplyForm({
                     type="number"
                     min={1}
                     className={inputCls}
+                    placeholder="例: 1"
                     value={draft.quantity || ""}
                     onChange={(e) => setDraftField("quantity", parseInt(e.target.value) || 0)}
                   />

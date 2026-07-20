@@ -30,9 +30,9 @@ const ITEM_TYPE_LABELS: Record<ItemType, string> = {
 // 代理入力（先払い→後日確定分請求）特有の流れの説明。利用規約の同意対象ではなく、単なる案内文。ADR-0077
 const PROXY_FLOW_NOTE = [
   "代理入力では、お客様に入力いただくのは代理入力する枚数・申込総数・返送先・電話番号・クレジットカード情報のみです。",
-  "お申込み時には、代理入力する枚数×代理入力費用（消費税込み）を先にお支払いいただきます。事務手数料は、実際のサービスが確定した際に別途ご請求します。",
-  "お支払い後、カードのお預け（店頭持込・郵送）をご予約ください。",
-  "当社で代理入力が完了次第、ご提出いただいたカードの内容に応じた鑑定料を別途メールにてご請求いたします。",
+  "お申込み時には、代理入力種類×代理入力費用 （税込1,100円）を先にお支払いいただきます。",
+  "代理入力料のお支払い後に、カードのお預け（店頭持込・郵送）をご予約ください。",
+  "当社で代理入力が完了次第、ご提出いただいたカードの内容に応じた鑑定および事務手数料を別途メールにてご請求いたします。",
 ];
 
 /** 制定済み利用規約(LegalDocument"terms")のバージョン識別子。改訂があれば最新改訂日、無ければ制定日。ADR-0077 */
@@ -70,7 +70,7 @@ function getProfileAddress(profile: CustomerProfile | null) {
 export default function StoreRequestForm({ profile, addresses, pricingSettings, stripePublishableKey, termsDocument }: Props) {
   const [region, setRegion] = useState<ServiceRegion>("PSA_JP");
   const [itemType, setItemType] = useState<ItemType>("TRADING_CARD");
-  // 代理入力数（同一カードは1としてカウント）。実際のサービスレベル・鑑定料はカードお預け後にスタッフが確定する。ADR-0026
+  // 代理入力種類（同一カードは1としてカウント）。実際のサービスレベル・鑑定料はカードお預け後にスタッフが確定する。ADR-0026
   const [agencyQuantity, setAgencyQuantity] = useState<number>(0);
   // 申込総数（あくまで当社の総量把握のための参考値。料金計算には使わない）。ADR-0037
   const [estimatedTotalCount, setEstimatedTotalCount] = useState<number>(0);
@@ -111,7 +111,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
 
   async function handleSubmit() {
     if (agencyQuantity < 1) {
-      setError("代理入力数を入力してください");
+      setError("代理入力種類を入力してください");
       return;
     }
     if (estimatedTotalCount < 1) {
@@ -206,7 +206,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         <h2 className="text-lg font-bold text-gray-900">代理入力費用のお支払い</h2>
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           <div className="flex justify-between text-sm text-gray-700">
-            <span>代理入力数 {agencyQuantity} 点 × 代理入力料（{formatMoneyIn(proxyFee, "JPY")}/点）</span>
+            <span>代理入力種類 {agencyQuantity} 点 × 代理入力料（{formatMoneyIn(proxyFee, "JPY")}/点）</span>
             <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
           </div>
           <p className="text-xs text-gray-500 text-right">（内消費税 {formatMoneyIn(innerTax, "JPY")}）</p>
@@ -298,9 +298,9 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h3 className="font-bold text-gray-800">代理入力数・申込総数</h3>
+        <h3 className="font-bold text-gray-800">代理入力種類・申込総数</h3>
         <div className="flex items-center justify-between gap-3">
-          <label className="text-sm font-bold text-gray-700">代理入力数</label>
+          <label className="text-sm font-bold text-gray-700">代理入力種類</label>
           <input
             type="number"
             min={1}
@@ -332,7 +332,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         {agencyQuantity > 0 && (
           <div className="rounded-lg bg-gray-50 p-4 space-y-1 text-sm">
             <div className="flex justify-between text-gray-700">
-              <span>代理入力数 {agencyQuantity} 点 × 代理入力料（{formatMoneyIn(proxyFee, "JPY")}/点）</span>
+              <span>代理入力種類 {agencyQuantity} 点 × 代理入力料（{formatMoneyIn(proxyFee, "JPY")}/点）</span>
               <span>{formatMoneyIn(agencyFeeTotal, "JPY")}</span>
             </div>
             <p className="text-xs text-gray-500 text-right">（内消費税 {formatMoneyIn(innerTax, "JPY")}）</p>

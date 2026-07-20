@@ -33,7 +33,7 @@ export default async function StoreRequestsPage() {
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">申込番号</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">顧客</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">提出先</th>
-                <th className="text-left px-4 py-3 text-gray-600 font-medium">代理入力数</th>
+                <th className="text-left px-4 py-3 text-gray-600 font-medium">代理入力種類</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">総枚数</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">返却</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">依頼日</th>

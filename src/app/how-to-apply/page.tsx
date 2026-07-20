@@ -6,8 +6,7 @@ import Footer from "@/components/Footer";
 export const metadata = { title: "申込の流れ | トレカビンクス" };
 
 const SELF_STEPS = [
-  "アイテム・サービス選択",
-  "アイテム情報・返送先・決済情報入力",
+  "提出先・アイテム・サービス選択・情報・返送先・決済情報入力",
   "オンライン決済",
   "提出予約（店頭持込／郵送）",
 ];
@@ -64,6 +63,9 @@ export default function HowToApplyPage() {
             </ol>
             <p className="text-xs text-gray-400 mt-3 pt-3 border-t border-gray-100">
               ※ 選択されたサービスごとに入力していただきます。
+            </p>
+            <p className="text-xs text-gray-400 mt-1">
+              ※ 一度の申込で複数のサービスに申し込めます。
             </p>
           </div>
 

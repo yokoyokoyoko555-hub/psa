@@ -746,7 +746,7 @@ export async function getStoreRequests() {
     createdAt: a.createdAt,
     customerEmail: a.customer.email,
     customerName: decrypt(a.customer.nameEncrypted),
-    agencyQuantity: a.agencyQuantity, // 代理入力数（顧客申告）。ADR-0038
+    agencyQuantity: a.agencyQuantity, // 代理入力種類（顧客申告）。ADR-0038
     estimatedCardCount: a.estimatedCardCount, // 申込総数（顧客申告・参考値）。ADR-0037
     awaitingPayment: a.status === "SUBMITTED", // true=入力・確定済みで顧客の支払い待ち。ADR-0044
   }));
