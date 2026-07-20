@@ -15,38 +15,50 @@ const METHOD_LABELS: Record<string, string> = {
   SHIPPING: "郵送",
 };
 
-/** クエリの週開始日（YYYY-MM-DD）をパースし、その週の月曜0時を返す。不正・未指定なら今週の月曜。 */
-function parseWeekStart(value?: string): Date {
-  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const base = match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : new Date();
-  const dow = base.getDay(); // 0=日, 1=月, ..., 6=土
-  const diffToMonday = (dow + 6) % 7; // 月曜からの経過日数
-  const monday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - diffToMonday);
-  return monday;
+// サーバーのタイムゾーン（Railway等はUTCが既定でJSTではない）に日付・時刻表示が左右されないよう、
+// Dateの現地getterは使わずJST基準で明示的に変換する。書き込み側（actions/submission-booking.ts の
+// dateKeyToJstDate）と同じ「JST基準」に統一しないと、カレンダー設定が前日にずれて表示される
+// バグになる（設定した日と別の日のマスに表示され、開き直しても実体を編集できなくなる）。
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** "YYYY-MM-DD"（JST）をその瞬間（JST 0時）のDateに変換。actions/submission-booking.tsと同じ定義。 */
+function dateKeyToJstDate(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00+09:00`);
 }
 
-function toDateParam(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
+/** DateをJST基準の"YYYY-MM-DD"キーに変換 */
 function toDateKey(date: Date) {
-  return toDateParam(date);
+  const jst = new Date(date.getTime() + JST_OFFSET_MS);
+  return `${jst.getUTCFullYear()}-${String(jst.getUTCMonth() + 1).padStart(2, "0")}-${String(jst.getUTCDate()).padStart(2, "0")}`;
 }
 
-function makeWeekDays(weekStart: Date) {
-  return Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + i);
-    return date;
-  });
+/** JST基準でdateKeyにN日加算した"YYYY-MM-DD"キーを返す */
+function addDaysToKey(dateKey: string, days: number) {
+  return toDateKey(new Date(dateKeyToJstDate(dateKey).getTime() + days * 86400000));
+}
+
+/** クエリの週開始日（YYYY-MM-DD）をパースし、その週の月曜（YYYY-MM-DD, JST）を返す。不正・未指定なら今週の月曜。 */
+function parseWeekStartKey(value?: string): string {
+  const match = value?.match(/^\d{4}-\d{2}-\d{2}$/);
+  const baseKey = match ? value! : toDateKey(new Date());
+  const baseJst = new Date(dateKeyToJstDate(baseKey).getTime() + JST_OFFSET_MS);
+  const dow = baseJst.getUTCDay(); // JST基準の曜日。0=日, 1=月, ..., 6=土
+  const diffToMonday = (dow + 6) % 7; // 月曜からの経過日数
+  return addDaysToKey(baseKey, -diffToMonday);
 }
 
 function formatTime(date: Date) {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const jst = new Date(date.getTime() + JST_OFFSET_MS);
+  return `${String(jst.getUTCHours()).padStart(2, "0")}:${String(jst.getUTCMinutes()).padStart(2, "0")}`;
 }
 
-function formatMonthDay(date: Date) {
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+function formatMonthDay(dateKey: string) {
+  const [, m, d] = dateKey.split("-");
+  return `${Number(m)}/${Number(d)}`;
+}
+
+function yearOfKey(dateKey: string) {
+  return Number(dateKey.slice(0, 4));
 }
 
 export default async function AdminSubmissionBookingsPage({
@@ -55,10 +67,12 @@ export default async function AdminSubmissionBookingsPage({
   searchParams: Promise<{ week?: string }>;
 }) {
   const sp = await searchParams;
-  const weekStart = parseWeekStart(sp.week);
-  const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7);
-  const prevWeek = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() - 7);
-  const nextWeek = weekEnd;
+  const weekStartKey = parseWeekStartKey(sp.week);
+  const weekEndKey = addDaysToKey(weekStartKey, 7);
+  const prevWeekKey = addDaysToKey(weekStartKey, -7);
+  const nextWeekKey = weekEndKey;
+  const weekStart = dateKeyToJstDate(weekStartKey);
+  const weekEnd = dateKeyToJstDate(weekEndKey);
 
   const [bookings, calendarDays] = await Promise.all([
     prisma.submissionBooking.findMany({
@@ -90,8 +104,8 @@ export default async function AdminSubmissionBookingsPage({
   }
   const settingsByDate = new Map(calendarDays.map((day) => [toDateKey(new Date(day.date)), day]));
 
-  const days = makeWeekDays(weekStart);
-  const weekEndDisplay = days[days.length - 1];
+  const dayKeys = Array.from({ length: 7 }, (_, i) => addDaysToKey(weekStartKey, i));
+  const weekEndDisplayKey = dayKeys[dayKeys.length - 1];
   const bookedCount = bookings.filter((b) => b.status === "BOOKED").length;
 
   return (
@@ -107,18 +121,18 @@ export default async function AdminSubmissionBookingsPage({
       <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <Link
-            href={`/admin/submission-bookings?week=${toDateParam(prevWeek)}`}
+            href={`/admin/submission-bookings?week=${prevWeekKey}`}
             className="w-9 h-9 rounded-full border border-gray-200 text-gray-600 hover:border-brand-300 flex items-center justify-center"
           >
             ‹
           </Link>
           <h2 className="font-bold text-gray-900">
-            {weekStart.getFullYear()}年 {formatMonthDay(weekStart)} 〜{" "}
-            {weekEndDisplay.getFullYear() !== weekStart.getFullYear() ? `${weekEndDisplay.getFullYear()}年 ` : ""}
-            {formatMonthDay(weekEndDisplay)}
+            {yearOfKey(weekStartKey)}年 {formatMonthDay(weekStartKey)} 〜{" "}
+            {yearOfKey(weekEndDisplayKey) !== yearOfKey(weekStartKey) ? `${yearOfKey(weekEndDisplayKey)}年 ` : ""}
+            {formatMonthDay(weekEndDisplayKey)}
           </h2>
           <Link
-            href={`/admin/submission-bookings?week=${toDateParam(nextWeek)}`}
+            href={`/admin/submission-bookings?week=${nextWeekKey}`}
             className="w-9 h-9 rounded-full border border-gray-200 text-gray-600 hover:border-brand-300 flex items-center justify-center"
           >
             ›
@@ -134,8 +148,7 @@ export default async function AdminSubmissionBookingsPage({
         </div>
 
         <div className="grid grid-cols-7">
-          {days.map((date) => {
-            const key = toDateKey(date);
+          {dayKeys.map((key) => {
             const dayBookings = grouped.get(key) ?? [];
             const daySetting = settingsByDate.get(key);
             return (
@@ -146,7 +159,7 @@ export default async function AdminSubmissionBookingsPage({
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold">{formatMonthDay(date)}</span>
+                  <span className="text-sm font-bold">{formatMonthDay(key)}</span>
                   <DaySettingsButton
                     date={key}
                     isClosed={daySetting?.isClosed ?? false}

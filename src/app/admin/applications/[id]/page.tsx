@@ -301,7 +301,7 @@ export default async function AdminApplicationDetailPage({
             <UpchargeForm
               cards={application.cards.map((c) => ({
                 id: c.id,
-                label: `${c.cardName}（${c.tcgTitle}・申告額${formatMoneyInt(c.declaredValue, application.region)}）`,
+                label: `${c.lineNo != null ? `${c.lineNo}. ` : ""}${c.cardName}（${c.tcgTitle}・申告額${formatMoneyInt(c.declaredValue, application.region)}）`,
               }))}
             />
           </div>

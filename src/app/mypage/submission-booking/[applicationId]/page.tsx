@@ -96,24 +96,11 @@ export default async function BookingDetailPage({
           <div className="px-6 py-4 bg-gray-50 text-xs text-gray-600 leading-relaxed">
             {isStore ? (
               <>
-                <p>店頭では、この受付番号の画面提示と本人確認書類（運転免許証等）でのご本人様確認を行います。</p>
-                <p className="mt-2">カードは以下の準備をしてご提出お願いいたします。</p>
-                <ol className="list-decimal pl-4 mt-1 space-y-1">
-                  <li>カードはソフトスリーブにカードを入れ、スリーブに入ったカードをカードセイバーに入れてください。</li>
-                  <li>面前にてカードの確認を行いますが、注文ごとにアイテムをグループ分けして番号通りに並べてご提出お願いいたします。</li>
-                </ol>
-              </>
-            ) : (
-              <>
-                <p className="font-bold text-gray-700">郵送時のご注意</p>
-                <p className="mt-2">カードは以下の準備をしてご提出お願いいたします。</p>
-                <ol className="list-decimal pl-4 mt-1 space-y-2">
+                <p className="font-bold text-gray-700">店頭持込時のご注意</p>
+                <ol className="list-decimal pl-4 mt-2 space-y-2">
+                  <li>店頭にて、この受付番号の画面と本人確認書類（運転免許証等）のご提示をお願いします。</li>
                   <li>
-                    カードはソフトスリーブにカードを入れ、スリーブに入ったカードをカードセイバーに入れてください。透明スリーブ・カードセイバーに入っていないカードのご提出はお受けしておりません。
-                  </li>
-                  <li>紛失などの都合上、ポスト投函および置配は不可にして郵送してください。</li>
-                  <li>
-                    当社は郵送受付後に動画撮影付きで開封および申込内容との一致確認を行っておりますが、お客様におかれましても、郵送前のカードを事前に写真撮影お願いいたします。紛失等につきましては当社は責任を負いかねます。（お写真のご提出は不要です）
+                    カードは透明なスリーブとカードセイバーに入れてください。透明スリーブ・カードセイバーに入っていないカードのご提出はお受けしておりません。
                   </li>
                 </ol>
                 {app.source !== "STORE" && (
@@ -122,6 +109,31 @@ export default async function BookingDetailPage({
                     <p className="mt-1">下記から確認できる申込内容通りの順番に並べてご提出をお願いしております。</p>
                   </>
                 )}
+                <p className="mt-2">
+                  ソフトスリーブおよびカードセイバーは
+                  <a
+                    href={SUPPLY_STORE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-600 underline"
+                  >
+                    こちら
+                  </a>
+                  からお買い求めいただけます。
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-bold text-gray-700">郵送時のご注意</p>
+                <ol className="list-decimal pl-4 mt-2 space-y-2">
+                  <li>
+                    カードは透明なスリーブとカードセイバーに入れてください。透明スリーブ・カードセイバーに入っていないカードのご提出はお受けしておりません。
+                  </li>
+                  <li>紛失などの都合上、ポスト投函および置配は不可にして郵送してください。郵送時の紛失等につきましては当社は責任を負いかねます。</li>
+                  <li>
+                    当社は郵送受付後に動画撮影付きで開封および申込内容との一致確認を行っております。お客様におかれましても、郵送前のカードを事前に写真撮影お願いいたします。（お写真のご提出は不要です）
+                  </li>
+                </ol>
                 <p className="mt-2">
                   ソフトスリーブおよびカードセイバーは
                   <a

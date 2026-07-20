@@ -53,7 +53,7 @@ function SourceBadge({ source }: { source: string }) {
   const isStore = source === "STORE";
   return (
     <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
+      className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold ${
         isStore ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"
       }`}
     >
@@ -155,63 +155,65 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium">申込</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium">種別</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium">提出先</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium">サービスレベル</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium">作成日</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {drafts.map((a) => (
-                  <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 font-medium text-gray-900">
-                      {a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : `${a.cardCount} 枚`}
-                    </td>
-                    <td className="px-4 py-4"><SourceBadge source={a.source} /></td>
-                    <td className="px-4 py-4 text-gray-700">
-                      {a.region}
-                      {a.itemType ? ` / ${a.itemType}` : ""}
-                    </td>
-                    <td className="px-4 py-4 text-gray-700">{a.serviceLevel}</td>
-                    <td className="px-4 py-4 text-gray-700">{fmt(a.createdAt)}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        {a.source === "STORE" ? (
-                          <button
-                            onClick={() => router.push(`/mypage/submission-booking/${a.id}`)}
-                            className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-                          >
-                            予約・確認
-                          </button>
-                        ) : (
-                          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">申込</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">種別</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">提出先</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">サービスレベル</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">作成日</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {drafts.map((a) => (
+                    <tr key={a.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-4 font-medium text-gray-900 whitespace-nowrap">
+                        {a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : `${a.cardCount} 枚`}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap"><SourceBadge source={a.source} /></td>
+                      <td className="px-4 py-4 text-gray-700 whitespace-nowrap">
+                        {a.region}
+                        {a.itemType ? ` / ${a.itemType}` : ""}
+                      </td>
+                      <td className="px-4 py-4 text-gray-700 whitespace-nowrap">{a.serviceLevel}</td>
+                      <td className="px-4 py-4 text-gray-700 whitespace-nowrap">{fmt(a.createdAt)}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                          {a.source === "STORE" ? (
                             <button
-                              onClick={() => handleDelete(a.id)}
-                              disabled={busy}
-                              className="w-9 h-9 rounded-full border border-gray-200 text-red-500 hover:bg-red-50 flex items-center justify-center"
-                              title="削除"
-                            >
-                              🗑
-                            </button>
-                            <button
-                              onClick={() => router.push(`/apply?draft=${a.id}`)}
+                              onClick={() => router.push(`/mypage/submission-booking/${a.id}`)}
                               className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                             >
-                              続行
+                              予約・確認
                             </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleDelete(a.id)}
+                                disabled={busy}
+                                className="w-9 h-9 rounded-full border border-gray-200 text-red-500 hover:bg-red-50 flex items-center justify-center"
+                                title="削除"
+                              >
+                                🗑
+                              </button>
+                              <button
+                                onClick={() => router.push(`/apply?draft=${a.id}`)}
+                                className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                続行
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>
