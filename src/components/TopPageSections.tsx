@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-// トップページ（未ログイン時）をLP風にするための追加セクション。ログイン/新規登録フォーム（AuthScreen）は
-// そのまま維持し、その下に表示する。実績・数値などコード上で裏付けられない訴求文言は使わない。
+// トップページ（未ログイン時）のLPセクション。ヘッダー（TopPageHeader）とアイキャッチの下に表示する。
+// 実績・数値などコード上で裏付けられない訴求文言は使わない。
 const FEATURES = [
   { icon: "🌏", title: "PSA日本・PSA US両対応", text: "提出先を選んで、国内・海外どちらのPSA鑑定にもお申込みいただけます。" },
   { icon: "⌨️", title: "自己入力・代理入力から選べる", text: "ご自身で入力する自己入力、当社スタッフが代行する代理入力、どちらもお選びいただけます。" },
@@ -21,7 +21,7 @@ export default function TopPageSections() {
       <div className="max-w-3xl mx-auto px-4 py-10 space-y-10">
         {/* 選ばれる理由 */}
         <section>
-          <h2 className="text-lg font-bold text-gray-900 text-center mb-6">トレカビンクスでPSA鑑定申込</h2>
+          <h2 className="text-lg font-bold text-gray-900 text-center mb-6">選ばれる理由</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {FEATURES.map((f) => (
               <div key={f.title} className="bg-white rounded-xl border border-gray-200 p-5">
