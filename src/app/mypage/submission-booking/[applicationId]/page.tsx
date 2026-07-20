@@ -8,6 +8,7 @@ import { decrypt } from "@/lib/crypto";
 import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import { format } from "date-fns";
+import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel } from "@/lib/application-status";
 
 export const metadata = { title: "提出予約の詳細 | トレカビンクス" };
 
@@ -15,6 +16,14 @@ const METHOD_LABELS: Record<string, string> = {
   STORE_DROP_OFF: "店頭持込",
   SHIPPING: "郵送",
 };
+
+const CARD_QUANTITY_UNIT: Record<string, string> = {
+  TRADING_CARD: "枚",
+  UNOPENED_PACK: "枚",
+  COMIC_MAGAZINE: "冊",
+};
+
+const SUPPLY_STORE_URL = "https://torecabinks2.ocnk.net/product-group/3";
 
 export default async function BookingDetailPage({
   params,
@@ -27,7 +36,7 @@ export default async function BookingDetailPage({
   const { applicationId } = await params;
   const app = await prisma.application.findFirst({
     where: { id: applicationId, customerId: customer.id },
-    include: { submissionBooking: true },
+    include: { submissionBooking: true, cards: { orderBy: { lineNo: "asc" } } },
   });
   if (!app) redirect("/mypage/submission-booking");
 
@@ -37,6 +46,17 @@ export default async function BookingDetailPage({
 
   const name = decrypt(customer.nameEncrypted);
   const isStore = booking.method === "STORE_DROP_OFF";
+  const quantityUnit = CARD_QUANTITY_UNIT[app.itemType] ?? "枚";
+
+  // 申込内容通りの順番でご提出いただくため、提出先・アイテム種別・サービスレベル単位でまとめて表示する（管理画面・申込詳細と同じ並び）。ADR-0038
+  const cardGroupMap = new Map<string, typeof app.cards>();
+  for (const card of app.cards) {
+    const key = card.customServiceLevelName ?? resolveServiceLevel(app);
+    const bucket = cardGroupMap.get(key);
+    if (bucket) bucket.push(card);
+    else cardGroupMap.set(key, [card]);
+  }
+  const cardGroups = [...cardGroupMap.entries()].sort((a, b) => a[0].localeCompare(b[0], "ja"));
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -84,11 +104,78 @@ export default async function BookingDetailPage({
                 </ol>
               </>
             ) : (
-              <p>郵送でお送りください。到着後、スタッフが受け付けます。</p>
+              <>
+                <p>郵送では以下の方法での郵送をお願いしております。</p>
+                <p className="mt-2">カードは以下の準備をしてご提出お願いいたします。</p>
+                <ol className="list-decimal pl-4 mt-1 space-y-2">
+                  <li>
+                    カードはソフトスリーブにカードを入れ、スリーブに入ったカードをカードセイバーに入れてください。透明スリーブ・カードセイバーに入っていないカードのご提出はお受けしておりません。
+                  </li>
+                  <li>申込内容通りの順番に並べてご提出お願いいたします。</li>
+                  <li>
+                    郵送前のカードを事前に写真撮影お願いいたします。（ご提出は不要です）
+                    <br />
+                    当社は郵送受付後に動画撮影付きで開封および申込内容との一致確認を行っております。
+                  </li>
+                </ol>
+                <p className="mt-2">
+                  ソフトスリーブおよびカードセイバーは
+                  <a
+                    href={SUPPLY_STORE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-600 underline"
+                  >
+                    こちら
+                  </a>
+                  からお買い求めいただけます。
+                </p>
+              </>
             )}
-            <p className="mt-2">※ 提出日時の変更は下のボタンから行えます。</p>
+            <p className="mt-2">※ 提出日時・方法の変更は左下のボタンから行えます。</p>
           </div>
         </div>
+
+        {/* 申込内容通りの順番でご提出いただくためのカード一覧 */}
+        {app.cards.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h2 className="font-bold text-gray-900 mb-1">カード一覧（{app.cards.length}{quantityUnit}）</h2>
+            <p className="text-sm text-gray-500 mb-4">この順番に並べてご提出ください。</p>
+            <div className="space-y-6">
+              {cardGroups.map(([serviceLevelName, cards]) => (
+                <div key={serviceLevelName}>
+                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-2 px-3 py-2 bg-brand-50 border border-brand-100 rounded-lg text-xs text-brand-800">
+                    <span className="font-bold">{REGION_LABELS[app.region] ?? app.region}</span>
+                    {app.region === "PSA_US" && (
+                      <>
+                        <span className="text-brand-300">・</span>
+                        <span>{ITEM_TYPE_LABELS[app.itemType] ?? app.itemType}</span>
+                      </>
+                    )}
+                    <span className="text-brand-300">・</span>
+                    <span className="font-bold">{serviceLevelName}</span>
+                    <span className="text-brand-400">（{cards.length}{quantityUnit}）</span>
+                  </div>
+                  <div className="space-y-2">
+                    {cards.map((card) => (
+                      <div key={card.id} className="flex items-center gap-3 border border-gray-200 rounded-lg px-3 py-2">
+                        {card.lineNo != null && (
+                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
+                            {card.lineNo}
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-900 text-sm truncate">{card.cardName}</p>
+                          <p className="text-xs text-gray-500 truncate">{card.tcgTitle}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <Link

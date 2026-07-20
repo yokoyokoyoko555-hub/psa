@@ -4,12 +4,13 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import CopyButton from "@/components/CopyButton";
 import UpchargeForm from "@/components/UpchargeForm";
 import MarkReceivedButton from "@/components/MarkReceivedButton";
+import CardListItem from "@/components/CardListItem";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { formatMoney, formatMoneyInt, formatMoneyIn } from "@/lib/currency";
+import { CARD_DISPLAY_LABELS } from "@/lib/card-display";
 import {
   REGION_LABELS,
   ITEM_TYPE_LABELS,
@@ -18,29 +19,6 @@ import {
   DISPLAY_STATUS,
   getApplicationGroups,
 } from "@/lib/application-status";
-
-// PSA提出フォームは英語1行のため、言語は英語表記でコピーする。
-// 自由記述化（ADR-0023）後は代表的な入力のみ変換し、それ以外はそのまま出力する。
-// 旧CardLanguage enum値（既存データ）もあわせてマッピング。
-const LANGUAGE_PSA: Record<string, string> = {
-  日本語: "Japanese",
-  英語: "English",
-  韓国語: "Korean",
-  中国語: "Chinese",
-  その他: "Other",
-  JAPANESE: "Japanese",
-  ENGLISH: "English",
-  KOREAN: "Korean",
-  CHINESE: "Chinese",
-  OTHER: "Other",
-};
-
-// アイテム種別ごとの表示ラベル切替（入力フォームと同じ考え方の表示専用版）。ADR-0033
-const CARD_DISPLAY_LABELS: Record<string, { entryLabel: string; secondaryLabel: string; quantityUnit: string }> = {
-  TRADING_CARD: { entryLabel: "カード", secondaryLabel: "言語", quantityUnit: "枚" },
-  UNOPENED_PACK: { entryLabel: "パック", secondaryLabel: "言語", quantityUnit: "枚" },
-  COMIC_MAGAZINE: { entryLabel: "コミック／マガジン", secondaryLabel: "出版社", quantityUnit: "冊" },
-};
 
 const UPCHARGE_STATUS_LABELS: Record<string, string> = {
   PENDING: "請求中",
@@ -119,6 +97,17 @@ export default async function AdminApplicationDetailPage({
       ? !application.payments.some((p) => p.status === "PENDING")
       : Boolean(application.receivedAt);
   const needsGroupAssignment = !isDraft && !isCancelled && hasCardsInHand && allGroups.length === 0;
+
+  // カード単位でサービスレベルが異なる場合（代理入力の明細確定時など。ADR-0038）に、
+  // 提出先・アイテム種別・サービスレベルがひと目でわかるようグループ化して表示する。
+  const cardGroupMap = new Map<string, typeof application.cards>();
+  for (const card of application.cards) {
+    const key = card.customServiceLevelName ?? resolveServiceLevel(application);
+    const bucket = cardGroupMap.get(key);
+    if (bucket) bucket.push(card);
+    else cardGroupMap.set(key, [card]);
+  }
+  const cardGroups = [...cardGroupMap.entries()].sort((a, b) => a[0].localeCompare(b[0], "ja"));
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -262,65 +251,29 @@ export default async function AdminApplicationDetailPage({
             <h2 className="font-bold text-gray-900 mb-4">
               {CARD_DISPLAY_LABELS[application.itemType]?.entryLabel ?? "カード"}一覧（{application.cards.length}{CARD_DISPLAY_LABELS[application.itemType]?.quantityUnit ?? "枚"}）
             </h2>
-            <div className="space-y-4">
-              {application.cards.map((card) => {
-                const displayLabels = CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
-                // PSA提出フォーム向け1行（発行年 タイトル 言語(英語)/出版社 カード番号／型番 カード名 レアリティ・半角スペース区切り）
-                // トレカ以外はcardNumber/rarityが空文字のためfilterで自然に除外される。ADR-0033
-                const psaLine = [
-                  card.releaseYear ?? "",
-                  card.tcgTitle,
-                  application.itemType === "TRADING_CARD" ? LANGUAGE_PSA[card.language] ?? card.language : card.language,
-                  card.cardNumber ?? "",
-                  card.cardName,
-                  card.rarity ?? "",
-                ]
-                  .filter((v) => v !== "" && v != null)
-                  .join(" ");
-                return (
-                <div
-                  key={card.id}
-                  className="border border-gray-200 rounded-lg p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        {card.lineNo != null && (
-                          <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
-                            {card.lineNo}
-                          </span>
-                        )}
-                        <span className="font-medium text-gray-900">{card.cardName}</span>
-                        {card.autographRequested && (
-                          <span className="text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5">
-                            🖊 オートグラフ
-                          </span>
-                        )}
-                        {/* PSA提出フォーム向け: 半角スペース区切り1行をコピー */}
-                        <CopyButton label="行コピー" text={psaLine} />
-                      </div>
-                      {/* 顧客入力内容を半角スペース区切り1行で表示（コピー内容と同一） */}
-                      <p className="mt-1 text-xs font-mono text-gray-700 bg-gray-50 rounded px-2 py-1 break-all">
-                        {psaLine}
-                      </p>
-                      <p className="mt-1 flex gap-3 text-xs text-gray-500">
-                        <span className="font-mono text-gray-400">{card.cardNo}</span>
-                        <span>申告額: {formatMoneyInt(card.declaredValue, application.region)}</span>
-                        <span>{displayLabels.secondaryLabel}: {card.language}</span>
-                        <span>{card.quantity}{displayLabels.quantityUnit}</span>
-                      </p>
-                    </div>
-                    <a
-                      href={`/api/qrcode?cardId=${card.id}`}
-                      target="_blank"
-                      className="shrink-0 text-xs text-brand-600 hover:underline"
-                    >
-                      📱 QR印刷
-                    </a>
+            <div className="space-y-6">
+              {cardGroups.map(([serviceLevelName, cards]) => (
+                <div key={serviceLevelName}>
+                  {/* カードごとに異なるサービスレベルを選べるため（ADR-0038）、提出先・アイテム種別・サービスレベル単位でまとめて表示する */}
+                  <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-2 px-3 py-2 bg-brand-50 border border-brand-100 rounded-lg text-xs text-brand-800">
+                    <span className="font-bold">{REGION_LABELS[application.region] ?? application.region}</span>
+                    {application.region === "PSA_US" && (
+                      <>
+                        <span className="text-brand-300">・</span>
+                        <span>{ITEM_TYPE_LABELS[application.itemType] ?? application.itemType}</span>
+                      </>
+                    )}
+                    <span className="text-brand-300">・</span>
+                    <span className="font-bold">{serviceLevelName}</span>
+                    <span className="text-brand-400">（{cards.length}{CARD_DISPLAY_LABELS[application.itemType]?.quantityUnit ?? "枚"}）</span>
+                  </div>
+                  <div className="space-y-4">
+                    {cards.map((card) => (
+                      <CardListItem key={card.id} card={card} itemType={application.itemType} region={application.region} />
+                    ))}
                   </div>
                 </div>
-                );
-              })}
+              ))}
             </div>
           </div>
 

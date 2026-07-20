@@ -10,7 +10,7 @@ import DifferentialPaymentPanel from "@/components/DifferentialPaymentPanel";
 import { formatMoney, formatMoneyIn, formatMoneyInt } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { computeDisplayStatus, DISPLAY_STATUS, getApplicationGroups } from "@/lib/application-status";
+import { computeDisplayStatus, DISPLAY_STATUS, getApplicationGroups, REGION_LABELS, resolveServiceLevel } from "@/lib/application-status";
 
 const SERVICE_LABELS: Record<string, string> = {
   VALUE: "バリュー",
@@ -94,6 +94,16 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     }, {})
   );
 
+  // カードごとに異なるサービスレベルを選べるため（ADR-0038）、提出先・アイテム種別・サービスレベル単位でまとめて表示する
+  const cardGroupMap = new Map<string, typeof application.cards>();
+  for (const card of application.cards) {
+    const key = card.customServiceLevelName ?? resolveServiceLevel(application);
+    const bucket = cardGroupMap.get(key);
+    if (bucket) bucket.push(card);
+    else cardGroupMap.set(key, [card]);
+  }
+  const cardGroups = [...cardGroupMap.entries()].sort((a, b) => a[0].localeCompare(b[0], "ja"));
+
   // 代理入力は明細を当社スタッフが入力するため、顧客が確認できるようカード一覧をサービスレベル・
   // 申告額つきで表示する（自己入力は自分で入力した内容のため付加情報は出さない）。ADR-0050
   const cardsSection = (
@@ -105,34 +115,52 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       {isStoreInput && (
         <p className="text-sm text-gray-500 mb-4">代理入力していただいた内容をご確認ください。</p>
       )}
-      <div className="space-y-3 mt-4">
-        {application.cards.map((card) => (
-          <div key={card.id} className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-2">
-              {card.lineNo != null && (
-                <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
-                  {card.lineNo}
-                </span>
+      <div className="space-y-6 mt-4">
+        {cardGroups.map(([serviceLevelName, cards]) => (
+          <div key={serviceLevelName}>
+            <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-2 px-3 py-2 bg-brand-50 border border-brand-100 rounded-lg text-xs text-brand-800">
+              <span className="font-bold">{REGION_LABELS[application.region] ?? application.region}</span>
+              {application.region === "PSA_US" && (
+                <>
+                  <span className="text-brand-300">・</span>
+                  <span>{ITEM_TYPE_LABELS[application.itemType] ?? application.itemType}</span>
+                </>
               )}
-              <p className="font-mono text-xs text-gray-400">{card.cardNo}</p>
+              <span className="text-brand-300">・</span>
+              <span className="font-bold">{serviceLevelName}</span>
+              <span className="text-brand-400">（{cards.length}{displayLabels.quantityUnit}）</span>
             </div>
-            <p className="font-bold text-gray-900">{card.cardName}</p>
-            <p className="text-sm text-gray-500">{card.tcgTitle}</p>
-            {isStoreInput && (
-              <p className="text-xs text-gray-500 mt-1">
-                サービス: {card.customServiceLevelName ?? "—"}　/　{card.quantity}
-                {displayLabels.quantityUnit}　/　申告額 {formatMoneyInt(card.declaredValue, application.region)}
-              </p>
-            )}
+            <div className="space-y-3">
+              {cards.map((card) => (
+                <div key={card.id} className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center gap-2">
+                    {card.lineNo != null && (
+                      <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-bold flex items-center justify-center">
+                        {card.lineNo}
+                      </span>
+                    )}
+                    <p className="font-mono text-xs text-gray-400">{card.cardNo}</p>
+                  </div>
+                  <p className="font-bold text-gray-900">{card.cardName}</p>
+                  <p className="text-sm text-gray-500">{card.tcgTitle}</p>
+                  {isStoreInput && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      サービス: {card.customServiceLevelName ?? "—"}　/　{card.quantity}
+                      {displayLabels.quantityUnit}　/　申告額 {formatMoneyInt(card.declaredValue, application.region)}
+                    </p>
+                  )}
 
-            {card.psaGrade && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3">
-                <p className="text-sm font-bold text-yellow-800">
-                  PSA Grade: {card.psaGrade}
-                  {card.psaCertNo && <span className="ml-3 font-normal text-yellow-600">Cert# {card.psaCertNo}</span>}
-                </p>
-              </div>
-            )}
+                  {card.psaGrade && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3">
+                      <p className="text-sm font-bold text-yellow-800">
+                        PSA Grade: {card.psaGrade}
+                        {card.psaCertNo && <span className="ml-3 font-normal text-yellow-600">Cert# {card.psaCertNo}</span>}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>

@@ -613,6 +613,73 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
   return upcharge;
 }
 
+const updateCardDetailsSchema = z.object({
+  cardId: z.string(),
+  tcgTitle: z.string().min(1),
+  releaseYear: z.string().optional(),
+  cardName: z.string().min(1),
+  cardNumber: z.string().optional(),
+  rarity: z.string().optional(),
+  language: z.string().min(1),
+});
+
+/**
+ * カードの識別情報（タイトル・発行年・カード名・カード番号・レアリティ・言語）を管理画面から直接修正する。
+ * 顧客の入力ミス・代理入力ミスを想定した訂正用途。料金計算に使う申告額・枚数はスナップショット済みのため対象外
+ * （変更すると送料・保険料等の確定済み金額と不整合を起こすため）。
+ */
+export async function updateCardDetails(
+  input: z.infer<typeof updateCardDetailsSchema>
+): Promise<{ success: true } | { success: false; error: string }> {
+  const user = await requireAdminOrStaff();
+  const parsed = updateCardDetailsSchema.parse(input);
+
+  const before = await prisma.card.findUniqueOrThrow({
+    where: { id: parsed.cardId },
+    include: { application: { select: { id: true, itemType: true } } },
+  });
+
+  // 発行年はコミック・マガジン以外は年（1900〜2100）の自由記述前提。入力フォームの検証（ApplyForm）と揃える。ADR-0033
+  if (before.application.itemType !== "COMIC_MAGAZINE" && parsed.releaseYear?.trim()) {
+    const y = parseInt(parsed.releaseYear, 10);
+    if (isNaN(y) || y < 1900 || y > 2100) {
+      return { success: false, error: "発行年は1900〜2100の範囲で入力してください（空欄でも構いません）" };
+    }
+  }
+
+  const data = {
+    tcgTitle: parsed.tcgTitle,
+    releaseYear: parsed.releaseYear?.trim() || null,
+    cardName: parsed.cardName,
+    cardNumber: parsed.cardNumber?.trim() || null,
+    rarity: parsed.rarity?.trim() || null,
+    language: parsed.language,
+  };
+
+  await prisma.card.update({ where: { id: parsed.cardId }, data });
+
+  const hdrs = await headers();
+  await logOperation({
+    userId: user.id,
+    ipAddress: (hdrs as unknown as Headers).get?.("x-forwarded-for") ?? "unknown",
+    action: "CARD_DETAILS_UPDATE",
+    targetType: "cards",
+    targetId: parsed.cardId,
+    before: {
+      tcgTitle: before.tcgTitle,
+      releaseYear: before.releaseYear,
+      cardName: before.cardName,
+      cardNumber: before.cardNumber,
+      rarity: before.rarity,
+      language: before.language,
+    },
+    after: data,
+  });
+
+  revalidatePath(`/admin/applications/${before.application.id}`);
+  return { success: true };
+}
+
 export async function getAdminCustomers(params: {
   search?: string;
   page?: number;
