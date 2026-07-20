@@ -241,7 +241,7 @@ export default async function PricingPage() {
                     </div>
 
                     {/* 代理入力料金・事務手数料 */}
-                    <div className="grid grid-cols-2 gap-4 text-sm border-t border-gray-100 pt-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm border-t border-gray-100 pt-4">
                       <div>
                         <p className="text-gray-500">代理入力料金（1枚あたり・代理入力時のみ）</p>
                         <p className="font-bold text-gray-900">{formatMoneyIn(setting?.proxyFee ?? 0, "JPY")}</p>

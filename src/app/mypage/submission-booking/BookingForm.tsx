@@ -138,7 +138,7 @@ export default function BookingForm({
                 type="button"
                 disabled={disabled}
                 onClick={() => setSelectedDate(key)}
-                className={`min-h-20 border-r border-b border-gray-100 p-2 text-left transition ${
+                className={`min-h-16 sm:min-h-20 border-r border-b border-gray-100 p-1 sm:p-2 text-left overflow-hidden transition ${
                   isClosed
                     ? "bg-red-50 text-red-300"
                     : active
@@ -150,16 +150,16 @@ export default function BookingForm({
                     : "bg-gray-50 text-gray-300"
                 }`}
               >
-                <span className="text-sm font-bold">{date.getDate()}</span>
-                <span className="mt-2 flex flex-wrap gap-1">
+                <span className="text-xs sm:text-sm font-bold">{date.getDate()}</span>
+                <span className="mt-1 sm:mt-2 flex flex-wrap gap-0.5 sm:gap-1">
                   {isClosed && (
-                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-bold text-red-700">受付不可</span>
+                    <span className="rounded bg-red-100 px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[11px] font-bold text-red-700 whitespace-nowrap">受付不可</span>
                   )}
                   {!isClosed && isFullyBooked && (
-                    <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-bold text-gray-600">満席</span>
+                    <span className="rounded bg-gray-200 px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[11px] font-bold text-gray-600 whitespace-nowrap">満席</span>
                   )}
                   {isShippingDay && (
-                    <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">発送日</span>
+                    <span className="rounded bg-brand-100 px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[11px] font-bold text-brand-700 whitespace-nowrap">発送日</span>
                   )}
                 </span>
               </button>

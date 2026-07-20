@@ -150,7 +150,7 @@ export default async function MypagePage() {
               <div className="p-6">
                 <p className="text-gray-700 mb-4">この申込の続きから再開します。</p>
                 <div className="border border-gray-200 rounded-xl p-5">
-                  <div className="grid grid-cols-3 gap-4 text-sm mb-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm mb-3">
                     <div>
                       <p className="text-gray-500">提出先</p>
                       <p className="font-medium text-gray-900">

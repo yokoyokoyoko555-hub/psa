@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getCustomerSession } from "@/lib/customer-auth";
 import AuthScreen from "@/components/AuthScreen";
+import TopPageSections from "@/components/TopPageSections";
 import Footer from "@/components/Footer";
 
 export default async function Home() {
@@ -10,5 +11,11 @@ export default async function Home() {
   const customer = await getCustomerSession();
   if (customer) redirect("/mypage");
 
-  return <AuthScreen initialTab="signup" footer={<Footer />} />;
+  return (
+    <>
+      <AuthScreen initialTab="signup" />
+      <TopPageSections />
+      <Footer />
+    </>
+  );
 }
