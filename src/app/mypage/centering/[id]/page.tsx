@@ -49,7 +49,7 @@ export default async function MeasurementDetailPage({
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader title="測定結果" />
 
-      <main className="flex-1 max-w-2xl mx-auto px-4 py-8 space-y-5">
+      <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-8 space-y-5">
         <Link href="/mypage/centering" className="text-sm text-gray-500 hover:text-gray-700">
           ← センタリング測定へ戻る
         </Link>

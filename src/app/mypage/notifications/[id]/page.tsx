@@ -32,7 +32,7 @@ export default async function NotificationDetailPage({
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader title="お知らせ" />
 
-      <main className="flex-1 max-w-2xl mx-auto px-4 py-8">
+      <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-8">
         <article className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-sm text-gray-500 mb-2">
             {format(new Date(notification.createdAt), "yyyy.MM.dd")}

@@ -40,7 +40,7 @@ export default function HowToApplyPage() {
         }
       />
 
-      <main className="flex-1 max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-8 space-y-6">
         <h1 className="text-xl font-bold text-gray-900 text-center">申込の流れ</h1>
 
         {/* 自己入力・代理入力の2ルート */}

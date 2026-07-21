@@ -33,7 +33,7 @@ export default async function CenteringPage({
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <CustomerHeader title="センタリング測定" />
-        <main className="flex-1 max-w-2xl mx-auto px-4 py-8">
+        <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-8">
           <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center space-y-2">
             <p className="font-bold text-gray-900">ただいま調整中です</p>
             <p className="text-sm text-gray-500">
@@ -60,7 +60,7 @@ export default async function CenteringPage({
         }
       />
 
-      <main className="flex-1 max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* 無料の手動測定（誰でも利用可） */}
         <Link
           href="/mypage/centering/measure"

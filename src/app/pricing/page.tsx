@@ -169,7 +169,7 @@ export default async function PricingPage() {
         }
       />
 
-      <main className="flex-1 max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h1 className="text-xl font-bold text-gray-900 mb-2">PSA鑑定代行サービス 料金表</h1>
           <p className="text-sm text-gray-600">

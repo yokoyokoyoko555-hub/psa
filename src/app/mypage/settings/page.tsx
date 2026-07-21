@@ -42,7 +42,7 @@ export default async function SettingsPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader title="アカウント設定" />
 
-      <main className="flex-1 max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-8 space-y-6">
         <ProfileSettingsModal profile={profile} />
 
         <section id="addresses" className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">

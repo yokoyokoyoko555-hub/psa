@@ -70,6 +70,11 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       : undefined;
   const displayLabels = CARD_DISPLAY_LABELS[application.itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
   const isStoreInput = application.source === "STORE";
+  // 現物が既に手元にある（自己入力=受取済み／代理入力=支払完了）状態になったら、提出予約は
+  // 案内不要（既に役目を終えている）。管理画面と同じ判定。ADR-0067
+  const hasCardsInHand = isStoreInput
+    ? !application.payments.some((p) => p.status === "PENDING")
+    : Boolean(application.receivedAt);
   const isDraft = application.status === "DRAFT";
   const isCancelled = application.status === "CANCELLED";
   // 1申込が複数のPSA提出グループ（サービスレベル別）にまたがる場合は、グループごとに1行表示する。ADR-0076
@@ -178,7 +183,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         }
       />
 
-      <main className="flex-1 max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-8 space-y-6">
         {isStoreInput && cardsSection}
 
         {/* Summary */}
@@ -325,35 +330,37 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           />
         )}
 
-        {/* Submission booking */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="font-bold text-gray-900">提出予約</h2>
-              {application.submissionBooking?.status === "BOOKED" ? (
-                <p className="text-sm text-gray-600 mt-1">
-                  {format(new Date(application.submissionBooking.scheduledAt), "yyyy/MM/dd HH:mm", { locale: ja })}
-                  {" / "}
-                  {application.submissionBooking.method === "STORE_DROP_OFF" ? "店頭持込" : "郵送予定"}
-                </p>
+        {/* Submission booking: 現物が既に手元にある状態になったら非表示（役目を終えているため） */}
+        {!hasCardsInHand && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="font-bold text-gray-900">提出予約</h2>
+                {application.submissionBooking?.status === "BOOKED" ? (
+                  <p className="text-sm text-gray-600 mt-1">
+                    {format(new Date(application.submissionBooking.scheduledAt), "yyyy/MM/dd HH:mm", { locale: ja })}
+                    {" / "}
+                    {application.submissionBooking.method === "STORE_DROP_OFF" ? "店頭持込" : "郵送予定"}
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-500 mt-1">
+                    お支払い後、カードの店頭持込または郵送予定を予約できます。
+                  </p>
+                )}
+              </div>
+              {isPaid ? (
+                <Link
+                  href={`/mypage/submission-booking/${application.id}`}
+                  className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
+                >
+                  予約する
+                </Link>
               ) : (
-                <p className="text-sm text-gray-500 mt-1">
-                  お支払い後、カードの店頭持込または郵送予定を予約できます。
-                </p>
+                <span className="text-sm font-bold text-gray-400">決済完了後に予約できます</span>
               )}
             </div>
-            {isPaid ? (
-              <Link
-                href={`/mypage/submission-booking/${application.id}`}
-                className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
-              >
-                予約する
-              </Link>
-            ) : (
-              <span className="text-sm font-bold text-gray-400">決済完了後に予約できます</span>
-            )}
           </div>
-        </div>
+        )}
 
         {!isStoreInput && cardsSection}
       </main>
