@@ -8,6 +8,7 @@ import HandlingFeeForm from "./HandlingFeeForm";
 import CampaignForm from "./CampaignForm";
 import CustomServicePriceForm from "./CustomServicePriceForm";
 import ExchangeRateForm from "./ExchangeRateForm";
+import ItemTypeEnabledForm from "./ItemTypeEnabledForm";
 
 const groupCls = "bg-white rounded-xl border border-gray-200 p-6";
 const subCls = "border border-gray-100 rounded-lg p-4";
@@ -74,6 +75,13 @@ export default async function PriceSettingPage() {
               const ps = settingFor(region, itemType);
               const body = (
                 <div className="space-y-4">
+                  {/* PSA_JPは常にTRADING_CARD固定、AUTOGRAPHはTRADING_CARD内のデュアルサービスで
+                      独立したアイテム種別として選択されないため、受付ON/OFFの対象外。ADR-0043 */}
+                  {region === "PSA_US" && itemType !== "AUTOGRAPH" && (
+                    <div className={subCls}>
+                      <ItemTypeEnabledForm region={region} itemType={itemType} enabled={ps?.enabled ?? true} />
+                    </div>
+                  )}
                   <div className={subCls}>
                     <h3 className="font-bold text-gray-800 mb-3">サービス料金（鑑定料・原価・申告上限）</h3>
                     <CustomServicePriceForm items={customServicePrices} category={itemType} region={region} />

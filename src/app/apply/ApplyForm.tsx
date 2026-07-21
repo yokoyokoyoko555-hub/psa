@@ -33,7 +33,7 @@ export type InitialDraft = {
 
 const DRAFT_KEY = "psa-apply-draft";
 import { ServiceRegion, ItemType, ReturnMethod } from "@prisma/client";
-import type { ShippingRule, InsuranceRule, CustomServicePrice } from "@prisma/client";
+import type { ShippingRule, InsuranceRule, CustomServicePrice, PricingSetting } from "@prisma/client";
 
 const LANGUAGE_SUGGESTIONS = ["日本語", "英語", "韓国語", "中国語", "その他"];
 import type { CustomerProfile } from "@/actions/customer";
@@ -162,6 +162,7 @@ type Props = {
   shippingRules: ShippingRule[];
   insuranceRules: InsuranceRule[];
   customServicePrices: CustomServicePrice[];
+  pricingSettings: PricingSetting[];
   profile: CustomerProfile | null;
   addresses: Address[];
   initialDraft?: InitialDraft | null;
@@ -182,6 +183,7 @@ export default function ApplyForm({
   shippingRules,
   insuranceRules,
   customServicePrices,
+  pricingSettings,
   stripePublishableKey,
   profile,
   addresses,
@@ -253,6 +255,10 @@ export default function ApplyForm({
   const customTierOptions = customServicePrices
     .filter((p) => p.region === region && p.category === itemType && p.isActive)
     .sort((a, b) => a.sortOrder - b.sortOrder);
+  // 管理画面でOFFにされたアイテム種別は選択肢から除外する（未設定なら有効扱い）。ADR-0043
+  const enabledItemTypes = (["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).filter(
+    (it) => (pricingSettings.find((p) => p.region === "PSA_US" && p.itemType === it)?.enabled ?? true)
+  );
   // デュアルサービス（カードとサインの鑑定）: PSA_US×TRADING_CARDのみ提示。通常サービスの代わりに
   // 選ぶ形式（加算しない・完全に切り替え）。ADR-0029
   const isAutographEligible = region === "PSA_US" && itemType === "TRADING_CARD";
@@ -763,7 +769,7 @@ export default function ApplyForm({
 
       <main className="max-w-3xl mx-auto px-4 pb-16">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm mb-4">
+          <div className="sticky top-[72px] z-10 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm mb-4 shadow-md">
             {error}
           </div>
         )}
@@ -799,7 +805,7 @@ export default function ApplyForm({
               <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
                 <h2 className="font-bold text-gray-800">アイテム種別</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).map((it) => (
+                  {enabledItemTypes.map((it) => (
                     <button
                       key={it}
                       onClick={() => {
@@ -807,7 +813,7 @@ export default function ApplyForm({
                         setCustomServiceLevelId(null);
                         setServiceMode("REGULAR");
                       }}
-                      className={`border-2 rounded-xl p-4 text-center font-bold transition ${
+                      className={`border-2 rounded-xl p-4 text-center font-bold whitespace-nowrap transition ${
                         itemType === it
                           ? "border-brand-500 bg-brand-50 text-brand-700"
                           : "border-gray-200 text-gray-700 hover:border-gray-300"

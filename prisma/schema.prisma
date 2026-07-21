@@ -646,6 +646,7 @@ model PricingSetting {
   handlingFee    Int           @default(0) // 事務手数料。常に円・1申込（サービスレベル選択）につき定額。ADR-0025/0030
   proxyFee       Int           @default(0) // 代理入力料金（常に円/枚・一律）。代理入力(STORE)時のみ。ADR-0025
   freeShipInsQty Int           @default(0) // この枚数以上で送料・保険を無料(0円)化。0=無効。ADR-0017
+  enabled        Boolean       @default(true) // OFFにすると顧客の申込画面でこのアイテム種別を選べなくする。PSA_JPのTRADING_CARDは常時固定のため対象外。
   updatedAt      DateTime      @updatedAt
   updatedBy      String?
 

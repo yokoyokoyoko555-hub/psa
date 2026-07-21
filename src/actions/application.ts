@@ -108,6 +108,24 @@ async function ensureStripeCustomer(customer: NonNullable<Awaited<ReturnType<typ
   return stripeCustomer.id;
 }
 
+async function isCustomerSelectableItemType(region: ServiceRegion, itemType: ItemType) {
+  const normalizedItemType: ItemType = region === "PSA_JP" ? "TRADING_CARD" : itemType;
+  if (normalizedItemType === "AUTOGRAPH") return false;
+  if (region === "PSA_JP") return true;
+
+  const setting = await prisma.pricingSetting.findUnique({
+    where: { id: pricingSettingId(region, normalizedItemType) },
+    select: { enabled: true },
+  });
+  return setting?.enabled ?? true;
+}
+
+async function itemTypeUnavailableError(region: ServiceRegion, itemType: ItemType) {
+  return (await isCustomerSelectableItemType(region, itemType))
+    ? null
+    : "現在このアイテム種別は受付停止中です。別のアイテム種別を選択してください。";
+}
+
 export async function createApplication(
   input: ApplicationInput
 ): Promise<{ success: boolean; clientSecret?: string; applicationId?: string; error?: string }> {
@@ -119,6 +137,8 @@ export async function createApplication(
 
   // PSA_JPは常にTRADING_CARD（クライアント値を信用しない）。ADR-0023
   const itemType: ItemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
+  const unavailableError = await itemTypeUnavailableError(parsed.data.region, itemType);
+  if (unavailableError) return { success: false, error: unavailableError };
   const isAutographEligible = parsed.data.region === "PSA_US" && itemType === "TRADING_CARD";
 
   // 全itemType（トレカ含む）がCustomServicePrice（管理画面でCRUD可能な動的タイア）を参照する。ADR-0025/0026
@@ -522,6 +542,8 @@ export async function createStoreRequest(
 
   // PSA_JPは常にTRADING_CARD（クライアント値を信用しない）。ADR-0023
   const itemType: ItemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
+  const unavailableError = await itemTypeUnavailableError(parsed.data.region, itemType);
+  if (unavailableError) return { success: false, error: unavailableError };
 
   const setting = await prisma.pricingSetting.findUnique({ where: { id: pricingSettingId(parsed.data.region, itemType) } });
   const agencyFeeTotal = (setting?.proxyFee ?? 0) * parsed.data.agencyQuantity;
@@ -758,6 +780,9 @@ export async function saveDraft(
   if (!parsed.success) return { success: false, error: "入力内容が正しくありません" };
 
   const draftData = { cards: parsed.data.cards, returnSel: parsed.data.returnSel };
+  const itemType = parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType;
+  const unavailableError = await itemTypeUnavailableError(parsed.data.region, itemType);
+  if (unavailableError) return { success: false, error: unavailableError };
 
   if (parsed.data.draftId) {
     const owned = await prisma.application.findFirst({
@@ -769,7 +794,7 @@ export async function saveDraft(
       data: {
         serviceLevel: "CUSTOM",
         region: parsed.data.region,
-        itemType: parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType,
+        itemType,
         customServiceLevelId: parsed.data.customServiceLevelId,
         returnMethod: parsed.data.returnMethod,
         draftData,
@@ -787,7 +812,7 @@ export async function saveDraft(
       customerId: customer.id,
       serviceLevel: "CUSTOM",
       region: parsed.data.region,
-      itemType: parsed.data.region === "PSA_JP" ? "TRADING_CARD" : parsed.data.itemType,
+      itemType,
       customServiceLevelId: parsed.data.customServiceLevelId,
       source: "CUSTOMER",
       returnMethod: parsed.data.returnMethod,
@@ -887,6 +912,7 @@ export async function previewFees(input: {
 }) {
   const itemType = input.region === "PSA_JP" ? "TRADING_CARD" : input.itemType;
   if (input.cardServiceLevels.length === 0) return null;
+  if (!(await isCustomerSelectableItemType(input.region, itemType))) return null;
   const customer = await getCustomerSession();
   try {
     return await calculateFees({

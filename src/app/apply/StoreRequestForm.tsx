@@ -102,6 +102,11 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
   const [clientSecret, setClientSecret] = useState("");
   const [createdId, setCreatedId] = useState<string | null>(null);
 
+  // 管理画面でOFFにされたアイテム種別は選択肢から除外する（未設定なら有効扱い）。ADR-0043
+  const enabledItemTypes = (["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).filter(
+    (it) => (pricingSettings.find((p) => p.region === "PSA_US" && p.itemType === it)?.enabled ?? true)
+  );
+
   const setting = pricingSettings.find((p) => p.region === region && p.itemType === itemType);
   const proxyFee = setting?.proxyFee ?? 0;
   const agencyFeeTotal = proxyFee * agencyQuantity;
@@ -247,7 +252,9 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
       </p>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>
+        <div className="sticky top-[72px] z-10 bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm shadow-md">
+          {error}
+        </div>
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
@@ -276,11 +283,11 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         <h3 className="font-bold text-gray-800">アイテム種別</h3>
         {region === "PSA_US" ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).map((it) => (
+            {enabledItemTypes.map((it) => (
               <button
                 key={it}
                 onClick={() => setItemType(it)}
-                className={`border-2 rounded-xl p-4 text-center font-bold transition ${
+                className={`border-2 rounded-xl p-4 text-center font-bold whitespace-nowrap transition ${
                   itemType === it
                     ? "border-brand-500 bg-brand-50 text-brand-700"
                     : "border-gray-200 text-gray-700 hover:border-gray-300"

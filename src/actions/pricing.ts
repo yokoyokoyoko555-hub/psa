@@ -81,6 +81,35 @@ export async function saveUniformFees(input: {
   return { success: true };
 }
 
+const setEnabledSchema = z.object({
+  region: regionEnum,
+  itemType: itemTypeEnum,
+  enabled: z.boolean(),
+});
+
+/**
+ * アイテム種別ごとの受付ON/OFF。OFFの間は顧客の申込画面（自己入力・代理入力とも）で
+ * このアイテム種別を選べなくする。PSA_JPは常にTRADING_CARD固定のため実質PSA_US専用。
+ */
+export async function setItemTypeEnabled(
+  input: z.infer<typeof setEnabledSchema>
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdmin();
+  const parsed = setEnabledSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "入力内容を確認してください" };
+  const { region, itemType, enabled } = parsed.data;
+  // idベースのupsertで一意性を担保する（saveUniformFeesと同じ理由。ADR-0023追記参照）。
+  const id = pricingSettingId(region, itemType);
+  await prisma.pricingSetting.upsert({
+    where: { id },
+    update: { region, itemType, enabled },
+    create: { id, region, itemType, enabled },
+  });
+  revalidatePath("/admin/price-setting");
+  revalidatePath("/apply");
+  return { success: true };
+}
+
 // 動的サービスタイア（トレーディングカード/未開封パック/コミック・マガジン/オートグラフ）の管理画面CRUD。ADR-0025/0026
 const customServiceCategoryEnum = z.enum(["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE", "AUTOGRAPH"]);
 
