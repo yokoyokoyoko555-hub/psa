@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { format } from "date-fns";
+import { toJstDisplay } from "@/lib/jst-date";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import CustomerHeader from "@/components/CustomerHeader";
@@ -42,7 +43,7 @@ export default async function NotificationsPage() {
                 >
                   <span className="min-w-0">
                     <span className="block text-sm text-gray-900 mb-1">
-                      {format(new Date(n.createdAt), "yyyy年MM月dd日")}
+                      {format(toJstDisplay(new Date(n.createdAt)), "yyyy年MM月dd日")}
                     </span>
                     <span
                       className={`block font-bold leading-6 ${

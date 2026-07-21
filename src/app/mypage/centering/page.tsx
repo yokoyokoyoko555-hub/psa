@@ -10,6 +10,7 @@ import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import { SubscribeButton, ManageSubscriptionButton } from "./CenteringPlanButtons";
 import { format } from "date-fns";
+import { toJstDisplay } from "@/lib/jst-date";
 
 export const metadata = { title: "センタリング測定 | トレカビンクス" };
 
@@ -131,7 +132,7 @@ export default async function CenteringPage({
                     <p className="text-sm text-gray-500 mt-1">表 {formatRatio(m.frontLR)} · {formatRatio(m.frontTB)}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-xs text-gray-400">{format(new Date(m.createdAt), "yyyy/MM/dd")}</p>
+                    <p className="text-xs text-gray-400">{format(toJstDisplay(new Date(m.createdAt)), "yyyy/MM/dd")}</p>
                     <span className="text-2xl leading-none text-brand-600">›</span>
                   </div>
                 </Link>

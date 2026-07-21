@@ -55,11 +55,14 @@ export async function upsertSubmissionBooking(
     return { success: false, error: "未来の日時を選択してください" };
   }
   const dateKey = parsed.data.scheduledAt.slice(0, 10);
-  const calendarDay = await prisma.submissionCalendarDay.findUnique({
-    where: { date: dateKeyToJstDate(dateKey) },
-  });
-  if (calendarDay?.isClosed) {
-    return { success: false, error: "この日は予約受付不可です。別の日を選択してください" };
+  // 「受付不可」は店頭持込（実店舗の休業日）向けの設定。郵送はお客様ご自身で投函するだけなので対象外。
+  if (parsed.data.method === "STORE_DROP_OFF") {
+    const calendarDay = await prisma.submissionCalendarDay.findUnique({
+      where: { date: dateKeyToJstDate(dateKey) },
+    });
+    if (calendarDay?.isClosed) {
+      return { success: false, error: "この日は予約受付不可です。別の日を選択してください" };
+    }
   }
 
   const application = await prisma.application.findFirst({

@@ -9,6 +9,7 @@ import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+import { toJstDisplay } from "@/lib/jst-date";
 import { REGION_LABELS, ITEM_TYPE_LABELS, SERVICE_LABELS } from "@/lib/application-status";
 
 export default async function MypagePage() {
@@ -51,7 +52,7 @@ export default async function MypagePage() {
                 >
                   <span className="min-w-0">
                     <span className="block text-sm text-gray-900 mb-1">
-                      {format(new Date(n.createdAt), "yyyy年MM月dd日")}
+                      {format(toJstDisplay(new Date(n.createdAt)), "yyyy年MM月dd日")}
                     </span>
                     <span
                       className={`block font-bold leading-6 ${
@@ -171,7 +172,7 @@ export default async function MypagePage() {
                     </div>
                   </div>
                   <p className="text-gray-500 text-sm">
-                    {format(new Date(latestDraft.createdAt), "yyyy年M月d日", { locale: ja })}
+                    {format(toJstDisplay(new Date(latestDraft.createdAt)), "yyyy年M月d日", { locale: ja })}
                   </p>
                   <p className="text-red-500 text-sm mt-1">下書き</p>
                 </div>

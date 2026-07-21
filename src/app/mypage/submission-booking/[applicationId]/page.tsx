@@ -9,6 +9,7 @@ import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import { format } from "date-fns";
 import { REGION_LABELS, ITEM_TYPE_LABELS, resolveServiceLevel } from "@/lib/application-status";
+import { toJstDisplay } from "@/lib/jst-date";
 
 export const metadata = { title: "提出予約の詳細 | トレカビンクス" };
 
@@ -81,7 +82,7 @@ export default async function BookingDetailPage({
           <div className="px-6 py-4 grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
             <div>
               <p className="text-gray-400">予約日時</p>
-              <p className="font-bold text-gray-900">{format(new Date(booking.scheduledAt), "yyyy/MM/dd HH:mm")}</p>
+              <p className="font-bold text-gray-900">{format(toJstDisplay(new Date(booking.scheduledAt)), "yyyy/MM/dd HH:mm")}</p>
             </div>
             <div>
               <p className="text-gray-400">提出方法</p>

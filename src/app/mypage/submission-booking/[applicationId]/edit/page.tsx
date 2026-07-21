@@ -10,14 +10,27 @@ import { formatMoney } from "@/lib/currency";
 import { getStoreSettings } from "@/actions/store-settings";
 import BookingForm from "../../BookingForm";
 
+// サーバーのタイムゾーン（Railway等はUTCが既定でJSTではない）に日付・時刻計算が左右されないよう、
+// Dateの現地getterは使わずJST基準で明示的に変換する。admin/submission-bookings/page.tsxと同じ理由
+// （現地getterのままだと、実際には空いている時間帯が「満席」と誤判定されるバグになる）。
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
 function toTimeKey(date: Date) {
-  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const jst = new Date(date.getTime() + JST_OFFSET_MS);
+  return `${String(jst.getUTCHours()).padStart(2, "0")}:${String(jst.getUTCMinutes()).padStart(2, "0")}`;
 }
 
 export const metadata = { title: "提出予約 | トレカビンクス" };
 
 function toDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const jst = new Date(date.getTime() + JST_OFFSET_MS);
+  return `${jst.getUTCFullYear()}-${String(jst.getUTCMonth() + 1).padStart(2, "0")}-${String(jst.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** JST基準の「今日0時」を絶対時刻として返す（サーバーのローカルタイムゾーンに依存しない）。 */
+function todayJstMidnight(): Date {
+  const nowJst = new Date(Date.now() + JST_OFFSET_MS);
+  return new Date(Date.UTC(nowJst.getUTCFullYear(), nowJst.getUTCMonth(), nowJst.getUTCDate()) - JST_OFFSET_MS);
 }
 
 export default async function EditBookingPage({
@@ -42,8 +55,7 @@ export default async function EditBookingPage({
   });
   if (!app) redirect("/mypage/submission-booking");
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = todayJstMidnight();
   const [calendarDays, storeSettings, otherBookings] = await Promise.all([
     prisma.submissionCalendarDay.findMany({
       where: { date: { gte: today } },

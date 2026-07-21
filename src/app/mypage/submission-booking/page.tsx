@@ -8,6 +8,7 @@ import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import { formatMoney } from "@/lib/currency";
 import { format } from "date-fns";
+import { toJstDisplay } from "@/lib/jst-date";
 
 export const metadata = { title: "提出予約 | トレカビンクス" };
 
@@ -101,7 +102,7 @@ export default async function SubmissionBookingPage() {
                           予約済
                         </span>
                         <span className="text-gray-700">
-                          {format(new Date(booked.scheduledAt), "yyyy/MM/dd HH:mm")} ・{" "}
+                          {format(toJstDisplay(new Date(booked.scheduledAt)), "yyyy/MM/dd HH:mm")} ・{" "}
                           {METHOD_LABELS[booked.method] ?? booked.method}
                         </span>
                       </p>

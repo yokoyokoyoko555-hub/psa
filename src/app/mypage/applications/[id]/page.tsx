@@ -10,7 +10,9 @@ import DifferentialPaymentPanel from "@/components/DifferentialPaymentPanel";
 import { formatMoney, formatMoneyIn, formatMoneyInt } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+import { toJstDisplay } from "@/lib/jst-date";
 import { computeDisplayStatus, DISPLAY_STATUS, getApplicationGroups, REGION_LABELS, resolveServiceLevel } from "@/lib/application-status";
+import { buildCardTitle } from "@/lib/card-display";
 
 const SERVICE_LABELS: Record<string, string> = {
   VALUE: "バリュー",
@@ -146,8 +148,10 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                     )}
                     <p className="font-mono text-xs text-gray-400">{card.cardNo}</p>
                   </div>
-                  <p className="font-bold text-gray-900">{card.cardName}</p>
-                  <p className="text-sm text-gray-500">{card.tcgTitle}</p>
+                  <p className="font-bold text-gray-900">{buildCardTitle(card, application.itemType)}</p>
+                  {application.itemType !== "COMIC_MAGAZINE" && (
+                    <p className="text-sm text-gray-500">{card.tcgTitle}</p>
+                  )}
                   {isStoreInput && (
                     <p className="text-xs text-gray-500 mt-1">
                       サービス: {card.customServiceLevelName ?? "—"}　/　{card.quantity}
@@ -239,7 +243,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             </div>
             <div>
               <p className="text-gray-500">申込日</p>
-              <p className="font-medium">{format(new Date(application.createdAt), "yyyy/MM/dd", { locale: ja })}</p>
+              <p className="font-medium">{format(toJstDisplay(new Date(application.createdAt)), "yyyy/MM/dd", { locale: ja })}</p>
             </div>
             <div>
               <p className="text-gray-500">合計金額</p>
@@ -338,7 +342,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                 <h2 className="font-bold text-gray-900">提出予約</h2>
                 {application.submissionBooking?.status === "BOOKED" ? (
                   <p className="text-sm text-gray-600 mt-1">
-                    {format(new Date(application.submissionBooking.scheduledAt), "yyyy/MM/dd HH:mm", { locale: ja })}
+                    {format(toJstDisplay(new Date(application.submissionBooking.scheduledAt)), "yyyy/MM/dd HH:mm", { locale: ja })}
                     {" / "}
                     {application.submissionBooking.method === "STORE_DROP_OFF" ? "店頭持込" : "郵送予定"}
                   </p>

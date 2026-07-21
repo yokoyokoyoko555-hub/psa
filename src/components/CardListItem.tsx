@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateCardDetails } from "@/actions/admin";
 import { formatMoneyInt } from "@/lib/currency";
-import { CARD_DISPLAY_LABELS, buildPsaLine } from "@/lib/card-display";
+import { CARD_DISPLAY_LABELS, buildPsaLine, buildCardTitle } from "@/lib/card-display";
 import CopyButton from "@/components/CopyButton";
 
 export type CardListItemData = {
@@ -39,6 +39,7 @@ export default function CardListItem({
 
   const displayLabels = CARD_DISPLAY_LABELS[itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
   const psaLine = buildPsaLine(card, itemType);
+  const cardTitle = buildCardTitle(card, itemType);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -78,7 +79,7 @@ export default function CardListItem({
                 {card.lineNo}
               </span>
             )}
-            <span className="font-medium text-gray-900">{card.cardName}</span>
+            <span className="font-medium text-gray-900">{cardTitle}</span>
             {card.autographRequested && (
               <span className="text-xs bg-brand-100 text-brand-700 rounded-full px-2 py-0.5">
                 🖊 オートグラフ

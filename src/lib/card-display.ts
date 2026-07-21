@@ -55,6 +55,21 @@ export const CARD_DISPLAY_LABELS: Record<
 };
 
 /**
+ * カード一覧の見出しに表示するタイトル。コミック・マガジンは巻数・号（cardName）だけでは
+ * 何のタイトルの号か分からないため、出版社・タイトル・巻数号を並べて表示する。それ以外は
+ * cardNameのみ（カード名／パック名としてそれ単体で意味が通るため）。
+ */
+export function buildCardTitle(
+  card: { tcgTitle: string; cardName: string; language: string },
+  itemType: string
+): string {
+  if (itemType === "COMIC_MAGAZINE") {
+    return `${card.language} ${card.tcgTitle} ${card.cardName}`;
+  }
+  return card.cardName;
+}
+
+/**
  * PSA提出フォーム向け1行（発行年 タイトル 言語(英語)/出版社 カード番号／型番 カード名 レアリティ・半角スペース区切り）。
  * トレカ以外はcardNumber/rarityが空文字のためfilterで自然に除外される。
  */

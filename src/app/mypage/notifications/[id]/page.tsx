@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { format } from "date-fns";
+import { toJstDisplay } from "@/lib/jst-date";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { prisma } from "@/lib/prisma";
 import CustomerHeader from "@/components/CustomerHeader";
@@ -35,7 +36,7 @@ export default async function NotificationDetailPage({
       <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-8">
         <article className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-sm text-gray-500 mb-2">
-            {format(new Date(notification.createdAt), "yyyy.MM.dd")}
+            {format(toJstDisplay(new Date(notification.createdAt)), "yyyy.MM.dd")}
           </p>
           <h2 className="text-xl font-bold text-gray-900 mb-6">{notification.title}</h2>
           <div className="whitespace-pre-wrap text-sm leading-7 text-gray-700">{notification.body}</div>

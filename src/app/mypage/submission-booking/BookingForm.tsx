@@ -16,6 +16,16 @@ type ExistingBooking = {
 const TIME_SLOTS = ["10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
+/** 指定日時（現地時間）が既に過ぎているかどうか。当日の過去の時間帯を選べないようにするため。 */
+function isSlotPast(dateKey: string, slot: string, now: Date) {
+  const [h, m] = slot.split(":").map(Number);
+  const slotDate = new Date(now);
+  const [y, mo, d] = dateKey.split("-").map(Number);
+  slotDate.setFullYear(y, mo - 1, d);
+  slotDate.setHours(h, m, 0, 0);
+  return slotDate.getTime() <= now.getTime();
+}
+
 function toDateKey(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -67,7 +77,8 @@ export default function BookingForm({
   const [note, setNote] = useState(existingBooking?.note ?? "");
   const [message, setMessage] = useState("");
   const days = useMemo(() => makeMonthDays(month), [month]);
-  const todayKey = toDateKey(new Date());
+  const now = new Date();
+  const todayKey = toDateKey(now);
   const takenSlotSet = useMemo(() => new Set(takenSlots), [takenSlots]);
   const isShipping = method === "SHIPPING";
 
@@ -76,13 +87,17 @@ export default function BookingForm({
   }
 
   function submit() {
-    if (closedDates.includes(selectedDate)) {
+    if (!isShipping && closedDates.includes(selectedDate)) {
       setMessage("この日は予約受付不可です。別の日を選択してください");
       return;
     }
     const submitTime = isShipping ? "00:00" : time;
     if (!isShipping && takenSlotSet.has(`${selectedDate}T${submitTime}`)) {
       setMessage("この日時は満席です。別の日時を選択してください");
+      return;
+    }
+    if (!isShipping && isSlotPast(selectedDate, submitTime, new Date())) {
+      setMessage("過去の時間は選択できません。別の時間を選択してください");
       return;
     }
     setMessage("");
@@ -126,10 +141,12 @@ export default function BookingForm({
           {days.map((date) => {
             const key = toDateKey(date);
             const inMonth = date.getMonth() === month.getMonth();
-            const isClosed = closedDates.includes(key);
+            // 「受付不可」は店頭持込（実店舗の休業日）向けの設定。郵送はお客様ご自身で投函するだけなので対象外。
+            const isClosed = closedDates.includes(key) && !isShipping;
             const isShippingDay = shippingDates.includes(key);
             const isFullyBooked =
-              !isShipping && TIME_SLOTS.every((slot) => takenSlotSet.has(`${key}T${slot}`));
+              !isShipping &&
+              TIME_SLOTS.every((slot) => takenSlotSet.has(`${key}T${slot}`) || isSlotPast(key, slot, now));
             const disabled = key < todayKey || isClosed || (isFullyBooked && !isShipping);
             const active = key === selectedDate && !isClosed;
             return (
@@ -210,15 +227,17 @@ export default function BookingForm({
             <div className="grid grid-cols-3 gap-2">
               {TIME_SLOTS.map((slot) => {
                 const taken = takenSlotSet.has(`${selectedDate}T${slot}`);
+                const past = isSlotPast(selectedDate, slot, now);
+                const disabled = taken || past;
                 return (
                   <button
                     key={slot}
                     type="button"
-                    disabled={taken}
+                    disabled={disabled}
                     onClick={() => setTime(slot)}
-                    title={taken ? "満席です" : undefined}
+                    title={taken ? "満席です" : past ? "過去の時間です" : undefined}
                     className={`rounded-lg border px-2 py-2 text-sm font-bold ${
-                      taken
+                      disabled
                         ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"
                         : time === slot
                         ? "border-brand-600 bg-brand-600 text-white"

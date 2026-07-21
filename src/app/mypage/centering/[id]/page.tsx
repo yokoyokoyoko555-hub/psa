@@ -8,6 +8,7 @@ import { formatRatio } from "@/lib/centering";
 import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import { format } from "date-fns";
+import { toJstDisplay } from "@/lib/jst-date";
 
 export const metadata = { title: "測定結果 | トレカビンクス" };
 
@@ -64,7 +65,7 @@ export default async function MeasurementDetailPage({
               )}
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              {format(new Date(m.createdAt), "yyyy年MM月dd日 HH:mm")}
+              {format(toJstDisplay(new Date(m.createdAt)), "yyyy年MM月dd日 HH:mm")}
             </p>
           </div>
 
