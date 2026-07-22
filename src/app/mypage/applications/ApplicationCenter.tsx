@@ -19,6 +19,8 @@ export interface AppRow {
   isDraft: boolean;
 }
 
+const PAGE_SIZE = 5;
+
 const STATUS_BADGE_CLS: Record<string, string> = {
   申込完了: "bg-blue-50 text-blue-700",
   入力完了: "bg-indigo-50 text-indigo-700",
@@ -62,22 +64,91 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
+// 作業中は全件status="DRAFT"で差が無いため、一覧に表示している見た目上の状態（明細入力待ち／入力中）を
+// 「ステータス」ソートの対象にする。
+function draftStatusLabel(a: AppRow): string {
+  return a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : "入力中";
+}
+
+type SubmittedSort = "date_desc" | "date_asc" | "status";
+type DraftSort = "date_asc" | "date_desc" | "status";
+
+function Pagination({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number;
+  totalPages: number;
+  onChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-end gap-2 mt-3 text-sm text-gray-600">
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(1, page - 1))}
+        disabled={page === 1}
+        className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center disabled:opacity-40 hover:border-brand-300 transition"
+      >
+        ‹
+      </button>
+      <span>
+        {page} / {totalPages}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(totalPages, page + 1))}
+        disabled={page === totalPages}
+        className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center disabled:opacity-40 hover:border-brand-300 transition"
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
 export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
   const router = useRouter();
   const [rows, setRows] = useState<AppRow[]>(apps);
-  const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [busy, setBusy] = useState(false);
 
-  const submitted = rows.filter((a) => !a.isDraft);
+  const [submittedSort, setSubmittedSort] = useState<SubmittedSort>("date_desc");
+  const [submittedPage, setSubmittedPage] = useState(1);
+  const [draftSort, setDraftSort] = useState<DraftSort>("date_asc");
+  const [draftPage, setDraftPage] = useState(1);
+
+  const submitted = [...rows.filter((a) => !a.isDraft)].sort((a, b) => {
+    if (submittedSort === "status") {
+      return (
+        (a.displayStatus ?? "").localeCompare(b.displayStatus ?? "", "ja") ||
+        b.createdAt.localeCompare(a.createdAt)
+      );
+    }
+    return submittedSort === "date_asc"
+      ? a.createdAt.localeCompare(b.createdAt)
+      : b.createdAt.localeCompare(a.createdAt);
+  });
+  const submittedTotalPages = Math.max(1, Math.ceil(submitted.length / PAGE_SIZE));
+  const submittedPageClamped = Math.min(submittedPage, submittedTotalPages);
+  const submittedPageItems = submitted.slice(
+    (submittedPageClamped - 1) * PAGE_SIZE,
+    submittedPageClamped * PAGE_SIZE
+  );
+
   // 代理入力(STORE)は先払い後もスタッフの明細確定までstatus=DRAFTのままのため、
   // 予約前に離脱すると申込一覧から二度と辿れなくなっていたバグを修正。作業中に含める。
-  const drafts = rows
-    .filter((a) => a.isDraft)
-    .sort((a, b) =>
-      order === "asc"
-        ? a.createdAt.localeCompare(b.createdAt)
-        : b.createdAt.localeCompare(a.createdAt)
-    );
+  const drafts = [...rows.filter((a) => a.isDraft)].sort((a, b) => {
+    if (draftSort === "status") {
+      return draftStatusLabel(a).localeCompare(draftStatusLabel(b), "ja") || a.createdAt.localeCompare(b.createdAt);
+    }
+    return draftSort === "date_asc"
+      ? a.createdAt.localeCompare(b.createdAt)
+      : b.createdAt.localeCompare(a.createdAt);
+  });
+  const draftTotalPages = Math.max(1, Math.ceil(drafts.length / PAGE_SIZE));
+  const draftPageClamped = Math.min(draftPage, draftTotalPages);
+  const draftPageItems = drafts.slice((draftPageClamped - 1) * PAGE_SIZE, draftPageClamped * PAGE_SIZE);
 
   async function handleDelete(id: string) {
     if (!confirm("この下書き申込を削除しますか？")) return;
@@ -95,38 +166,59 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
     <div className="space-y-10">
       {/* 提出済み */}
       <section>
-        <h2 className="text-lg font-bold text-gray-900">提出済み</h2>
-        <p className="text-sm text-gray-500 mb-3">最近完了したお申込み</p>
+        <div className="flex items-end justify-between mb-3">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">提出済み</h2>
+            <p className="text-sm text-gray-500">最近完了したお申込み</p>
+          </div>
+          {submitted.length > 0 && (
+            <select
+              value={submittedSort}
+              onChange={(e) => {
+                setSubmittedSort(e.target.value as SubmittedSort);
+                setSubmittedPage(1);
+              }}
+              className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700"
+            >
+              <option value="date_desc">作成日：新しい順</option>
+              <option value="date_asc">作成日：古い順</option>
+              <option value="status">ステータス順</option>
+            </select>
+          )}
+        </div>
         {submitted.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-400 text-sm">
             現在お申込みはございません
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-            {submitted.map((a) => (
-              <Link
-                key={a.id}
-                href={`/mypage/applications/${a.id}`}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 px-5 py-4 hover:bg-gray-50"
-              >
-                <div className="min-w-0">
-                  <span className="font-mono text-xs text-gray-400">{a.applicationNo}</span>
-                  <p className="font-medium text-gray-900 flex flex-wrap items-center gap-2">
-                    {a.cardCount}枚 / {a.serviceLevel}
-                    <SourceBadge source={a.source} />
-                    {a.displayStatus && <StatusBadge status={a.displayStatus} />}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {a.region}
-                    {a.itemType ? ` / ${a.itemType}` : ""}
-                  </p>
-                </div>
-                <span className="shrink-0 text-sm text-gray-500">
-                  {fmt(a.createdAt)} {fmtTime(a.createdAt)}
-                </span>
-              </Link>
-            ))}
-          </div>
+          <>
+            <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+              {submittedPageItems.map((a) => (
+                <Link
+                  key={a.id}
+                  href={`/mypage/applications/${a.id}`}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 px-5 py-4 hover:bg-gray-50"
+                >
+                  <div className="min-w-0">
+                    <span className="font-mono text-xs text-gray-400">{a.applicationNo}</span>
+                    <p className="font-medium text-gray-900 flex flex-wrap items-center gap-2">
+                      {a.cardCount}枚 / {a.serviceLevel}
+                      <SourceBadge source={a.source} />
+                      {a.displayStatus && <StatusBadge status={a.displayStatus} />}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {a.region}
+                      {a.itemType ? ` / ${a.itemType}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-sm text-gray-500">
+                    {fmt(a.createdAt)} {fmtTime(a.createdAt)}
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <Pagination page={submittedPageClamped} totalPages={submittedTotalPages} onChange={setSubmittedPage} />
+          </>
         )}
       </section>
 
@@ -140,12 +232,16 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
             <p className="text-sm text-gray-500">未完了の申込</p>
           </div>
           <select
-            value={order}
-            onChange={(e) => setOrder(e.target.value as "asc" | "desc")}
+            value={draftSort}
+            onChange={(e) => {
+              setDraftSort(e.target.value as DraftSort);
+              setDraftPage(1);
+            }}
             className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700"
           >
-            <option value="asc">作成日：古い順</option>
-            <option value="desc">作成日：新しい順</option>
+            <option value="date_asc">作成日：古い順</option>
+            <option value="date_desc">作成日：新しい順</option>
+            <option value="status">ステータス順</option>
           </select>
         </div>
 
@@ -154,117 +250,120 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
             作業中の申込はありません
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            {/* 横スクロールさせず、狭い画面ではカード表示に切り替える */}
-            <div className="md:hidden divide-y divide-gray-100">
-              {drafts.map((a) => (
-                <div key={a.id} className="p-4 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-gray-900">
-                      {a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : `${a.cardCount} 枚`}
-                    </span>
-                    <SourceBadge source={a.source} />
-                  </div>
-                  <dl className="grid grid-cols-[4.5em_1fr] gap-y-1 text-sm">
-                    <dt className="text-gray-400">提出先</dt>
-                    <dd className="text-gray-700">
-                      {a.region}
-                      {a.itemType ? ` / ${a.itemType}` : ""}
-                    </dd>
-                    <dt className="text-gray-400">サービス</dt>
-                    <dd className="text-gray-700">{a.serviceLevel}</dd>
-                    <dt className="text-gray-400">作成日</dt>
-                    <dd className="text-gray-700">{fmt(a.createdAt)}</dd>
-                  </dl>
-                  <div className="pt-1 flex items-center gap-2">
-                    {a.source === "STORE" ? (
-                      <button
-                        onClick={() => router.push(`/mypage/submission-booking/${a.id}`)}
-                        className="flex-1 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-                      >
-                        予約・確認
-                      </button>
-                    ) : (
-                      <>
+          <>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              {/* 横スクロールさせず、狭い画面ではカード表示に切り替える */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {draftPageItems.map((a) => (
+                  <div key={a.id} className="p-4 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-gray-900">
+                        {a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : `${a.cardCount} 枚`}
+                      </span>
+                      <SourceBadge source={a.source} />
+                    </div>
+                    <dl className="grid grid-cols-[4.5em_1fr] gap-y-1 text-sm">
+                      <dt className="text-gray-400">提出先</dt>
+                      <dd className="text-gray-700">
+                        {a.region}
+                        {a.itemType ? ` / ${a.itemType}` : ""}
+                      </dd>
+                      <dt className="text-gray-400">サービス</dt>
+                      <dd className="text-gray-700">{a.serviceLevel}</dd>
+                      <dt className="text-gray-400">作成日</dt>
+                      <dd className="text-gray-700">{fmt(a.createdAt)}</dd>
+                    </dl>
+                    <div className="pt-1 flex items-center gap-2">
+                      {a.source === "STORE" ? (
                         <button
-                          onClick={() => router.push(`/apply?draft=${a.id}`)}
+                          onClick={() => router.push(`/mypage/submission-booking/${a.id}`)}
                           className="flex-1 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                         >
-                          続行
+                          予約・確認
                         </button>
-                        <button
-                          onClick={() => handleDelete(a.id)}
-                          disabled={busy}
-                          className="w-9 h-9 shrink-0 rounded-full border border-gray-200 text-red-500 hover:bg-red-50 flex items-center justify-center"
-                          title="削除"
-                        >
-                          🗑
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <table className="hidden md:table w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">申込</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">種別</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium">提出先</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium">サービスレベル</th>
-                  <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">作成日</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {drafts.map((a) => (
-                  <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 font-medium text-gray-900 whitespace-nowrap">
-                      {a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : `${a.cardCount} 枚`}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap"><SourceBadge source={a.source} /></td>
-                    <td className="px-4 py-4 text-gray-700">
-                      {a.region}
-                      {a.itemType ? ` / ${a.itemType}` : ""}
-                    </td>
-                    <td className="px-4 py-4 text-gray-700">{a.serviceLevel}</td>
-                    <td className="px-4 py-4 text-gray-700 whitespace-nowrap">{fmt(a.createdAt)}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                        {a.source === "STORE" ? (
+                      ) : (
+                        <>
                           <button
-                            onClick={() => router.push(`/mypage/submission-booking/${a.id}`)}
-                            className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                            onClick={() => router.push(`/apply?draft=${a.id}`)}
+                            className="flex-1 border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                           >
-                            予約・確認
+                            続行
                           </button>
-                        ) : (
-                          <>
+                          <button
+                            onClick={() => handleDelete(a.id)}
+                            disabled={busy}
+                            className="w-9 h-9 shrink-0 rounded-full border border-gray-200 text-red-500 hover:bg-red-50 flex items-center justify-center"
+                            title="削除"
+                          >
+                            🗑
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <table className="hidden md:table w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">申込</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">種別</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">提出先</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">サービスレベル</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium whitespace-nowrap">作成日</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {draftPageItems.map((a) => (
+                    <tr key={a.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-4 font-medium text-gray-900 whitespace-nowrap">
+                        {a.source === "STORE" && a.cardCount === 0 ? "明細入力待ち" : `${a.cardCount} 枚`}
+                      </td>
+                      <td className="px-4 py-4 whitespace-nowrap"><SourceBadge source={a.source} /></td>
+                      <td className="px-4 py-4 text-gray-700">
+                        {a.region}
+                        {a.itemType ? ` / ${a.itemType}` : ""}
+                      </td>
+                      <td className="px-4 py-4 text-gray-700">{a.serviceLevel}</td>
+                      <td className="px-4 py-4 text-gray-700 whitespace-nowrap">{fmt(a.createdAt)}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                          {a.source === "STORE" ? (
                             <button
-                              onClick={() => handleDelete(a.id)}
-                              disabled={busy}
-                              className="w-9 h-9 rounded-full border border-gray-200 text-red-500 hover:bg-red-50 flex items-center justify-center"
-                              title="削除"
-                            >
-                              🗑
-                            </button>
-                            <button
-                              onClick={() => router.push(`/apply?draft=${a.id}`)}
+                              onClick={() => router.push(`/mypage/submission-booking/${a.id}`)}
                               className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                             >
-                              続行
+                              予約・確認
                             </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleDelete(a.id)}
+                                disabled={busy}
+                                className="w-9 h-9 rounded-full border border-gray-200 text-red-500 hover:bg-red-50 flex items-center justify-center"
+                                title="削除"
+                              >
+                                🗑
+                              </button>
+                              <button
+                                onClick={() => router.push(`/apply?draft=${a.id}`)}
+                                className="border border-gray-300 rounded-full px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                続行
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={draftPageClamped} totalPages={draftTotalPages} onChange={setDraftPage} />
+          </>
         )}
       </section>
     </div>

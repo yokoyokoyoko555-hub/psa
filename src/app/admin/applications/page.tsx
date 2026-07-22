@@ -23,6 +23,13 @@ const STATUS_BADGE_CLS: Record<string, string> = {
 // 種別（自己入力/代理入力）は申込番号の接頭辞（APP-/DAI-）で判別できるため列としては持たない
 const REGION_SHORT_LABELS: Record<string, string> = { PSA_JP: "日本", PSA_US: "US" };
 
+// カードごとに異なるサービスレベルが混在する申込は「A / B / C」のように連結されて長くなるため、
+// 一覧では先頭のみ＋「他」に圧縮する（並び替えは元の値のまま行う）。詳細は申込詳細ページで確認できる。
+function compactServiceLevel(label: string): string {
+  const parts = label.split(" / ");
+  return parts.length > 1 ? `${parts[0]} 他` : label;
+}
+
 const SORTABLE_COLUMNS = ["region", "itemType", "serviceLevel", "status"] as const;
 type SortColumn = (typeof SORTABLE_COLUMNS)[number];
 
@@ -129,20 +136,19 @@ export default async function AdminApplicationsPage({
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm whitespace-nowrap">
+        <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">申込番号</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">顧客</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("region", "提出先")}</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("itemType", "アイテム種別")}</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("serviceLevel", "サービスレベル")}</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">枚数</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">金額</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">提出予約</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">{sortLink("status", "ステータス")}</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium">申込日時</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">申込番号</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">顧客</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{sortLink("region", "提出先")}</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{sortLink("itemType", "アイテム種別")}</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{sortLink("serviceLevel", "サービスレベル")}</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">枚数</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">金額</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">提出予約</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{sortLink("status", "ステータス")}</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">申込日時</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -150,7 +156,7 @@ export default async function AdminApplicationsPage({
               const booking = app.submissionBooking;
               return (
                 <tr key={app.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs">
+                  <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
                     <Link href={`/admin/applications/${app.id}`} className="text-brand-600 hover:underline">
                       {app.applicationNo}
                     </Link>
@@ -159,14 +165,16 @@ export default async function AdminApplicationsPage({
                     <Link href={`/admin/customers/${app.customerId}`} className="text-gray-900 hover:text-brand-600 hover:underline">
                       {decrypt(app.customer.nameEncrypted)}
                     </Link>
-                    <p className="text-xs text-gray-400">{app.customer.email}</p>
+                    <p className="text-xs text-gray-400 break-all">{app.customer.email}</p>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">{regionLabel}</td>
-                  <td className="px-4 py-3 text-gray-700">{itemTypeLabel}</td>
-                  <td className="px-4 py-3 text-gray-700">{serviceLevelLabel}</td>
-                  <td className="px-4 py-3 text-gray-700">{app._count.cards}枚</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{formatMoneyIn(app.totalAmount, "JPY")}</td>
-                  <td className="px-4 py-3 text-xs text-gray-600">
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{regionLabel}</td>
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{itemTypeLabel}</td>
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap" title={serviceLevelLabel}>
+                    {compactServiceLevel(serviceLevelLabel)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{app._count.cards}枚</td>
+                  <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{formatMoneyIn(app.totalAmount, "JPY")}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                     {booking?.status === "BOOKED" ? (
                       <>
                         <span className="font-medium">
@@ -179,12 +187,12 @@ export default async function AdminApplicationsPage({
                       <span className="text-gray-400">未予約</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_BADGE_CLS[statusLabel] ?? "bg-green-50 text-green-700"}`}>
                       {statusLabel}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
+                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
                     {format(new Date(app.createdAt), "MM/dd HH:mm")}
                   </td>
                 </tr>
@@ -192,7 +200,6 @@ export default async function AdminApplicationsPage({
             })}
           </tbody>
         </table>
-        </div>
       </div>
     </div>
   );
