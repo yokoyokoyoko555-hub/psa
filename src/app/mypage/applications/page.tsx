@@ -38,6 +38,12 @@ export default async function ApplicationsPage() {
             })(),
       source: app.source,
       isDraft: app.status === "DRAFT",
+      pendingPaymentAmount: app.payments.find((p) => p.status === "PENDING")?.amount ?? null,
+      pendingUpchargeTotal:
+        app.cards
+          .flatMap((c) => c.upcharges)
+          .filter((u) => u.status === "PENDING" || u.status === "FAILED")
+          .reduce((sum, u) => sum + u.upchargeAmount, 0) || null,
     };
   });
 

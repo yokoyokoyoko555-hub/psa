@@ -938,7 +938,14 @@ export async function getMyApplications() {
     where: { customerId: customer.id },
     include: {
       cards: {
-        select: { id: true, cardName: true, status: true, psaGrade: true, psaCertNo: true },
+        select: {
+          id: true,
+          cardName: true,
+          status: true,
+          psaGrade: true,
+          psaCertNo: true,
+          upcharges: { select: { id: true, status: true, upchargeAmount: true } },
+        },
       },
       payments: { select: { status: true, amount: true, paidAt: true } },
       psaSubmissionGroup: {
@@ -964,7 +971,7 @@ export async function getApplicationDetail(applicationId: string) {
   return prisma.application.findFirst({
     where: { id: applicationId, customerId: customer.id },
     include: {
-      cards: { orderBy: { lineNo: "asc" } },
+      cards: { orderBy: { lineNo: "asc" }, include: { upcharges: true } },
       payments: true,
       agreement: true,
       submissionBooking: true,

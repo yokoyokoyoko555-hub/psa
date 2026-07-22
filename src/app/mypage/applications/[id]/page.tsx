@@ -7,6 +7,7 @@ import { getApplicationDetail } from "@/actions/application";
 import CustomerHeader from "@/components/CustomerHeader";
 import Footer from "@/components/Footer";
 import DifferentialPaymentPanel from "@/components/DifferentialPaymentPanel";
+import UpchargePaymentPanel from "@/components/UpchargePaymentPanel";
 import { formatMoney, formatMoneyIn, formatMoneyInt } from "@/lib/currency";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -63,6 +64,12 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   if (!application) notFound();
   const isPaid = application.payments.some((p) => p.status === "SUCCEEDED");
   const pendingPayment = application.payments.find((p) => p.status === "PENDING");
+  // 自動課金（保存カードへのoff-session課金）が失敗した場合や保存カード未登録の場合、顧客自身に支払ってもらう。
+  const pendingUpcharges = application.cards.flatMap((c) =>
+    c.upcharges
+      .filter((u) => u.status === "PENDING" || u.status === "FAILED")
+      .map((u) => ({ ...u, cardName: c.cardName }))
+  );
   // 代理申込の先払い（概算の代理入力料金）記録。何をいつ払ったか顧客に分かるよう表示する。ADR-0049
   const prepayPayment =
     application.source === "STORE"
@@ -333,6 +340,17 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
             publishableKey={process.env.STRIPE_PUBLISHABLE_KEY!}
           />
         )}
+
+        {pendingUpcharges.map((u) => (
+          <UpchargePaymentPanel
+            key={u.id}
+            upchargeId={u.id}
+            cardName={u.cardName}
+            reason={u.reason}
+            amount={u.upchargeAmount}
+            publishableKey={process.env.STRIPE_PUBLISHABLE_KEY!}
+          />
+        ))}
 
         {/* Submission booking: 現物が既に手元にある状態になったら非表示（役目を終えているため） */}
         {!hasCardsInHand && (

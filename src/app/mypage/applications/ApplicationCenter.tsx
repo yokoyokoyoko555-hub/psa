@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { deleteApplication } from "@/actions/application";
+import { formatMoneyIn } from "@/lib/currency";
 
 export interface AppRow {
   id: string;
@@ -17,6 +18,10 @@ export interface AppRow {
   displayStatus: string | null; // 顧客向け簡易ステータス（申込完了/受取完了/発送完了/PSA進捗ステータス名）。ADR-0034
   source: string; // CUSTOMER | STORE
   isDraft: boolean;
+  /** 差額請求など未払いのPayment額（あれば）。ADR-0042 */
+  pendingPaymentAmount: number | null;
+  /** 未払い（PENDING/FAILED）Upcharge合計額（あれば） */
+  pendingUpchargeTotal: number | null;
 }
 
 const PAGE_SIZE = 5;
@@ -118,7 +123,13 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
   const [draftSort, setDraftSort] = useState<DraftSort>("date_asc");
   const [draftPage, setDraftPage] = useState(1);
 
-  const submitted = [...rows.filter((a) => !a.isDraft)].sort((a, b) => {
+  // 未払い（差額請求・Upcharge）がある申込はお客様の対応が必要なため、通常の一覧から取り出して専用セクションに表示する。
+  const actionNeeded = rows.filter(
+    (a) => !a.isDraft && ((a.pendingPaymentAmount ?? 0) > 0 || (a.pendingUpchargeTotal ?? 0) > 0)
+  );
+  const actionNeededIds = new Set(actionNeeded.map((a) => a.id));
+
+  const submitted = [...rows.filter((a) => !a.isDraft && !actionNeededIds.has(a.id))].sort((a, b) => {
     if (submittedSort === "status") {
       return (
         (a.displayStatus ?? "").localeCompare(b.displayStatus ?? "", "ja") ||
@@ -164,6 +175,38 @@ export default function ApplicationCenter({ apps }: { apps: AppRow[] }) {
 
   return (
     <div className="space-y-10">
+      {/* お客様の対応が必要（未払いの差額請求・Upcharge） */}
+      {actionNeeded.length > 0 && (
+        <section>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">お客様の対応が必要です</h2>
+          <p className="text-sm text-gray-500 mb-3">お支払いが完了していない申込があります</p>
+          <div className="bg-white rounded-xl border border-amber-300 divide-y divide-amber-100">
+            {actionNeeded.map((a) => (
+              <Link
+                key={a.id}
+                href={`/mypage/applications/${a.id}`}
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-5 py-4 hover:bg-amber-50"
+              >
+                <div className="min-w-0">
+                  <span className="font-mono text-xs text-gray-400">{a.applicationNo}</span>
+                  <p className="font-medium text-gray-900">
+                    {a.cardCount}枚 / {a.serviceLevel}
+                  </p>
+                  <p className="text-sm font-bold text-amber-700 mt-1">
+                    {(a.pendingPaymentAmount ?? 0) > 0 &&
+                      `お支払いをお願いします（${formatMoneyIn(a.pendingPaymentAmount!, "JPY")}）`}
+                    {(a.pendingPaymentAmount ?? 0) > 0 && (a.pendingUpchargeTotal ?? 0) > 0 && "／"}
+                    {(a.pendingUpchargeTotal ?? 0) > 0 &&
+                      `Upcharge（追加請求）のお支払いをお願いします（${formatMoneyIn(a.pendingUpchargeTotal!, "JPY")}）`}
+                  </p>
+                </div>
+                <span className="shrink-0 text-sm font-bold text-brand-600">お支払いへ ›</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* 提出済み */}
       <section>
         <div className="flex items-end justify-between mb-3">

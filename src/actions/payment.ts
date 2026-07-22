@@ -182,6 +182,129 @@ export async function confirmDifferentialPayment(
 }
 
 /**
+ * Upcharge（PSA鑑定結果に応じた追加請求）に対し、顧客が能動的に支払うためのPaymentIntentを作成する。
+ * 管理画面での自動課金（保存カードへのoff-session課金）が失敗した場合や保存カード未登録の場合、
+ * PENDING/FAILEDのまま放置されないよう顧客自身がここから支払える。createDifferentialPaymentIntentと同じ構造。
+ */
+export async function createUpchargePaymentIntent(upchargeId: string, useSavedCard: boolean = true) {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" } as const;
+
+  const upcharge = await prisma.upcharge.findFirst({
+    where: { id: upchargeId, customerId: customer.id },
+    include: { card: { select: { applicationId: true, cardName: true } } },
+  });
+  if (!upcharge) return { success: false, error: "Upchargeが見つかりません" } as const;
+  if (upcharge.status === "PAID") return { success: false, error: "お支払い済みです" } as const;
+  if (upcharge.status === "WAIVED") return { success: false, error: "このUpchargeは請求対象外です" } as const;
+
+  if (!customer.stripeCustomerId) {
+    return { success: false, error: "決済情報の準備ができていません。サポートまでご連絡ください。" } as const;
+  }
+
+  const savedMethod = useSavedCard
+    ? await prisma.savedPaymentMethod.findFirst({ where: { customerId: customer.id, isDefault: true } })
+    : null;
+
+  const pi = await createPaymentIntent({
+    amount: toStripeAmount(upcharge.upchargeAmount),
+    currency: stripeCurrency(),
+    customerId: customer.stripeCustomerId,
+    applicationId: upcharge.card.applicationId,
+    description: `Upcharge: ${upcharge.card.cardName}`,
+    paymentMethodId: savedMethod?.stripePaymentMethodId,
+  });
+
+  await prisma.upcharge.update({
+    where: { id: upcharge.id },
+    data: { stripePaymentIntentId: pi.id },
+  });
+
+  return {
+    success: true,
+    clientSecret: pi.client_secret!,
+    amount: upcharge.upchargeAmount,
+    savedCard: savedMethod ? { brand: savedMethod.brand, last4: savedMethod.last4 } : null,
+  } as const;
+}
+
+const confirmUpchargePaymentSchema = z.object({
+  upchargeId: z.string().min(1),
+  paymentIntentId: z.string().min(1),
+});
+
+/** クライアント側のconfirmCardPayment成功後、Stripe側の状態を確認してUpchargeをPAIDにする。 */
+export async function confirmUpchargePayment(
+  input: z.infer<typeof confirmUpchargePaymentSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const customer = await getCustomerSession();
+  if (!customer) return { success: false, error: "ログインが必要です" };
+
+  const parsed = confirmUpchargePaymentSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "決済情報を確認してください" };
+
+  const upcharge = await prisma.upcharge.findFirst({
+    where: {
+      id: parsed.data.upchargeId,
+      customerId: customer.id,
+      stripePaymentIntentId: parsed.data.paymentIntentId,
+    },
+  });
+  if (!upcharge) return { success: false, error: "Upchargeが見つかりません" };
+  if (upcharge.status === "PAID") return { success: true };
+
+  const stripe = getStripe();
+  const paymentIntent = await stripe.paymentIntents.retrieve(parsed.data.paymentIntentId, {
+    expand: ["payment_method"],
+  });
+
+  if (paymentIntent.status !== "succeeded") {
+    if (paymentIntent.status === "processing") {
+      return { success: false, error: "決済処理中です。少し待ってから再度ご確認ください" };
+    }
+    return { success: false, error: "決済が完了していません" };
+  }
+
+  await prisma.upcharge.update({
+    where: { id: upcharge.id },
+    data: { status: "PAID", paidAt: new Date(), failedAt: null, failureReason: null },
+  });
+
+  const paymentMethod = paymentIntent.payment_method;
+  if (typeof paymentMethod === "object" && paymentMethod?.id && paymentMethod.card && customer.stripeCustomerId) {
+    // 同一カード（ブランド・下4桁・有効期限が一致）は重複保存しない。ADR-0048
+    const existing = await prisma.savedPaymentMethod.findFirst({
+      where: {
+        customerId: customer.id,
+        brand: paymentMethod.card.brand,
+        last4: paymentMethod.card.last4,
+        expMonth: paymentMethod.card.exp_month,
+        expYear: paymentMethod.card.exp_year,
+      },
+    });
+    if (!existing) {
+      const hasDefault = await prisma.savedPaymentMethod.findFirst({
+        where: { customerId: customer.id, isDefault: true },
+      });
+      await prisma.savedPaymentMethod.create({
+        data: {
+          customerId: customer.id,
+          stripePaymentMethodId: paymentMethod.id,
+          brand: paymentMethod.card.brand,
+          last4: paymentMethod.card.last4,
+          expMonth: paymentMethod.card.exp_month,
+          expYear: paymentMethod.card.exp_year,
+          isDefault: !hasDefault,
+        },
+      });
+    }
+  }
+
+  revalidatePath("/mypage/applications");
+  return { success: true };
+}
+
+/**
  * 顧客自身の保存済みカードのうち、同一カード（ブランド・下4桁・有効期限が一致）の重複行を1件に
  * まとめる（既定カード優先、無ければ最古の1件を残す）。既存データの一括整理用。ADR-0048
  */
