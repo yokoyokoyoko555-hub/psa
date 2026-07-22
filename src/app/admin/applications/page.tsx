@@ -52,6 +52,29 @@ function statusRank(label: string): number {
   return STATUS_ORDER[label] ?? 4.5;
 }
 
+// フィルタータブの区分。カスタムのPSA進捗ステータス名（自由入力のため無数にありうる）と複数グループは
+// 「PSA対応中」1つにまとめる。それ以外はステータス列と同じ実在のラベルをそのままタブにする。
+const STATUS_TABS = [
+  { value: "", label: "すべて" },
+  { value: "申込完了", label: "申込完了" },
+  { value: "受取完了", label: "受取完了" },
+  { value: "入力完了", label: "入力完了" },
+  { value: "支払完了", label: "支払完了" },
+  { value: "発送完了", label: "発送完了" },
+  { value: "PSA対応中", label: "PSA対応中" },
+  { value: "返送準備中", label: "返送準備中" },
+  { value: "店頭受取可能", label: "店頭受取可能" },
+  { value: "返送完了", label: "返送完了" },
+  { value: "店頭受取完了", label: "店頭受取完了" },
+  { value: "キャンセル", label: "キャンセル" },
+] as const;
+
+function statusTabCategory(label: string): string {
+  if (label === "複数グループ") return "PSA対応中";
+  // STATUS_ORDERに無い＝カスタムのPSA進捗ステータス名
+  return label in STATUS_ORDER ? label : "PSA対応中";
+}
+
 const SORTABLE_COLUMNS = ["region", "itemType", "serviceLevel", "status"] as const;
 type SortColumn = (typeof SORTABLE_COLUMNS)[number];
 
@@ -61,42 +84,36 @@ export default async function AdminApplicationsPage({
   searchParams: Promise<{ status?: string; page?: string; sort?: string; dir?: string }>;
 }) {
   const sp = await searchParams;
-  const page = sp.page ? parseInt(sp.page) : 1;
   const limit = 50;
   const sortCol = SORTABLE_COLUMNS.includes(sp.sort as SortColumn) ? (sp.sort as SortColumn) : null;
   const sortDir = sp.dir === "desc" ? "desc" : "asc";
 
   // 自己入力(CUSTOMER)・代理入力(STORE)の両方を表示する。代理入力は先払い・明細確定が完了する
   // （status非DRAFT）まではここに出さず、「代理申込」画面（要対応）で扱う。下書き(DRAFT)は表示しない。ADR-0038
-  const where = {
-    status: sp.status
-      ? (sp.status as "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED")
-      : { not: "DRAFT" as const },
-  };
+  // ステータスタブは実際の進捗（computeListDisplayStatus由来のラベル）で絞り込む。DB上のApplication.status
+  // はDRAFT/SUBMITTED/CANCELLEDしか実際には使われない（IN_PROGRESS/COMPLETEDは書き込まれることが無い）ため、
+  // ここでの絞り込みには使えない。ラベルはDB側で計算できないため、絞り込み・並び替え・ページングは
+  // 全件取得してから行う（skip/takeによるDB側ページングは使わない）。
+  const where = { status: { not: "DRAFT" as const } };
 
-  const [applicationsRaw, total] = await Promise.all([
-    prisma.application.findMany({
-      where,
-      skip: (page - 1) * limit,
-      take: limit,
-      include: {
-        customer: { select: { nameEncrypted: true, email: true } },
-        _count: { select: { cards: true } },
-        payments: { select: { status: true } },
-        psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } },
-        groupMemberships: {
-          include: { psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } } },
-        },
-        submissionBooking: { select: { status: true, method: true, scheduledAt: true } },
+  const applicationsRaw = await prisma.application.findMany({
+    where,
+    include: {
+      customer: { select: { nameEncrypted: true, email: true } },
+      _count: { select: { cards: true } },
+      payments: { select: { status: true } },
+      psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } },
+      groupMemberships: {
+        include: { psaSubmissionGroup: { select: { status: true, submittedAt: true, returnReadyAt: true, returnedAt: true } } },
       },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.application.count({ where }),
-  ]);
+      submissionBooking: { select: { status: true, method: true, scheduledAt: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-  // 表示用の値を先に算出してからソートする（提出先・アイテム種別・サービスレベル・ステータスは
-  // ラベル変換や複数フィールドの組み合わせで決まるため、DBのorderByだけでは表現できない）。ADR-0036
-  const applications = applicationsRaw
+  // 表示用の値を先に算出してから、タブでの絞り込み・ソートを行う（提出先・アイテム種別・サービスレベル・
+  // ステータスはラベル変換や複数フィールドの組み合わせで決まるため、DBのwhere/orderByだけでは表現できない）。ADR-0036
+  const filteredSorted = applicationsRaw
     .map((app) => ({
       app,
       regionLabel: REGION_SHORT_LABELS[app.region] ?? app.region,
@@ -107,6 +124,7 @@ export default async function AdminApplicationsPage({
         return raw === "MULTIPLE" ? "複数グループ" : raw;
       })(),
     }))
+    .filter((row) => !sp.status || statusTabCategory(row.statusLabel) === sp.status)
     .sort((a, b) => {
       if (!sortCol) return 0;
       let cmp: number;
@@ -118,6 +136,10 @@ export default async function AdminApplicationsPage({
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
+
+  const totalPages = Math.max(1, Math.ceil(filteredSorted.length / limit));
+  const page = Math.min(Math.max(1, sp.page ? parseInt(sp.page) : 1), totalPages);
+  const applications = filteredSorted.slice((page - 1) * limit, page * limit);
 
   function sortLink(col: SortColumn, label: string) {
     const nextDir = sortCol === col && sortDir === "asc" ? "desc" : "asc";
@@ -133,24 +155,33 @@ export default async function AdminApplicationsPage({
     );
   }
 
+  function pageLink(p: number) {
+    const params = new URLSearchParams();
+    if (sp.status) params.set("status", sp.status);
+    if (sortCol) {
+      params.set("sort", sortCol);
+      params.set("dir", sortDir);
+    }
+    params.set("page", String(p));
+    return `?${params.toString()}`;
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">申込管理</h1>
-        <p className="text-gray-500 text-sm">全{total}件</p>
+        <p className="text-gray-500 text-sm">
+          全{applicationsRaw.length}件
+          {sp.status ? `（${STATUS_TABS.find((t) => t.value === sp.status)?.label ?? sp.status}: ${filteredSorted.length}件）` : ""}
+        </p>
       </div>
 
       {/* Status filter */}
-      <div className="flex gap-2 mb-6">
-        {[
-          { value: "", label: "すべて" },
-          { value: "SUBMITTED", label: "申込済" },
-          { value: "IN_PROGRESS", label: "処理中" },
-          { value: "COMPLETED", label: "完了" },
-        ].map((f) => (
+      <div className="flex flex-wrap gap-2 mb-6">
+        {STATUS_TABS.map((f) => (
           <Link
             key={f.value}
-            href={`?status=${f.value}`}
+            href={`?status=${encodeURIComponent(f.value)}`}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
               (sp.status ?? "") === f.value
                 ? "bg-brand-600 text-white"
@@ -228,6 +259,32 @@ export default async function AdminApplicationsPage({
           </tbody>
         </table>
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-end gap-2 mt-4 text-sm text-gray-600">
+          <Link
+            href={pageLink(Math.max(1, page - 1))}
+            aria-disabled={page === 1}
+            className={`w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:border-brand-300 transition ${
+              page === 1 ? "pointer-events-none opacity-40" : ""
+            }`}
+          >
+            ‹
+          </Link>
+          <span>
+            {page} / {totalPages}
+          </span>
+          <Link
+            href={pageLink(Math.min(totalPages, page + 1))}
+            aria-disabled={page === totalPages}
+            className={`w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:border-brand-300 transition ${
+              page === totalPages ? "pointer-events-none opacity-40" : ""
+            }`}
+          >
+            ›
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
