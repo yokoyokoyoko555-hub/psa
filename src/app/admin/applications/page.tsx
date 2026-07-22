@@ -30,6 +30,28 @@ function compactServiceLevel(label: string): string {
   return parts.length > 1 ? `${parts[0]} 他` : label;
 }
 
+// ステータスの並び順は五十音順ではなく進行順にする。lib/application-status.tsのDISPLAY_STATUSに
+// 定義されている自己入力・代理入力2系統の流れに沿う（承認済み: 自己入力は受取完了→発送完了、
+// 代理入力は入力完了→支払完了→発送完了で合流し、以降は共通）。
+const STATUS_ORDER: Record<string, number> = {
+  申込完了: 1,
+  受取完了: 2, // 自己入力
+  入力完了: 2, // 代理入力（受取完了と同じ段階）
+  支払完了: 3, // 代理入力のみ
+  発送完了: 4,
+  複数グループ: 5, // 発送後、複数のPSA提出グループにまたがっている状態
+  返送準備中: 6,
+  店頭受取可能: 6,
+  返送完了: 7,
+  店頭受取完了: 7,
+  キャンセル: 8,
+};
+
+// 上記に無いものは管理画面で自由入力されたPSA進捗ステータス名（発送完了〜返送準備中の間の段階）。
+function statusRank(label: string): number {
+  return STATUS_ORDER[label] ?? 4.5;
+}
+
 const SORTABLE_COLUMNS = ["region", "itemType", "serviceLevel", "status"] as const;
 type SortColumn = (typeof SORTABLE_COLUMNS)[number];
 
@@ -87,8 +109,13 @@ export default async function AdminApplicationsPage({
     }))
     .sort((a, b) => {
       if (!sortCol) return 0;
-      const key = sortCol === "region" ? "regionLabel" : sortCol === "itemType" ? "itemTypeLabel" : sortCol === "serviceLevel" ? "serviceLevelLabel" : "statusLabel";
-      const cmp = a[key].localeCompare(b[key], "ja");
+      let cmp: number;
+      if (sortCol === "status") {
+        cmp = statusRank(a.statusLabel) - statusRank(b.statusLabel) || a.statusLabel.localeCompare(b.statusLabel, "ja");
+      } else {
+        const key = sortCol === "region" ? "regionLabel" : sortCol === "itemType" ? "itemTypeLabel" : "serviceLevelLabel";
+        cmp = a[key].localeCompare(b[key], "ja");
+      }
       return sortDir === "asc" ? cmp : -cmp;
     });
 
