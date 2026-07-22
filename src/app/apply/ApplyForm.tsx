@@ -337,6 +337,15 @@ export default function ApplyForm({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // 似た内容のアイテムを続けて追加しやすいよう、選択した行の内容を上の入力欄に複製する
+  // （編集と異なり既存の行は残したまま、保存すると新しい行として追加される）。
+  function copyCard(i: number) {
+    setDraft({ ...cards[i] });
+    setEditingIndex(null);
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function deleteCard(i: number) {
     setCards((prev) => prev.filter((_, idx) => idx !== i));
     if (editingIndex === i) clearDraft();
@@ -1042,6 +1051,12 @@ export default function ApplyForm({
                                 {fieldLabels.quantityUnit} / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
                               </p>
                             </div>
+                            <button
+                              onClick={() => copyCard(i)}
+                              className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+                            >
+                              コピー
+                            </button>
                             <button
                               onClick={() => editCard(i)}
                               className="text-brand-600 hover:text-brand-800 text-sm font-medium"

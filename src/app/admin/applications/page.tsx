@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import Link from "next/link";
 import { formatMoneyIn } from "@/lib/currency";
 import { ITEM_TYPE_LABELS, resolveServiceLevel, computeListDisplayStatus } from "@/lib/application-status";
+import FilterSortBar from "./FilterSortBar";
 
 const STATUS_BADGE_CLS: Record<string, string> = {
   申込完了: "bg-blue-50 text-blue-700",
@@ -24,7 +25,7 @@ const STATUS_BADGE_CLS: Record<string, string> = {
 const REGION_SHORT_LABELS: Record<string, string> = { PSA_JP: "日本", PSA_US: "US" };
 
 // カードごとに異なるサービスレベルが混在する申込は「A / B / C」のように連結されて長くなるため、
-// 一覧では先頭のみ＋「他」に圧縮する（並び替えは元の値のまま行う）。詳細は申込詳細ページで確認できる。
+// 一覧では先頭のみ＋「他」に圧縮する（並び替えも同じ圧縮後の値で行い、表示と一致させる）。詳細は申込詳細ページで確認できる。
 function compactServiceLevel(label: string): string {
   const parts = label.split(" / ");
   return parts.length > 1 ? `${parts[0]} 他` : label;
@@ -52,30 +53,16 @@ function statusRank(label: string): number {
   return STATUS_ORDER[label] ?? 4.5;
 }
 
-// フィルタータブの区分。カスタムのPSA進捗ステータス名（自由入力のため無数にありうる）と複数グループは
-// 「PSA対応中」1つにまとめる。それ以外はステータス列と同じ実在のラベルをそのままタブにする。
-const STATUS_TABS = [
-  { value: "", label: "すべて" },
-  { value: "申込完了", label: "申込完了" },
-  { value: "受取完了", label: "受取完了" },
-  { value: "入力完了", label: "入力完了" },
-  { value: "支払完了", label: "支払完了" },
-  { value: "発送完了", label: "発送完了" },
-  { value: "PSA対応中", label: "PSA対応中" },
-  { value: "返送準備中", label: "返送準備中" },
-  { value: "店頭受取可能", label: "店頭受取可能" },
-  { value: "返送完了", label: "返送完了" },
-  { value: "店頭受取完了", label: "店頭受取完了" },
-  { value: "キャンセル", label: "キャンセル" },
-] as const;
-
+// ステータス区分（絞り込みプルダウンの選択肢はFilterSortBar側）。カスタムのPSA進捗ステータス名
+// （自由入力のため無数にありうる）と複数グループは「PSA対応中」1つにまとめる。それ以外はステータス列と
+// 同じ実在のラベルをそのまま使う。
 function statusTabCategory(label: string): string {
   if (label === "複数グループ") return "PSA対応中";
   // STATUS_ORDERに無い＝カスタムのPSA進捗ステータス名
   return label in STATUS_ORDER ? label : "PSA対応中";
 }
 
-const SORTABLE_COLUMNS = ["region", "itemType", "serviceLevel", "status"] as const;
+const SORTABLE_COLUMNS = ["region", "itemType", "serviceLevel", "booking", "status"] as const;
 type SortColumn = (typeof SORTABLE_COLUMNS)[number];
 
 export default async function AdminApplicationsPage({
@@ -121,6 +108,13 @@ export default async function AdminApplicationsPage({
       regionLabel: REGION_SHORT_LABELS[app.region] ?? app.region,
       itemTypeLabel: app.region === "PSA_US" ? (ITEM_TYPE_LABELS[app.itemType] ?? app.itemType) : "-",
       serviceLevelLabel: resolveServiceLevel(app),
+      // 未予約は最後、それ以外は方法（店頭/郵送）でまとめてからソートできるようにする。
+      bookingSortLabel:
+        app.submissionBooking?.status === "BOOKED"
+          ? app.submissionBooking.method === "STORE_DROP_OFF"
+            ? "1_店頭"
+            : "2_郵送"
+          : "3_未予約",
       statusLabel: (() => {
         const raw = app.status === "CANCELLED" ? "キャンセル" : computeListDisplayStatus(app);
         return raw === "MULTIPLE" ? "複数グループ" : raw;
@@ -141,8 +135,14 @@ export default async function AdminApplicationsPage({
       let cmp: number;
       if (sortCol === "status") {
         cmp = statusRank(a.statusLabel) - statusRank(b.statusLabel) || a.statusLabel.localeCompare(b.statusLabel, "ja");
+      } else if (sortCol === "booking") {
+        cmp = a.bookingSortLabel.localeCompare(b.bookingSortLabel, "ja");
+      } else if (sortCol === "serviceLevel") {
+        // 表示（「A 他」等に圧縮した値）でまとまるようにソートする。元の値でソートすると、
+        // 混在するカードの組み合わせ次第で表示上同じ「A 他」でも離れて並んでしまうため。
+        cmp = compactServiceLevel(a.serviceLevelLabel).localeCompare(compactServiceLevel(b.serviceLevelLabel), "ja");
       } else {
-        const key = sortCol === "region" ? "regionLabel" : sortCol === "itemType" ? "itemTypeLabel" : "serviceLevelLabel";
+        const key = sortCol === "region" ? "regionLabel" : "itemTypeLabel";
         cmp = a[key].localeCompare(b[key], "ja");
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -151,21 +151,6 @@ export default async function AdminApplicationsPage({
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / limit));
   const page = Math.min(Math.max(1, sp.page ? parseInt(sp.page) : 1), totalPages);
   const applications = filteredSorted.slice((page - 1) * limit, page * limit);
-
-  function sortLink(col: SortColumn, label: string) {
-    const nextDir = sortCol === col && sortDir === "asc" ? "desc" : "asc";
-    const params = new URLSearchParams();
-    if (sp.status) params.set("status", sp.status);
-    if (q) params.set("q", q);
-    params.set("sort", col);
-    params.set("dir", nextDir);
-    return (
-      <Link href={`?${params.toString()}`} className="inline-flex items-center gap-1 hover:text-gray-900">
-        {label}
-        {sortCol === col && <span>{sortDir === "asc" ? "▲" : "▼"}</span>}
-      </Link>
-    );
-  }
 
   function pageLink(p: number) {
     const params = new URLSearchParams();
@@ -176,13 +161,6 @@ export default async function AdminApplicationsPage({
       params.set("dir", sortDir);
     }
     params.set("page", String(p));
-    return `?${params.toString()}`;
-  }
-
-  function statusLink(value: string) {
-    const params = new URLSearchParams();
-    if (value) params.set("status", value);
-    if (q) params.set("q", q);
     return `?${params.toString()}`;
   }
 
@@ -227,37 +205,23 @@ export default async function AdminApplicationsPage({
         )}
       </form>
 
-      {/* Status filter */}
-      <div className="flex flex-wrap gap-1.5 mb-6">
-        {STATUS_TABS.map((f) => (
-          <Link
-            key={f.value}
-            href={statusLink(f.value)}
-            className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition ${
-              (sp.status ?? "") === f.value
-                ? "border-brand-600 bg-brand-600 text-white"
-                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
-            }`}
-          >
-            {f.label}
-          </Link>
-        ))}
-      </div>
+      {/* ステータス絞り込み・並び替え（プルダウン） */}
+      <FilterSortBar status={sp.status ?? ""} q={q} sort={sortCol ?? ""} dir={sortDir} />
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">申込日時</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">申込番号</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">顧客</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{sortLink("region", "提出先")}</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{sortLink("itemType", "アイテム種別")}</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{sortLink("serviceLevel", "サービスレベル")}</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">提出先</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">アイテム種別</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">サービスレベル</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">枚数</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">金額</th>
               <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">提出予約</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">{sortLink("status", "ステータス")}</th>
-              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">申込日時</th>
+              <th className="text-left px-4 py-3 text-gray-600 font-medium whitespace-nowrap">ステータス</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -265,6 +229,9 @@ export default async function AdminApplicationsPage({
               const booking = app.submissionBooking;
               return (
                 <tr key={app.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                    {format(new Date(app.createdAt), "MM/dd HH:mm")}
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
                     <Link href={`/admin/applications/${app.id}`} className="text-brand-600 hover:underline">
                       {app.applicationNo}
@@ -300,9 +267,6 @@ export default async function AdminApplicationsPage({
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_BADGE_CLS[statusLabel] ?? "bg-green-50 text-green-700"}`}>
                       {statusLabel}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                    {format(new Date(app.createdAt), "MM/dd HH:mm")}
                   </td>
                 </tr>
               );

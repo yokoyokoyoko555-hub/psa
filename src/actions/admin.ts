@@ -140,6 +140,7 @@ export async function markApplicationReceived(applicationId: string) {
   });
 
   revalidatePath(`/admin/applications/${applicationId}`);
+  revalidatePath(`/admin/store-requests/${applicationId}`);
   revalidatePath("/mypage/applications");
   return { success: true };
 }

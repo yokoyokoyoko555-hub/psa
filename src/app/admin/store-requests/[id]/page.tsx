@@ -2,9 +2,12 @@ export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { ensureTradingCardCustomPrices } from "@/actions/pricing";
+import { toJstDisplay } from "@/lib/jst-date";
+import MarkReceivedButton from "@/components/MarkReceivedButton";
 import StoreInputForm from "./StoreInputForm";
 
 const REGION_LABELS: Record<string, string> = {
@@ -130,6 +133,28 @@ export default async function StoreRequestDetailPage({
             <dd>{app.returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}</dd>
           </div>
         </dl>
+        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+          <span className="text-sm font-bold text-gray-700">受取確認</span>
+          {app.receivedAt ? (
+            <span className="text-xs text-gray-500">
+              受取完了: {format(toJstDisplay(new Date(app.receivedAt)), "yyyy/MM/dd HH:mm")}
+            </span>
+          ) : (
+            <MarkReceivedButton applicationId={app.id} />
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="font-bold text-gray-900 mb-3">代理入力種類・申込総数（お客様申告）</h2>
+        <div className="flex items-center justify-between py-1.5 text-sm">
+          <span className="text-gray-700">代理入力種類（同一カードは1としてカウント）</span>
+          <span className="font-medium text-gray-900">{app.agencyQuantity ?? "—"} 点</span>
+        </div>
+        <div className="flex items-center justify-between py-1.5 border-t border-gray-100 text-sm">
+          <span className="text-gray-700">申込総数（お預けいただく総数の目安）</span>
+          <span className="font-medium text-gray-900">{app.estimatedCardCount ?? "—"} 枚</span>
+        </div>
       </div>
 
       {estimatedLevels.length > 0 && (

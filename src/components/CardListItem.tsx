@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateCardDetails } from "@/actions/admin";
 import { formatMoneyInt } from "@/lib/currency";
-import { CARD_DISPLAY_LABELS, buildPsaLine, buildCardTitle } from "@/lib/card-display";
+import { CARD_DISPLAY_LABELS, buildPsaLine, buildCardTitle, containsJapanese } from "@/lib/card-display";
 import CopyButton from "@/components/CopyButton";
 
 export type CardListItemData = {
@@ -40,6 +40,8 @@ export default function CardListItem({
   const displayLabels = CARD_DISPLAY_LABELS[itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
   const psaLine = buildPsaLine(card, itemType);
   const cardTitle = buildCardTitle(card, itemType);
+  // 英語化しきれず日本語が残っている行は、提出フォームへそのまま貼ると不備になるためハイライトする。
+  const psaLineNeedsReview = containsJapanese(psaLine);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -89,6 +91,14 @@ export default function CardListItem({
               <>
                 {/* PSA提出フォーム向け: 半角スペース区切り1行をコピー */}
                 <CopyButton label="行コピー" text={psaLine} />
+                {psaLineNeedsReview && (
+                  <span
+                    className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5"
+                    title="英語への自動変換が不完全な可能性があります。行コピーの内容をご確認ください。"
+                  >
+                    ⚠ 要確認
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => setEditing(true)}
@@ -103,7 +113,13 @@ export default function CardListItem({
           {!editing ? (
             <>
               {/* 顧客入力内容を半角スペース区切り1行で表示（コピー内容と同一） */}
-              <p className="mt-1 text-xs font-mono text-gray-700 bg-gray-50 rounded px-2 py-1 break-all">
+              <p
+                className={`mt-1 text-xs font-mono rounded px-2 py-1 break-all ${
+                  psaLineNeedsReview
+                    ? "bg-amber-50 text-amber-800 border border-amber-200"
+                    : "bg-gray-50 text-gray-700"
+                }`}
+              >
                 {psaLine}
               </p>
               <p className="mt-1 flex gap-3 text-xs text-gray-500">

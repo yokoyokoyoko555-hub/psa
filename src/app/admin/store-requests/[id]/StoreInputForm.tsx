@@ -37,7 +37,7 @@ const CARD_FIELD_LABELS: Record<
     secondaryLabel: "言語",
     secondaryPlaceholder: "例: 日本語",
     nameLabel: "カード名",
-    namePlaceholder: "例: リザードン",
+    namePlaceholder: "例: モンキー・D・ルフィ",
     quantityLabel: "枚数",
     quantityUnit: "枚",
     showCardNumberRarity: true,
@@ -210,6 +210,14 @@ export default function StoreInputForm({
   function editCard(i: number) {
     setDraft(cards[i]);
     setEditingIndex(i);
+    setError("");
+  }
+
+  // 似た内容のアイテムを続けて追加しやすいよう、選択した行の内容を上の入力欄に複製する
+  // （編集と異なり既存の行は残したまま、保存すると新しい行として追加される）。
+  function copyCard(i: number) {
+    setDraft({ ...cards[i] });
+    setEditingIndex(null);
     setError("");
   }
 
@@ -503,6 +511,13 @@ export default function StoreInputForm({
                       {fieldLabels.quantityUnit} / 申告 {formatMoneyInt(c.declaredValue * c.quantity, region)}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => copyCard(i)}
+                    className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+                  >
+                    コピー
+                  </button>
                   <button
                     type="button"
                     onClick={() => editCard(i)}
