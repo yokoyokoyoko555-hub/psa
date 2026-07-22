@@ -165,6 +165,7 @@ export default async function AdminSubmissionBookingsPage({
                     align={i === 0 ? "left" : "right"}
                     isClosed={daySetting?.isClosed ?? false}
                     isShippingDay={daySetting?.isShippingDay ?? false}
+                    closedSlots={daySetting?.closedSlots ?? []}
                     note={daySetting?.note ?? ""}
                   />
                 </div>
@@ -177,6 +178,11 @@ export default async function AdminSubmissionBookingsPage({
                   {daySetting?.isShippingDay && (
                     <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[11px] font-bold text-brand-700">
                       発送日
+                    </span>
+                  )}
+                  {!daySetting?.isClosed && (daySetting?.closedSlots.length ?? 0) > 0 && (
+                    <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[11px] font-bold text-orange-700">
+                      時間一部不可
                     </span>
                   )}
                   {dayBookings.length > 0 && (

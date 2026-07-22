@@ -70,6 +70,18 @@ export function buildCardTitle(
 }
 
 /**
+ * コミック・マガジンの発行年月は顧客が「2022年5月」のように和暦風の自由記述で入力するため、
+ * PSA提出フォーム（英語）向けに「05/2022」形式へ変換する。該当しない形式（既に数字のみ等）はそのまま返す。
+ */
+function formatReleaseYearForPsa(value: string): string {
+  const yearMonth = value.match(/^(\d{4})年(\d{1,2})月$/);
+  if (yearMonth) return `${yearMonth[2].padStart(2, "0")}/${yearMonth[1]}`;
+  const yearOnly = value.match(/^(\d{4})年$/);
+  if (yearOnly) return yearOnly[1];
+  return value;
+}
+
+/**
  * PSA提出フォーム向け1行（発行年 タイトル 言語(英語)/出版社 カード番号／型番 カード名 レアリティ・半角スペース区切り）。
  * トレカ以外はcardNumber/rarityが空文字のためfilterで自然に除外される。
  */
@@ -84,8 +96,12 @@ export function buildPsaLine(
   },
   itemType: string
 ): string {
+  const releaseYear =
+    itemType === "COMIC_MAGAZINE" && card.releaseYear
+      ? formatReleaseYearForPsa(card.releaseYear)
+      : card.releaseYear ?? "";
   return [
-    card.releaseYear ?? "",
+    releaseYear,
     card.tcgTitle,
     itemType === "TRADING_CARD" ? LANGUAGE_PSA[card.language] ?? card.language : card.language,
     card.cardNumber ?? "",

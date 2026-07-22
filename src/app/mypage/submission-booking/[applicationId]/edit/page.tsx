@@ -74,6 +74,9 @@ export default async function EditBookingPage({
     }),
   ]);
   const takenSlots = otherBookings.map((b) => `${toDateKey(b.scheduledAt)}T${toTimeKey(b.scheduledAt)}`);
+  const closedSlotsByDate = Object.fromEntries(
+    calendarDays.filter((d) => d.closedSlots.length > 0).map((d) => [toDateKey(d.date), d.closedSlots])
+  );
 
   const booking =
     app.submissionBooking && app.submissionBooking.status === "BOOKED"
@@ -107,6 +110,7 @@ export default async function EditBookingPage({
           closedDates={calendarDays.filter((d) => d.isClosed).map((d) => toDateKey(d.date))}
           shippingDates={calendarDays.filter((d) => d.isShippingDay).map((d) => toDateKey(d.date))}
           takenSlots={takenSlots}
+          closedSlotsByDate={closedSlotsByDate}
           storeAddress={
             storeSettings
               ? {

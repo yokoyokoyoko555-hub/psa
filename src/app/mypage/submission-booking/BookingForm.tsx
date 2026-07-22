@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { upsertSubmissionBooking } from "@/actions/submission-booking";
+import { TIME_SLOTS } from "@/lib/booking-slots";
 
 type BookingMethod = "STORE_DROP_OFF" | "SHIPPING";
 
@@ -13,7 +14,6 @@ type ExistingBooking = {
   note: string | null;
 } | null;
 
-const TIME_SLOTS = ["10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 /** 指定日時（現地時間）が既に過ぎているかどうか。当日の過去の時間帯を選べないようにするため。 */
@@ -50,6 +50,7 @@ export default function BookingForm({
   closedDates,
   shippingDates,
   takenSlots,
+  closedSlotsByDate,
   storeAddress,
 }: {
   applicationId: string;
@@ -58,6 +59,8 @@ export default function BookingForm({
   shippingDates: string[];
   /** 既に他の予約で埋まっている店頭持込の日時（`${dateKey}T${time}`形式）。自分自身の既存予約は含まない。ADR-0035 */
   takenSlots: string[];
+  /** 管理画面で日付ごとに個別に受付不可にした時間帯（dateKey→時間帯の配列）。店頭持込のみ対象。 */
+  closedSlotsByDate: Record<string, string[]>;
   storeAddress: { postalCode: string; address: string; storeName: string; phone: string } | null;
 }) {
   const router = useRouter();
@@ -81,6 +84,7 @@ export default function BookingForm({
   const todayKey = toDateKey(now);
   const takenSlotSet = useMemo(() => new Set(takenSlots), [takenSlots]);
   const isShipping = method === "SHIPPING";
+  const closedSlotsForSelectedDate = closedSlotsByDate[selectedDate] ?? [];
 
   function moveMonth(offset: number) {
     setMonth((c) => new Date(c.getFullYear(), c.getMonth() + offset, 1));
@@ -98,6 +102,10 @@ export default function BookingForm({
     }
     if (!isShipping && isSlotPast(selectedDate, submitTime, new Date())) {
       setMessage("過去の時間は選択できません。別の時間を選択してください");
+      return;
+    }
+    if (!isShipping && closedSlotsForSelectedDate.includes(submitTime)) {
+      setMessage("この時間帯は受付不可です。別の時間を選択してください");
       return;
     }
     setMessage("");
@@ -144,9 +152,12 @@ export default function BookingForm({
             // 「受付不可」は店頭持込（実店舗の休業日）向けの設定。郵送はお客様ご自身で投函するだけなので対象外。
             const isClosed = closedDates.includes(key) && !isShipping;
             const isShippingDay = shippingDates.includes(key);
+            const keyClosedSlots = closedSlotsByDate[key] ?? [];
             const isFullyBooked =
               !isShipping &&
-              TIME_SLOTS.every((slot) => takenSlotSet.has(`${key}T${slot}`) || isSlotPast(key, slot, now));
+              TIME_SLOTS.every(
+                (slot) => takenSlotSet.has(`${key}T${slot}`) || isSlotPast(key, slot, now) || keyClosedSlots.includes(slot)
+              );
             const disabled = key < todayKey || isClosed || (isFullyBooked && !isShipping);
             const active = key === selectedDate && !isClosed;
             return (
@@ -228,14 +239,15 @@ export default function BookingForm({
               {TIME_SLOTS.map((slot) => {
                 const taken = takenSlotSet.has(`${selectedDate}T${slot}`);
                 const past = isSlotPast(selectedDate, slot, now);
-                const disabled = taken || past;
+                const closedSlot = closedSlotsForSelectedDate.includes(slot);
+                const disabled = taken || past || closedSlot;
                 return (
                   <button
                     key={slot}
                     type="button"
                     disabled={disabled}
                     onClick={() => setTime(slot)}
-                    title={taken ? "満席です" : past ? "過去の時間です" : undefined}
+                    title={taken ? "満席です" : past ? "過去の時間です" : closedSlot ? "受付不可です" : undefined}
                     className={`rounded-lg border px-2 py-2 text-sm font-bold ${
                       disabled
                         ? "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"

@@ -3,12 +3,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { upsertSubmissionCalendarDay } from "@/actions/submission-booking";
+import { TIME_SLOTS } from "@/lib/booking-slots";
 
 export default function DaySettingsButton({
   date,
   align = "right",
   isClosed,
   isShippingDay,
+  closedSlots,
   note,
 }: {
   date: string;
@@ -16,15 +18,21 @@ export default function DaySettingsButton({
   align?: "left" | "right";
   isClosed: boolean;
   isShippingDay: boolean;
+  closedSlots: string[];
   note: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [closed, setClosed] = useState(isClosed);
   const [shippingDay, setShippingDay] = useState(isShippingDay);
+  const [slotsClosed, setSlotsClosed] = useState(closedSlots);
   const [dayNote, setDayNote] = useState(note);
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  function toggleSlot(slot: string) {
+    setSlotsClosed((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
+  }
 
   function save() {
     setMessage("");
@@ -33,6 +41,7 @@ export default function DaySettingsButton({
         date,
         isClosed: closed,
         isShippingDay: shippingDay,
+        closedSlots: slotsClosed,
         note: dayNote,
       });
       setMessage(result.success ? "保存しました" : result.error ?? "保存に失敗しました");
@@ -77,6 +86,26 @@ export default function DaySettingsButton({
             />
             発送日
           </label>
+          <div className="mt-3">
+            <p className="mb-1 text-xs font-bold text-gray-700">時間帯（店頭持込のみ受付不可にする）</p>
+            <div className="grid grid-cols-4 gap-1">
+              {TIME_SLOTS.map((slot) => {
+                const active = slotsClosed.includes(slot);
+                return (
+                  <button
+                    key={slot}
+                    type="button"
+                    onClick={() => toggleSlot(slot)}
+                    className={`rounded border px-1 py-1 text-[11px] font-bold ${
+                      active ? "border-red-300 bg-red-50 text-red-600" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    {slot}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <textarea
             value={dayNote}
             onChange={(event) => setDayNote(event.target.value)}

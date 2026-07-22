@@ -19,6 +19,7 @@ const calendarDaySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   isClosed: z.boolean(),
   isShippingDay: z.boolean(),
+  closedSlots: z.array(z.string()).default([]),
   note: z.string().max(300).optional(),
 });
 
@@ -55,6 +56,7 @@ export async function upsertSubmissionBooking(
     return { success: false, error: "未来の日時を選択してください" };
   }
   const dateKey = parsed.data.scheduledAt.slice(0, 10);
+  const timeKey = parsed.data.scheduledAt.slice(11, 16);
   // 「受付不可」は店頭持込（実店舗の休業日）向けの設定。郵送はお客様ご自身で投函するだけなので対象外。
   if (parsed.data.method === "STORE_DROP_OFF") {
     const calendarDay = await prisma.submissionCalendarDay.findUnique({
@@ -62,6 +64,9 @@ export async function upsertSubmissionBooking(
     });
     if (calendarDay?.isClosed) {
       return { success: false, error: "この日は予約受付不可です。別の日を選択してください" };
+    }
+    if (calendarDay?.closedSlots.includes(timeKey)) {
+      return { success: false, error: "この時間帯は受付不可です。別の時間を選択してください" };
     }
   }
 
@@ -188,12 +193,14 @@ export async function upsertSubmissionCalendarDay(
     update: {
       isClosed: parsed.data.isClosed,
       isShippingDay: parsed.data.isShippingDay,
+      closedSlots: parsed.data.closedSlots,
       note: parsed.data.note?.trim() || null,
     },
     create: {
       date,
       isClosed: parsed.data.isClosed,
       isShippingDay: parsed.data.isShippingDay,
+      closedSlots: parsed.data.closedSlots,
       note: parsed.data.note?.trim() || null,
     },
   });

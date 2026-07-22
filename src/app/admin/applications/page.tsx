@@ -81,10 +81,11 @@ type SortColumn = (typeof SORTABLE_COLUMNS)[number];
 export default async function AdminApplicationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string; sort?: string; dir?: string }>;
+  searchParams: Promise<{ status?: string; page?: string; sort?: string; dir?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const limit = 50;
+  const q = sp.q?.trim() ?? "";
   const sortCol = SORTABLE_COLUMNS.includes(sp.sort as SortColumn) ? (sp.sort as SortColumn) : null;
   const sortDir = sp.dir === "desc" ? "desc" : "asc";
 
@@ -116,6 +117,7 @@ export default async function AdminApplicationsPage({
   const filteredSorted = applicationsRaw
     .map((app) => ({
       app,
+      customerName: decrypt(app.customer.nameEncrypted),
       regionLabel: REGION_SHORT_LABELS[app.region] ?? app.region,
       itemTypeLabel: app.region === "PSA_US" ? (ITEM_TYPE_LABELS[app.itemType] ?? app.itemType) : "-",
       serviceLevelLabel: resolveServiceLevel(app),
@@ -125,6 +127,15 @@ export default async function AdminApplicationsPage({
       })(),
     }))
     .filter((row) => !sp.status || statusTabCategory(row.statusLabel) === sp.status)
+    .filter((row) => {
+      if (!q) return true;
+      const needle = q.toLowerCase();
+      return (
+        row.app.applicationNo.toLowerCase().includes(needle) ||
+        row.customerName.toLowerCase().includes(needle) ||
+        row.app.customer.email.toLowerCase().includes(needle)
+      );
+    })
     .sort((a, b) => {
       if (!sortCol) return 0;
       let cmp: number;
@@ -145,6 +156,7 @@ export default async function AdminApplicationsPage({
     const nextDir = sortCol === col && sortDir === "asc" ? "desc" : "asc";
     const params = new URLSearchParams();
     if (sp.status) params.set("status", sp.status);
+    if (q) params.set("q", q);
     params.set("sort", col);
     params.set("dir", nextDir);
     return (
@@ -158,11 +170,25 @@ export default async function AdminApplicationsPage({
   function pageLink(p: number) {
     const params = new URLSearchParams();
     if (sp.status) params.set("status", sp.status);
+    if (q) params.set("q", q);
     if (sortCol) {
       params.set("sort", sortCol);
       params.set("dir", sortDir);
     }
     params.set("page", String(p));
+    return `?${params.toString()}`;
+  }
+
+  function statusLink(value: string) {
+    const params = new URLSearchParams();
+    if (value) params.set("status", value);
+    if (q) params.set("q", q);
+    return `?${params.toString()}`;
+  }
+
+  function clearSearchLink() {
+    const params = new URLSearchParams();
+    if (sp.status) params.set("status", sp.status);
     return `?${params.toString()}`;
   }
 
@@ -172,20 +198,45 @@ export default async function AdminApplicationsPage({
         <h1 className="text-2xl font-bold text-gray-900">申込管理</h1>
         <p className="text-gray-500 text-sm">
           全{applicationsRaw.length}件
-          {sp.status ? `（${STATUS_TABS.find((t) => t.value === sp.status)?.label ?? sp.status}: ${filteredSorted.length}件）` : ""}
+          {sp.status || q ? `（絞り込み: ${filteredSorted.length}件）` : ""}
         </p>
       </div>
 
+      {/* 検索: 申込番号・顧客名・メールアドレス */}
+      <form method="GET" className="mb-4 flex flex-wrap items-center gap-2">
+        {sp.status && <input type="hidden" name="status" value={sp.status} />}
+        {sortCol && <input type="hidden" name="sort" value={sortCol} />}
+        {sortCol && <input type="hidden" name="dir" value={sortDir} />}
+        <input
+          type="text"
+          name="q"
+          defaultValue={q}
+          placeholder="申込番号・顧客名・メールアドレスで検索"
+          className="flex-1 min-w-0 max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+        <button
+          type="submit"
+          className="bg-brand-600 text-white font-bold px-4 py-2 rounded-lg text-sm hover:bg-brand-700 transition"
+        >
+          検索
+        </button>
+        {q && (
+          <Link href={clearSearchLink()} className="text-sm text-gray-500 hover:text-gray-700">
+            クリア
+          </Link>
+        )}
+      </form>
+
       {/* Status filter */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-1.5 mb-6">
         {STATUS_TABS.map((f) => (
           <Link
             key={f.value}
-            href={`?status=${encodeURIComponent(f.value)}`}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            href={statusLink(f.value)}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium transition ${
               (sp.status ?? "") === f.value
-                ? "bg-brand-600 text-white"
-                : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300"
+                ? "border-brand-600 bg-brand-600 text-white"
+                : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
             }`}
           >
             {f.label}
@@ -210,7 +261,7 @@ export default async function AdminApplicationsPage({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {applications.map(({ app, regionLabel, itemTypeLabel, serviceLevelLabel, statusLabel }) => {
+            {applications.map(({ app, customerName, regionLabel, itemTypeLabel, serviceLevelLabel, statusLabel }) => {
               const booking = app.submissionBooking;
               return (
                 <tr key={app.id} className="hover:bg-gray-50">
@@ -221,7 +272,7 @@ export default async function AdminApplicationsPage({
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/admin/customers/${app.customerId}`} className="text-gray-900 hover:text-brand-600 hover:underline">
-                      {decrypt(app.customer.nameEncrypted)}
+                      {customerName}
                     </Link>
                     <p className="text-xs text-gray-400 break-all">{app.customer.email}</p>
                   </td>
