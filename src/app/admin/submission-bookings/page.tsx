@@ -148,7 +148,7 @@ export default async function AdminSubmissionBookingsPage({
         </div>
 
         <div className="grid grid-cols-7">
-          {dayKeys.map((key) => {
+          {dayKeys.map((key, i) => {
             const dayBookings = grouped.get(key) ?? [];
             const daySetting = settingsByDate.get(key);
             return (
@@ -162,6 +162,7 @@ export default async function AdminSubmissionBookingsPage({
                   <span className="text-sm font-bold">{formatMonthDay(key)}</span>
                   <DaySettingsButton
                     date={key}
+                    align={i === 0 ? "left" : "right"}
                     isClosed={daySetting?.isClosed ?? false}
                     isShippingDay={daySetting?.isShippingDay ?? false}
                     note={daySetting?.note ?? ""}

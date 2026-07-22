@@ -6,11 +6,14 @@ import { upsertSubmissionCalendarDay } from "@/actions/submission-booking";
 
 export default function DaySettingsButton({
   date,
+  align = "right",
   isClosed,
   isShippingDay,
   note,
 }: {
   date: string;
+  /** ポップアップの開く向き。左端（月曜）はrightだとサイドバーに被るためleftを指定する。 */
+  align?: "left" | "right";
   isClosed: boolean;
   isShippingDay: boolean;
   note: string;
@@ -50,7 +53,11 @@ export default function DaySettingsButton({
         設定
       </button>
       {open && (
-        <div className="absolute right-0 top-8 z-20 w-64 rounded-lg border border-gray-200 bg-white p-3 text-left shadow-lg">
+        <div
+          className={`absolute top-8 z-20 w-64 rounded-lg border border-gray-200 bg-white p-3 text-left shadow-lg ${
+            align === "left" ? "left-0" : "right-0"
+          }`}
+        >
           <p className="mb-3 font-bold text-gray-900">{date}</p>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input
