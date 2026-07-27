@@ -293,15 +293,6 @@ export default function CardListItem({
             </form>
           )}
         </div>
-        {!editing && (
-          <a
-            href={`/api/qrcode?cardId=${card.id}`}
-            target="_blank"
-            className="shrink-0 text-xs text-brand-600 hover:underline"
-          >
-            📱 QR印刷
-          </a>
-        )}
       </div>
     </div>
   );
