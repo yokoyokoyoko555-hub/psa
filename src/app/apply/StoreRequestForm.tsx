@@ -3,11 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createStoreRequest, confirmStorePrepayPayment } from "@/actions/application";
+import { createDifferentialPaymentIntent } from "@/actions/payment";
 import { ServiceRegion, ReturnMethod, ItemType } from "@prisma/client";
 import type { PricingSetting } from "@prisma/client";
 import type { CustomerProfile } from "@/actions/customer";
 import type { Address } from "@/actions/address";
 import { formatMoneyIn } from "@/lib/currency";
+import { getStripeClient } from "@/lib/stripe-client";
 import StripeCardPayment from "@/components/StripeCardPayment";
 import PaymentDoneScreen from "@/components/PaymentDoneScreen";
 import { renderLegalMarkdown } from "@/lib/legal-markdown";
@@ -74,6 +76,8 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
   const [agencyQuantity, setAgencyQuantity] = useState<number>(0);
   // 申込総数（あくまで当社の総量把握のための参考値。料金計算には使わない）。ADR-0037
   const [estimatedTotalCount, setEstimatedTotalCount] = useState<number>(0);
+  // 連番提出を希望する場合の順序メモ（自由記述・任意）。
+  const [sequenceRequest, setSequenceRequest] = useState("");
   const [returnMethod, setReturnMethod] = useState<ReturnMethod>("SHIPPING");
   const addressOptions = [
     ...(getProfileAddress(profile) ? [getProfileAddress(profile)!] : []),
@@ -101,6 +105,10 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
   const [step, setStep] = useState<"form" | "payment" | "done">("form");
   const [clientSecret, setClientSecret] = useState("");
   const [createdId, setCreatedId] = useState<string | null>(null);
+  // 2回目以降の代理入力依頼では保存済みカードでのワンクリック決済を優先する。ADR-0048と同じ考え方。
+  const [savedCard, setSavedCard] = useState<{ brand: string; last4: string } | null>(null);
+  const [useNewCard, setUseNewCard] = useState(false);
+  const [savedCardLoading, setSavedCardLoading] = useState(false);
 
   // 管理画面でOFFにされたアイテム種別は選択肢から除外する（未設定なら有効扱い）。ADR-0043
   const enabledItemTypes = (["TRADING_CARD", "UNOPENED_PACK", "COMIC_MAGAZINE"] as ItemType[]).filter(
@@ -147,6 +155,7 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         itemType,
         agencyQuantity,
         estimatedTotalCount,
+        sequenceRequest: sequenceRequest.trim() || undefined,
         returnMethod,
         returnAddress: {
           name: selectedAddress.name,
@@ -168,6 +177,16 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
       if (result.success && result.clientSecret) {
         setCreatedId(result.applicationId ?? null);
         setClientSecret(result.clientSecret);
+        setSavedCard(null);
+        setUseNewCard(false);
+        // 保存済みカードがあれば、それを事前アタッチしたPaymentIntentに差し替える（無ければ最初のclientSecretのまま新規入力）。
+        if (result.applicationId) {
+          const intentResult = await createDifferentialPaymentIntent(result.applicationId, true);
+          if (intentResult.success) {
+            setClientSecret(intentResult.clientSecret);
+            setSavedCard(intentResult.savedCard);
+          }
+        }
         setStep("payment");
       } else {
         setError(result.error ?? "送信に失敗しました");
@@ -193,6 +212,44 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         confirmed.error ??
           "決済は完了しましたが、反映に時間がかかっています。少し待ってから提出予約へ進んでください。"
       );
+    }
+  }
+
+  async function handlePaySavedCard() {
+    if (!clientSecret) return;
+    setLoading(true);
+    setError("");
+    try {
+      const stripe = await getStripeClient(stripePublishableKey);
+      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret);
+      if (stripeError) {
+        setError(stripeError.message ?? "決済エラーが発生しました");
+        return;
+      }
+      const paymentIntentId = paymentIntent?.id ?? clientSecret.split("_secret_")[0];
+      await handlePaid(paymentIntentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "決済処理中にエラーが発生しました");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleUseNewCard() {
+    if (!createdId) return;
+    setSavedCardLoading(true);
+    setError("");
+    try {
+      const intentResult = await createDifferentialPaymentIntent(createdId, false);
+      if (!intentResult.success) {
+        setError(intentResult.error ?? "決済準備に失敗しました");
+        return;
+      }
+      setClientSecret(intentResult.clientSecret);
+      setSavedCard(null);
+      setUseNewCard(true);
+    } finally {
+      setSavedCardLoading(false);
     }
   }
 
@@ -229,14 +286,38 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         )}
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <StripeCardPayment
-            clientSecret={clientSecret}
-            publishableKey={stripePublishableKey}
-            buttonLabel={`${formatMoneyIn(prepaidAmount, "JPY")} を支払う`}
-            billingName={profile?.name ?? "Customer"}
-            onPaid={handlePaid}
-            onError={setError}
-          />
+          {savedCard && !useNewCard ? (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600">
+                登録済みのカード（{savedCard.brand} •••• {savedCard.last4}）でお支払いします。
+              </p>
+              <button
+                type="button"
+                onClick={handlePaySavedCard}
+                disabled={loading}
+                className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
+              >
+                {loading ? "決済処理中..." : `${formatMoneyIn(prepaidAmount, "JPY")} を支払う`}
+              </button>
+              <button
+                type="button"
+                onClick={handleUseNewCard}
+                disabled={loading || savedCardLoading}
+                className="w-full text-sm text-gray-500 hover:text-gray-700"
+              >
+                {savedCardLoading ? "準備中..." : "別のカードを使う"}
+              </button>
+            </div>
+          ) : (
+            <StripeCardPayment
+              clientSecret={clientSecret}
+              publishableKey={stripePublishableKey}
+              buttonLabel={`${formatMoneyIn(prepaidAmount, "JPY")} を支払う`}
+              billingName={profile?.name ?? "Customer"}
+              onPaid={handlePaid}
+              onError={setError}
+            />
+          )}
         </div>
       </div>
     );
@@ -335,6 +416,20 @@ export default function StoreRequestForm({ profile, addresses, pricingSettings, 
         <p className="text-xs text-gray-500">
           お預けいただく総数の目安です。当社の受入準備のための参考情報で、料金には影響しません。
         </p>
+
+        <div className="pt-2 border-t border-gray-100">
+          <label className="block text-sm font-bold text-gray-700 mb-1">連番希望</label>
+          <textarea
+            value={sequenceRequest}
+            onChange={(e) => setSequenceRequest(e.target.value)}
+            rows={3}
+            placeholder="例: ワンピース1〜5巻を1→5の順番で提出してほしい　等"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            連番での提出をご希望の場合は、希望する順番が分かるようにご記入ください（任意）。
+          </p>
+        </div>
 
         {agencyQuantity > 0 && (
           <div className="rounded-lg bg-gray-50 p-4 space-y-1 text-sm">

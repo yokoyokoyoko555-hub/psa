@@ -513,6 +513,8 @@ const storeRequestSchema = z.object({
   agencyQuantity: z.number().int().min(1).max(500),
   // 申込総数（あくまで当社の総量把握のための参考値。料金計算には使わない）。ADR-0037
   estimatedTotalCount: z.number().int().min(1).max(5000),
+  // 連番提出を希望する場合の順序メモ（自由記述・任意）。スタッフの明細入力時の参考情報。
+  sequenceRequest: z.string().max(1000).optional(),
   returnMethod: z.nativeEnum(ReturnMethod),
   returnAddress: returnAddressSchema,
   shippingPhone: z.string().regex(/^[0-9-+() ]{10,20}$/),
@@ -575,6 +577,7 @@ export async function createStoreRequest(
         status: "DRAFT",
         estimatedCardCount: parsed.data.estimatedTotalCount,
         agencyQuantity: parsed.data.agencyQuantity,
+        sequenceRequest: parsed.data.sequenceRequest?.trim() || null,
         agencyFeeTotal,
         prepaidAmount,
         totalAmount: prepaidAmount,

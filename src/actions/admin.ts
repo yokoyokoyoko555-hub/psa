@@ -681,6 +681,44 @@ export async function updateCardDetails(
   return { success: true };
 }
 
+const updateCardPsaLineOverrideSchema = z.object({
+  cardId: z.string(),
+  psaLineOverride: z.string().max(300).optional(),
+});
+
+/**
+ * PSA提出フォーム向け1行（行コピー）の自動英語変換が不十分な場合に、内容を直接上書きする。
+ * 空欄で保存すると上書きを解除し、自動生成（buildPsaLine）の内容に戻る。
+ */
+export async function updateCardPsaLineOverride(
+  input: z.infer<typeof updateCardPsaLineOverrideSchema>
+): Promise<{ success: true } | { success: false; error: string }> {
+  const user = await requireAdminOrStaff();
+  const parsed = updateCardPsaLineOverrideSchema.parse(input);
+
+  const before = await prisma.card.findUniqueOrThrow({
+    where: { id: parsed.cardId },
+    include: { application: { select: { id: true } } },
+  });
+
+  const value = parsed.psaLineOverride?.trim() || null;
+  await prisma.card.update({ where: { id: parsed.cardId }, data: { psaLineOverride: value } });
+
+  const hdrs = await headers();
+  await logOperation({
+    userId: user.id,
+    ipAddress: (hdrs as unknown as Headers).get?.("x-forwarded-for") ?? "unknown",
+    action: "CARD_PSA_LINE_OVERRIDE_UPDATE",
+    targetType: "cards",
+    targetId: parsed.cardId,
+    before: { psaLineOverride: before.psaLineOverride },
+    after: { psaLineOverride: value },
+  });
+
+  revalidatePath(`/admin/applications/${before.application.id}`);
+  return { success: true };
+}
+
 export async function getAdminCustomers(params: {
   search?: string;
   page?: number;

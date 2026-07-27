@@ -155,6 +155,12 @@ export default async function StoreRequestDetailPage({
           <span className="text-gray-700">申込総数（お預けいただく総数の目安）</span>
           <span className="font-medium text-gray-900">{app.estimatedCardCount ?? "—"} 枚</span>
         </div>
+        {app.sequenceRequest && (
+          <div className="pt-2 mt-2 border-t border-gray-100">
+            <p className="text-xs text-gray-500 mb-1">連番希望</p>
+            <p className="text-sm text-gray-900 whitespace-pre-wrap">{app.sequenceRequest}</p>
+          </div>
+        )}
       </div>
 
       {estimatedLevels.length > 0 && (

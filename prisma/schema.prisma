@@ -367,6 +367,8 @@ model Application {
   agencyQuantity     Int?
   // 先払い概算のサービスレベル別内訳（複数レベル同時申込に対応。例: [{serviceLevel,quantity}]）。ADR-0024
   estimatedServiceLevels Json?
+  // 代理入力(STORE)で顧客が希望する連番提出の順序メモ（自由記述）。スタッフの明細入力時の参考情報。
+  sequenceRequest String?
   totalAmount    Float             @default(0) // 常に円。PSA USは鑑定料をJPY換算してから合算。ADR-0022/0031
   psaFeeTotal    Float             @default(0) // 表示用の鑑定料（JP=円 / US=USD、換算前の生値）。ADR-0031
   agencyFeeTotal Int               @default(0)
@@ -453,6 +455,9 @@ model Card {
   // 備考
   notes         String?
   internalNotes String?
+
+  // PSA提出フォーム向け1行（行コピー）の手動上書き。設定時は自動生成（英語変換）の代わりにこの内容をコピーする。
+  psaLineOverride String?
 
   // QRコード
   qrCodeKey String?

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { confirmApplicationPayment, createApplication, previewFees, saveDraft as saveDraftServer } from "@/actions/application";
+import { createDifferentialPaymentIntent } from "@/actions/payment";
 import type { FeeBreakdown } from "@/lib/fee-calculator";
 import { formatMoney, formatMoneyIn, formatMoneyInt, currencySymbol } from "@/lib/currency";
 import { getStripeClient, type StripeClientLike, type StripeCardElementLike } from "@/lib/stripe-client";
@@ -247,6 +248,10 @@ export default function ApplyForm({
   const [paymentDone, setPaymentDone] = useState(false);
   const [stripeReady, setStripeReady] = useState(false);
   const [cardError, setCardError] = useState("");
+  // 2回目以降の申込では保存済みカードでのワンクリック決済を優先する。ADR-0048と同じ考え方。
+  const [savedCard, setSavedCard] = useState<{ brand: string; last4: string } | null>(null);
+  const [useNewCard, setUseNewCard] = useState(false);
+  const [savedCardLoading, setSavedCardLoading] = useState(false);
   const cardElementContainerRef = useRef<HTMLDivElement | null>(null);
   const stripeRef = useRef<StripeClientLike | null>(null);
   const cardElementRef = useRef<StripeCardElementLike | null>(null);
@@ -476,13 +481,23 @@ export default function ApplyForm({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (step !== "payment" || !clientSecret || !cardElementContainerRef.current) return;
+    const useSavedCardMode = Boolean(savedCard) && !useNewCard;
+    if (step !== "payment" || !clientSecret) return;
+    if (!useSavedCardMode && !cardElementContainerRef.current) return;
 
     let cancelled = false;
 
     async function loadStripeJs() {
       const stripe = await getStripeClient(stripePublishableKey);
-      if (cancelled || !cardElementContainerRef.current) return;
+      if (cancelled) return;
+      stripeRef.current = stripe;
+
+      // 保存済みカードを使う場合はカード入力欄を出さない（PaymentIntent側に既にアタッチ済み）。
+      if (useSavedCardMode) {
+        setStripeReady(true);
+        return;
+      }
+      if (!cardElementContainerRef.current) return;
 
       cardElementRef.current?.destroy();
       const elements = stripe.elements({ clientSecret });
@@ -499,7 +514,6 @@ export default function ApplyForm({
       });
       card.on("change", (event) => setCardError(event.error?.message ?? ""));
       card.mount(cardElementContainerRef.current);
-      stripeRef.current = stripe;
       cardElementRef.current = card;
       setStripeReady(true);
     }
@@ -513,7 +527,7 @@ export default function ApplyForm({
     return () => {
       cancelled = true;
     };
-  }, [clientSecret, step, stripePublishableKey]);
+  }, [clientSecret, step, stripePublishableKey, savedCard, useNewCard]);
 
   function saveDraftToStorage() {
     try {
@@ -637,6 +651,16 @@ export default function ApplyForm({
         }
         setClientSecret(result.clientSecret);
         setCreatedApplicationId(result.applicationId ?? "");
+        setSavedCard(null);
+        setUseNewCard(false);
+        // 保存済みカードがあれば、それを事前アタッチしたPaymentIntentに差し替える（無ければ最初のclientSecretのまま新規入力）。
+        if (result.applicationId) {
+          const intentResult = await createDifferentialPaymentIntent(result.applicationId, true);
+          if (intentResult.success) {
+            setClientSecret(intentResult.clientSecret);
+            setSavedCard(intentResult.savedCard);
+          }
+        }
         setMaxStep(4);
         setStep("payment");
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -651,9 +675,28 @@ export default function ApplyForm({
     }
   }
 
+  async function handleUseNewCard() {
+    if (!createdApplicationId) return;
+    setSavedCardLoading(true);
+    setError("");
+    try {
+      const intentResult = await createDifferentialPaymentIntent(createdApplicationId, false);
+      if (!intentResult.success) {
+        setError(intentResult.error ?? "決済準備に失敗しました");
+        return;
+      }
+      setClientSecret(intentResult.clientSecret);
+      setSavedCard(null);
+      setUseNewCard(true);
+    } finally {
+      setSavedCardLoading(false);
+    }
+  }
+
   async function handlePayment() {
-    if (!clientSecret) return;
-    if (!stripeRef.current || !cardElementRef.current) {
+    if (!clientSecret || !stripeRef.current) return;
+    const useSavedCardMode = Boolean(savedCard) && !useNewCard;
+    if (!useSavedCardMode && !cardElementRef.current) {
       setError("カード入力欄の読み込みが完了していません");
       return;
     }
@@ -661,12 +704,14 @@ export default function ApplyForm({
     setError("");
 
     try {
-      const { error: stripeError, paymentIntent } = await stripeRef.current.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: cardElementRef.current,
-          billing_details: { name: profile?.name ?? "Customer" },
-        },
-      });
+      const { error: stripeError, paymentIntent } = useSavedCardMode
+        ? await stripeRef.current.confirmCardPayment(clientSecret)
+        : await stripeRef.current.confirmCardPayment(clientSecret, {
+            payment_method: {
+              card: cardElementRef.current!,
+              billing_details: { name: profile?.name ?? "Customer" },
+            },
+          });
       if (stripeError) {
         setError(stripeError.message ?? "決済エラーが発生しました");
         return;
@@ -1021,6 +1066,9 @@ export default function ApplyForm({
                 </p>
               ) : (
                 <div className="divide-y divide-gray-200">
+                  <p className="px-4 py-2 text-xs text-gray-500 bg-gray-50">
+                    ※連番での提出をご希望の場合は、下記の左側の数字が申請したい順番になるように並べてください。
+                  </p>
                   {cardGroups.map((group) => (
                     <div key={group.tier?.id ?? "none"}>
                       <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
@@ -1289,23 +1337,48 @@ export default function ApplyForm({
                   カード情報を入力して決済を完了してください。決済後、提出予約へ進みます。
                 </p>
               </div>
-              <div className="rounded-lg border border-gray-300 bg-white px-3 py-3 focus-within:ring-2 focus-within:ring-brand-500">
-                <div ref={cardElementContainerRef} className="min-h-6" />
-              </div>
-              {cardError && <p className="text-sm text-red-600">{cardError}</p>}
-              {!stripeReady && (
-                <p className="text-sm text-brand-700">カード入力欄を読み込んでいます...</p>
+              {savedCard && !useNewCard ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">
+                    登録済みのカード（{savedCard.brand} •••• {savedCard.last4}）でお支払いします。
+                  </p>
+                  <button
+                    onClick={handlePayment}
+                    disabled={paymentLoading || !stripeReady}
+                    className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
+                  >
+                    {paymentLoading ? "決済処理中..." : `${formatMoneyIn(totalAmount, "JPY")} を支払う`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUseNewCard}
+                    disabled={paymentLoading || savedCardLoading}
+                    className="w-full text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    {savedCardLoading ? "準備中..." : "別のカードを使う"}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg border border-gray-300 bg-white px-3 py-3 focus-within:ring-2 focus-within:ring-brand-500">
+                    <div ref={cardElementContainerRef} className="min-h-6" />
+                  </div>
+                  {cardError && <p className="text-sm text-red-600">{cardError}</p>}
+                  {!stripeReady && (
+                    <p className="text-sm text-brand-700">カード入力欄を読み込んでいます...</p>
+                  )}
+                  <button
+                    onClick={handlePayment}
+                    disabled={paymentLoading || !stripeReady || !!cardError}
+                    className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
+                  >
+                    {paymentLoading ? "決済処理中..." : `${formatMoneyIn(totalAmount, "JPY")} を支払う`}
+                  </button>
+                  <p className="text-xs text-gray-400 text-center">
+                    カード情報はStripe上で安全に処理され、このサービスには保存されません。
+                  </p>
+                </>
               )}
-              <button
-                onClick={handlePayment}
-                disabled={paymentLoading || !stripeReady || !!cardError}
-                className="w-full bg-brand-600 text-white font-bold py-3 rounded-lg hover:bg-brand-700 disabled:opacity-50 transition"
-              >
-                {paymentLoading ? "決済処理中..." : `${formatMoneyIn(totalAmount, "JPY")} を支払う`}
-              </button>
-              <p className="text-xs text-gray-400 text-center">
-                カード情報はStripe上で安全に処理され、このサービスには保存されません。
-              </p>
             </div>
           </div>
           )

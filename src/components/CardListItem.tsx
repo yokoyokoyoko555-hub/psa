@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { updateCardDetails } from "@/actions/admin";
+import { updateCardDetails, updateCardPsaLineOverride } from "@/actions/admin";
 import { formatMoneyInt } from "@/lib/currency";
 import { CARD_DISPLAY_LABELS, buildPsaLine, buildCardTitle, containsJapanese } from "@/lib/card-display";
 import CopyButton from "@/components/CopyButton";
@@ -20,6 +20,7 @@ export type CardListItemData = {
   declaredValue: number;
   quantity: number;
   autographRequested: boolean;
+  psaLineOverride: string | null;
 };
 
 /** 申込詳細のカード1行。表示のほか、入力ミス訂正用に識別情報（タイトル・発行年・カード名・カード番号・レアリティ・言語）をその場で編集できる。 */
@@ -36,12 +37,42 @@ export default function CardListItem({
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [editingLine, setEditingLine] = useState(false);
+  const [lineDraft, setLineDraft] = useState("");
+  const [lineLoading, setLineLoading] = useState(false);
+  const [lineError, setLineError] = useState("");
 
   const displayLabels = CARD_DISPLAY_LABELS[itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
-  const psaLine = buildPsaLine(card, itemType);
+  // 自動生成（発行年月・タイトル・出版社の英語変換）が不十分な場合は、行コピーの内容を直接上書きできる。
+  const autoPsaLine = buildPsaLine(card, itemType);
+  const psaLine = card.psaLineOverride ?? autoPsaLine;
   const cardTitle = buildCardTitle(card, itemType);
   // 英語化しきれず日本語が残っている行は、提出フォームへそのまま貼ると不備になるためハイライトする。
   const psaLineNeedsReview = containsJapanese(psaLine);
+
+  function startEditLine() {
+    setLineDraft(psaLine);
+    setLineError("");
+    setEditingLine(true);
+  }
+
+  async function saveLine(value: string) {
+    setLineLoading(true);
+    setLineError("");
+    try {
+      const result = await updateCardPsaLineOverride({ cardId: card.id, psaLineOverride: value });
+      if (!result.success) {
+        setLineError(result.error);
+        return;
+      }
+      setEditingLine(false);
+      router.refresh();
+    } catch {
+      setLineError("更新に失敗しました");
+    } finally {
+      setLineLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -87,10 +118,13 @@ export default function CardListItem({
                 🖊 オートグラフ
               </span>
             )}
-            {!editing && (
+            {!editing && !editingLine && (
               <>
                 {/* PSA提出フォーム向け: 半角スペース区切り1行をコピー */}
                 <CopyButton label="行コピー" text={psaLine} />
+                {card.psaLineOverride && (
+                  <span className="text-xs bg-blue-50 text-blue-700 rounded-full px-2 py-0.5">✎ 手動編集済み</span>
+                )}
                 {psaLineNeedsReview && (
                   <span
                     className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5"
@@ -99,6 +133,13 @@ export default function CardListItem({
                     ⚠ 要確認
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={startEditLine}
+                  className="text-xs text-gray-400 hover:text-brand-600 border border-gray-200 rounded px-1.5 py-0.5"
+                >
+                  行編集
+                </button>
                 <button
                   type="button"
                   onClick={() => setEditing(true)}
@@ -112,16 +153,56 @@ export default function CardListItem({
 
           {!editing ? (
             <>
-              {/* 顧客入力内容を半角スペース区切り1行で表示（コピー内容と同一） */}
-              <p
-                className={`mt-1 text-xs font-mono rounded px-2 py-1 break-all ${
-                  psaLineNeedsReview
-                    ? "bg-amber-50 text-amber-800 border border-amber-200"
-                    : "bg-gray-50 text-gray-700"
-                }`}
-              >
-                {psaLine}
-              </p>
+              {/* 顧客入力内容を半角スペース区切り1行で表示（コピー内容と同一）。行編集で直接上書きできる。 */}
+              {editingLine ? (
+                <div className="mt-1 space-y-1.5">
+                  <textarea
+                    value={lineDraft}
+                    onChange={(e) => setLineDraft(e.target.value)}
+                    rows={2}
+                    className="w-full text-xs font-mono rounded px-2 py-1 border border-brand-300 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  {lineError && <p className="text-xs text-red-600">{lineError}</p>}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveLine(lineDraft)}
+                      disabled={lineLoading}
+                      className="bg-brand-600 text-white text-xs font-bold px-3 py-1 rounded hover:bg-brand-700 disabled:opacity-50 transition"
+                    >
+                      {lineLoading ? "保存中..." : "保存"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingLine(false)}
+                      disabled={lineLoading}
+                      className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+                    >
+                      キャンセル
+                    </button>
+                    {card.psaLineOverride && (
+                      <button
+                        type="button"
+                        onClick={() => saveLine("")}
+                        disabled={lineLoading}
+                        className="text-xs text-gray-400 hover:text-red-600 px-2 py-1"
+                      >
+                        自動生成に戻す
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p
+                  className={`mt-1 text-xs font-mono rounded px-2 py-1 break-all ${
+                    psaLineNeedsReview
+                      ? "bg-amber-50 text-amber-800 border border-amber-200"
+                      : "bg-gray-50 text-gray-700"
+                  }`}
+                >
+                  {psaLine}
+                </p>
+              )}
               <p className="mt-1 flex gap-3 text-xs text-gray-500">
                 <span className="font-mono text-gray-400">{card.cardNo}</span>
                 <span>申告額: {formatMoneyInt(card.declaredValue, region)}</span>
