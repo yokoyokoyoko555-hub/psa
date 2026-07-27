@@ -47,7 +47,8 @@ export async function sendTemplate(
       s.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (vars[k] !== undefined ? String(vars[k]) : ""));
     await sendMail({ to, subject: fill(tpl.subject), html: fill(tpl.bodyHtml) });
     return true;
-  } catch {
+  } catch (err) {
+    console.error(`Failed to send mail template "${key}":`, err);
     return false;
   }
 }

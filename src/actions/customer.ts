@@ -62,7 +62,8 @@ export async function requestRegistration(
       html: registrationVerificationHtml({ verifyUrl }),
     });
     return { success: true, sent: true };
-  } catch {
+  } catch (err) {
+    console.error("Failed to send registration verification email:", err);
     return { success: true, sent: false, devLink: verifyUrl };
   }
 }
@@ -230,7 +231,8 @@ export async function requestPasswordReset(
       html: passwordResetHtml({ resetUrl }),
     });
     return { success: true, sent: true };
-  } catch {
+  } catch (err) {
+    console.error("Failed to send password reset email:", err);
     return { success: true, sent: false, devLink: resetUrl };
   }
 }
