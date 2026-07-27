@@ -3,7 +3,7 @@ import Link from "next/link";
 // 未ログイン時のトップページ専用ヘッダー。ログイン中はCustomerHeaderを使う（こちらはログイン/新規登録導線のみ）。
 export default function TopPageHeader() {
   return (
-    <header className="bg-white border-b border-gray-200 px-4 py-3">
+    <header className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-3">
       <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
         <Link href="/" className="shrink-0 hover:opacity-70 transition">
           {/* eslint-disable-next-line @next/next/no-img-element */}
