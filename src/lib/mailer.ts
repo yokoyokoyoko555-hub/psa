@@ -1,13 +1,19 @@
 import nodemailer from "nodemailer";
 
+const smtpPort = Number(process.env.SMTP_PORT) || 587;
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: false,
+  port: smtpPort,
+  secure: smtpPort === 465, // 465は最初からTLS、それ以外(587等)はSTARTTLS
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  // 接続先が誤っている/ポートが塞がれている場合に無期限でハングしないよう明示的にタイムアウトする
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 15_000,
 });
 
 interface MailOptions {
