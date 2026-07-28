@@ -69,30 +69,30 @@ export default async function DashboardPage({
   ];
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">ダッシュボード</h1>
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6">
+        <h1 className="hidden text-2xl font-bold text-gray-900 lg:block">ダッシュボード</h1>
         <MonthSelector year={year} month={month} />
       </div>
 
       {/* KPI */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
           <p className="text-sm text-gray-500 mb-1">申込数</p>
           <p className="text-2xl font-bold text-brand-700">{metrics.kpi.count}件</p>
           <p className="text-xs text-gray-400 mt-1">{formatDelta(metrics.kpi.countDelta, "count")}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
           <p className="text-sm text-gray-500 mb-1">売上</p>
           <p className="text-2xl font-bold text-brand-700">{formatMoneyIn(metrics.kpi.revenue, "JPY")}</p>
           <p className="text-xs text-gray-400 mt-1">{formatDelta(metrics.kpi.revenueDelta, "yen")}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
           <p className="text-sm text-gray-500 mb-1">客単価</p>
           <p className="text-2xl font-bold text-brand-700">{formatMoneyIn(Math.round(metrics.kpi.avgOrderValue), "JPY")}</p>
           <p className="text-xs text-gray-400 mt-1">{formatDelta(metrics.kpi.avgOrderValueDelta, "yen")}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
           <p className="text-sm text-gray-500 mb-1">利益</p>
           <p className="text-2xl font-bold text-brand-700">{formatMoneyIn(Math.round(metrics.kpi.profit), "JPY")}</p>
           <p className="text-xs text-gray-400 mt-1">{formatDelta(metrics.kpi.profitDelta, "yen")}</p>
@@ -101,7 +101,7 @@ export default async function DashboardPage({
 
       {/* Action items */}
       <div className="mb-2 text-sm font-bold text-gray-700">対応が必要な内容</div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
         {actionCards.map((c) => (
           <Link
             key={c.label}
@@ -137,7 +137,7 @@ export default async function DashboardPage({
             もっと見る →
           </Link>
         </div>
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -170,6 +170,29 @@ export default async function DashboardPage({
               })}
             </tbody>
           </table>
+        </div>
+        <div className="divide-y divide-gray-100 sm:hidden">
+          {recentApplications.map((app) => {
+            const rawStatus = app.status === "CANCELLED" ? "キャンセル" : computeListDisplayStatus(app);
+            const statusLabel = rawStatus === "MULTIPLE" ? "複数グループ" : rawStatus;
+            return (
+              <Link key={app.id} href={`/admin/applications/${app.id}`} className="block p-4 hover:bg-gray-50">
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-xs font-medium text-brand-700">{app.applicationNo}</p>
+                    <p className="mt-1 font-bold text-gray-900">{decrypt(app.customer.nameEncrypted)}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${STATUS_BADGE_CLS[statusLabel] ?? "bg-green-50 text-green-700"}`}>
+                    {statusLabel}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm text-gray-500">
+                  <span>{app._count.cards}枚</span>
+                  <span>{format(new Date(app.createdAt), "MM/dd HH:mm", { locale: ja })} ›</span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
     </div>

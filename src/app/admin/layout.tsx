@@ -1,11 +1,11 @@
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { signOut } from "@/lib/auth";
 import { getAdminNavItems } from "@/actions/admin-nav";
+import AdminShell from "@/components/AdminShell";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = (await headers()).get("x-pathname") ?? "";
@@ -23,46 +23,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const navItems = await getAdminNavItems();
 
+  async function logoutAction() {
+    "use server";
+    await signOut({ redirectTo: "/admin/login" });
+  }
+
   return (
-    <div className="min-h-screen bg-gray-100 flex">
-      {/* Sidebar */}
-      <div className="w-56 bg-gray-900 text-white flex flex-col fixed h-full z-10">
-        <div className="p-4 border-b border-gray-700">
-          <p className="text-xs text-gray-400">トレカビンクス</p>
-          <p className="font-bold">PSA管理システム</p>
-        </div>
-
-        <nav className="flex-1 py-4">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
-            >
-              <span>{item.icon}</span>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-gray-700">
-          <p className="text-xs text-gray-400 mb-1">{session.user.name}</p>
-          <p className="text-xs text-gray-500">{(session.user as { role: string }).role}</p>
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/admin/login" });
-            }}
-          >
-            <button type="submit" className="text-xs text-gray-400 hover:text-white mt-2">
-              ログアウト
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 ml-56 min-h-screen">{children}</div>
-    </div>
+    <AdminShell
+      navItems={navItems}
+      userName={session.user.name}
+      role={(session.user as { role: string }).role}
+      logoutAction={logoutAction}
+    >
+      {children}
+    </AdminShell>
   );
 }

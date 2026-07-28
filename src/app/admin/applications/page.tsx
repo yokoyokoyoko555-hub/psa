@@ -171,9 +171,9 @@ export default async function AdminApplicationsPage({
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">申込管理</h1>
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="flex items-center justify-between mb-5 sm:mb-6">
+        <h1 className="hidden text-2xl font-bold text-gray-900 lg:block">申込管理</h1>
         <p className="text-gray-500 text-sm">
           全{applicationsRaw.length}件
           {sp.status || q ? `（絞り込み: ${filteredSorted.length}件）` : ""}
@@ -181,7 +181,7 @@ export default async function AdminApplicationsPage({
       </div>
 
       {/* 検索: 申込番号・顧客名・メールアドレス */}
-      <form method="GET" className="mb-4 flex flex-wrap items-center gap-2">
+      <form method="GET" className="mb-3 flex flex-wrap items-center gap-2 sm:mb-4">
         {sp.status && <input type="hidden" name="status" value={sp.status} />}
         {sortCol && <input type="hidden" name="sort" value={sortCol} />}
         {sortCol && <input type="hidden" name="dir" value={sortDir} />}
@@ -190,7 +190,7 @@ export default async function AdminApplicationsPage({
           name="q"
           defaultValue={q}
           placeholder="申込番号・顧客名・メールアドレスで検索"
-          className="flex-1 min-w-0 max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className="min-w-0 flex-1 rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 sm:max-w-sm"
         />
         <button
           type="submit"
@@ -208,7 +208,7 @@ export default async function AdminApplicationsPage({
       {/* ステータス絞り込み・並び替え（プルダウン） */}
       <FilterSortBar status={sp.status ?? ""} q={q} sort={sortCol ?? ""} dir={sortDir} />
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="hidden bg-white rounded-xl border border-gray-200 overflow-hidden md:block">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -273,6 +273,45 @@ export default async function AdminApplicationsPage({
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="space-y-3 md:hidden">
+        {applications.map(({ app, customerName, regionLabel, itemTypeLabel, serviceLevelLabel, statusLabel }) => {
+          const booking = app.submissionBooking;
+          return (
+            <Link
+              key={app.id}
+              href={`/admin/applications/${app.id}`}
+              className="block rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition active:bg-gray-50"
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-xs font-bold text-brand-700">{app.applicationNo}</p>
+                  <p className="mt-1 truncate font-bold text-gray-900">{customerName}</p>
+                  <p className="truncate text-xs text-gray-400">{app.customer.email}</p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${STATUS_BADGE_CLS[statusLabel] ?? "bg-green-50 text-green-700"}`}>
+                  {statusLabel}
+                </span>
+              </div>
+              <div className="mb-3 grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl bg-gray-50 p-3 text-xs">
+                <p><span className="text-gray-400">提出先</span><br /><span className="font-medium text-gray-800">{regionLabel}</span></p>
+                <p><span className="text-gray-400">サービス</span><br /><span className="font-medium text-gray-800">{compactServiceLevel(serviceLevelLabel)}</span></p>
+                <p><span className="text-gray-400">アイテム・枚数</span><br /><span className="font-medium text-gray-800">{itemTypeLabel}・{app._count.cards}枚</span></p>
+                <p><span className="text-gray-400">金額</span><br /><span className="font-medium text-gray-800">{formatMoneyIn(app.totalAmount, "JPY")}</span></p>
+              </div>
+              <div className="flex items-end justify-between gap-3 text-xs text-gray-500">
+                <div>
+                  <p>{format(new Date(app.createdAt), "yyyy/MM/dd HH:mm")}</p>
+                  {booking?.status === "BOOKED" && (
+                    <p className="mt-1 text-gray-700">{booking.method === "STORE_DROP_OFF" ? "店頭" : "郵送"} {format(new Date(booking.scheduledAt), "MM/dd HH:mm")}</p>
+                  )}
+                </div>
+                <span className="font-bold text-brand-700">詳細・対応する ›</span>
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
       {totalPages > 1 && (

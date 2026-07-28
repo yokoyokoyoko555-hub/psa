@@ -21,7 +21,7 @@ const emailSchema = z.object({
 
 /**
  * メールアドレスを受け取り、確認リンクを送信する（24時間有効）。
- * SMTP未設定時はテスト用に devLink を返す（設定後は自動でメール送信）。
+ * RESEND_API_KEY未設定時はテスト用に devLink を返す（設定後は自動でメール送信）。
  */
 export async function requestRegistration(
   input: z.infer<typeof emailSchema>
@@ -49,8 +49,8 @@ export async function requestRegistration(
   const base = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "";
   const verifyUrl = `${base}/register?token=${token}`;
 
-  // SMTP未設定ならテスト用にリンクを返す
-  if (!process.env.SMTP_HOST) {
+  // メール未設定ならテスト用にリンクを返す
+  if (!process.env.RESEND_API_KEY) {
     return { success: true, sent: false, devLink: verifyUrl };
   }
 
@@ -189,7 +189,7 @@ export async function registerCustomer(
 /**
  * メールアドレスを受け取り、再設定リンクを送信する（1時間有効）。
  * メール存在の有無を漏らさないため、未登録でも success を返す。
- * SMTP未設定時はテスト用に devLink を返す。
+ * RESEND_API_KEY未設定時はテスト用に devLink を返す。
  */
 export async function requestPasswordReset(
   input: z.infer<typeof emailSchema>
@@ -219,7 +219,7 @@ export async function requestPasswordReset(
   const base = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "";
   const resetUrl = `${base}/reset-password?token=${token}`;
 
-  if (!process.env.SMTP_HOST) {
+  if (!process.env.RESEND_API_KEY) {
     return { success: true, sent: false, devLink: resetUrl };
   }
 

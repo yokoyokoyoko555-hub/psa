@@ -56,11 +56,12 @@ export default function FilterSortBar({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-6">
+    <div className="flex flex-wrap items-center gap-2 mb-4 sm:mb-6">
       <select
         value={status}
         onChange={(e) => navigate({ status: e.target.value })}
-        className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        aria-label="ステータスで絞り込む"
+        className="min-h-10 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 sm:flex-none"
       >
         {STATUS_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>
@@ -71,7 +72,8 @@ export default function FilterSortBar({
       <select
         value={sort}
         onChange={(e) => navigate({ sort: e.target.value })}
-        className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        aria-label="並び順"
+        className="min-h-10 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 sm:flex-none"
       >
         {SORT_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>

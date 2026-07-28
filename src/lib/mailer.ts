@@ -1,20 +1,6 @@
-import nodemailer from "nodemailer";
-
-const smtpPort = Number(process.env.SMTP_PORT) || 587;
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: smtpPort,
-  secure: smtpPort === 465, // 465は最初からTLS、それ以外(587等)はSTARTTLS
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  // 接続先が誤っている/ポートが塞がれている場合に無期限でハングしないよう明示的にタイムアウトする
-  connectionTimeout: 10_000,
-  greetingTimeout: 10_000,
-  socketTimeout: 15_000,
-});
+// SMTP（生TCP接続）はRailway環境でポートがブロックされ接続がタイムアウトしたため、
+// Resendのメール送信をHTTP API（HTTPS）経由に切り替えた。HTTPSはブロックされにくく安定する。
+const RESEND_API_URL = "https://api.resend.com/emails";
 
 interface MailOptions {
   to: string;
@@ -23,22 +9,40 @@ interface MailOptions {
 }
 
 export async function sendMail(options: MailOptions) {
-  return transporter.sendMail({
-    from: `トレカビンクス <${process.env.EMAIL_FROM ?? process.env.SMTP_FROM}>`,
-    ...options,
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not set");
+  }
+  const res = await fetch(RESEND_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: `トレカビンクス <${process.env.EMAIL_FROM ?? process.env.SMTP_FROM}>`,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+    }),
   });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Resend API error (${res.status}): ${body}`);
+  }
+  return res.json();
 }
 
 /**
  * DBのメールテンプレート(MailTemplate)を使って送信。{{var}} を vars で置換。
- * SMTP未設定・テンプレ無効/不在・送信失敗時は何もしない（呼び出し側の処理を止めない）。ADR-0018
+ * メール未設定・テンプレ無効/不在・送信失敗時は何もしない（呼び出し側の処理を止めない）。ADR-0018
  */
 export async function sendTemplate(
   key: string,
   to: string,
   vars: Record<string, string | number> = {},
 ): Promise<boolean> {
-  if (!process.env.SMTP_HOST) return false;
+  if (!process.env.RESEND_API_KEY) return false;
   try {
     const { prisma } = await import("./prisma");
     const tpl = await prisma.mailTemplate.findUnique({ where: { key } });

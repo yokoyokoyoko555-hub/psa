@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getCustomerSession } from "@/lib/customer-auth";
+import CustomerMobileNav from "@/components/CustomerMobileNav";
 
 type Props = {
   title?: string;
@@ -11,6 +12,7 @@ export default async function CustomerHeader({ title, actions }: Props) {
   const customer = await getCustomerSession();
 
   return (
+    <>
     <header className="bg-white border-b border-gray-200 sticky top-0 z-10 px-4 py-3">
       <div className="max-w-6xl mx-auto flex items-center gap-2 sm:gap-4">
         <Link href={customer ? "/mypage" : "/"} className="shrink-0 hover:opacity-70 transition">
@@ -40,5 +42,7 @@ export default async function CustomerHeader({ title, actions }: Props) {
         </div>
       </div>
     </header>
+    {customer && <CustomerMobileNav />}
+    </>
   );
 }

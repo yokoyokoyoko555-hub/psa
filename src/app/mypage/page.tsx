@@ -37,7 +37,7 @@ export default async function MypagePage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <CustomerHeader title="マイページ" />
 
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-5 sm:py-8 space-y-5 sm:space-y-6">
         {notifications.length > 0 && (
           <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="bg-brand-600 text-white px-4 py-3">
@@ -78,20 +78,21 @@ export default async function MypagePage() {
         )}
 
         {/* Quick actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <Link
             href="/apply"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+            className="col-span-2 bg-brand-600 text-white rounded-2xl p-5 hover:bg-brand-700 transition flex items-center justify-between gap-4 shadow-sm"
           >
-            <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">📋</div>
+            <div className="w-11 h-11 bg-white/15 rounded-xl flex items-center justify-center text-2xl">＋</div>
             <div>
-              <p className="font-bold text-lg text-gray-900">新規申込</p>
-              <p className="text-gray-500 text-sm">鑑定を申し込む</p>
+              <p className="font-bold text-lg">新規申込</p>
+              <p className="text-white/75 text-sm">鑑定を申し込む</p>
             </div>
+            <span className="ml-auto text-2xl" aria-hidden="true">›</span>
           </Link>
           <Link
             href="/how-to-apply"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+            className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 hover:border-brand-300 transition flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
           >
             <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">🗺️</div>
             <div>
@@ -101,7 +102,7 @@ export default async function MypagePage() {
           </Link>
           <Link
             href="/mypage/applications"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+            className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 hover:border-brand-300 transition flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
           >
             <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">📦</div>
             <div>
@@ -111,7 +112,7 @@ export default async function MypagePage() {
           </Link>
           <Link
             href="/mypage/submission-booking"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+            className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 hover:border-brand-300 transition flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
           >
             <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">📅</div>
             <div>
@@ -122,7 +123,7 @@ export default async function MypagePage() {
           {centeringToolEnabled && (
             <Link
               href="/mypage/centering"
-              className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+              className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 hover:border-brand-300 transition flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
             >
               <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">◎</div>
               <div>
@@ -133,7 +134,7 @@ export default async function MypagePage() {
           )}
           <Link
             href="/pricing"
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:border-brand-300 transition flex items-center gap-4"
+            className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 hover:border-brand-300 transition flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
           >
             <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center text-2xl">💴</div>
             <div>
