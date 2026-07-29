@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type NavItem = { href: string; label: string; icon: string };
 
@@ -21,8 +21,12 @@ export default function AdminShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => setOpen(false), [pathname]);
+  // ページ遷移時にメニューを閉じる（useEffectではなくrender中にstateを調整する推奨パターン）
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
+    setOpen(false);
+  }
 
   const navigation = (
     <>
