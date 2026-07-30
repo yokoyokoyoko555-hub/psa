@@ -43,6 +43,27 @@ export async function saveStoreSettings(
   return { success: true };
 }
 
+const notificationEmailsSchema = z.object({
+  emails: z.array(z.string().email()).max(20),
+});
+
+/** 新規問い合わせ・顧客からの返信をスタッフへ通知するメールアドレス一覧を保存する（複数可）。 */
+export async function saveNotificationEmails(
+  input: z.infer<typeof notificationEmailsSchema>
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAdmin();
+  const parsed = notificationEmailsSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: "メールアドレスの形式を確認してください" };
+
+  await prisma.storeSettings.upsert({
+    where: { id: STORE_SETTINGS_ID },
+    update: { notificationEmails: parsed.data.emails, updatedBy: user.id },
+    create: { id: STORE_SETTINGS_ID, notificationEmails: parsed.data.emails, updatedBy: user.id },
+  });
+  revalidatePath("/admin/general-settings");
+  return { success: true };
+}
+
 /**
  * センタリング測定ツールを顧客画面に表示するかどうかのスイッチ。精度・操作性の改善が済むまで
  * 一時的に非表示にできるようにする（機能自体は削除しない）。ADR-0070

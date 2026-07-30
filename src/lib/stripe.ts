@@ -36,6 +36,8 @@ export async function createPaymentIntent(params: {
   /** 保存済みカードを事前アタッチする場合に指定。クライアントはconfirmCardPayment(clientSecret)のみでよくなる
    * （カード再入力不要）。顧客が能動的にボタンを押して確定するオンセッション決済のため、off_session化はしない。ADR-0048 */
   paymentMethodId?: string;
+  /** 指定するとStripeが決済完了時に自動でレシートメールを送る（このシステム側では領収書を発行していないため）。 */
+  receiptEmail?: string;
 }) {
   return getStripe().paymentIntents.create({
     amount: params.amount,
@@ -47,6 +49,7 @@ export async function createPaymentIntent(params: {
       applicationId: params.applicationId,
     },
     ...(params.paymentMethodId ? { payment_method: params.paymentMethodId } : {}),
+    ...(params.receiptEmail ? { receipt_email: params.receiptEmail } : {}),
     payment_method_types: ["card"],
   });
 }
@@ -60,6 +63,8 @@ export async function chargeOffSession(params: {
   description: string;
   /** Stripeメタデータに残す参照ID（Upcharge.id、Application.idなど呼び出し元の対象を識別する値） */
   referenceId: string;
+  /** 指定するとStripeが決済完了時に自動でレシートメールを送る（このシステム側では領収書を発行していないため）。 */
+  receiptEmail?: string;
 }) {
   return getStripe().paymentIntents.create({
     amount: params.amount,
@@ -72,6 +77,7 @@ export async function chargeOffSession(params: {
     metadata: {
       referenceId: params.referenceId,
     },
+    ...(params.receiptEmail ? { receipt_email: params.receiptEmail } : {}),
   });
 }
 

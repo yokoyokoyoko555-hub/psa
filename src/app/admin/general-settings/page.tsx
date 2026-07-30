@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getAdminNavItems } from "@/actions/admin-nav";
 import PsaProgressStatusForm from "./PsaProgressStatusForm";
 import StoreSettingsForm from "./StoreSettingsForm";
+import NotificationEmailsForm from "./NotificationEmailsForm";
 import AdminNavOrderForm from "./AdminNavOrderForm";
 import CenteringToggleForm from "./CenteringToggleForm";
 import MailTemplateManager from "./MailTemplateManager";
@@ -45,6 +46,14 @@ export default async function GeneralSettingsPage() {
             storeName={storeSettings?.storeName ?? ""}
             phone={storeSettings?.phone ?? ""}
           />
+        </div>
+      </details>
+
+      {/* お問い合わせ通知先 */}
+      <details className={groupCls}>
+        <summary className="text-lg font-bold text-gray-900 cursor-pointer select-none">お問い合わせ通知先</summary>
+        <div className="mt-4">
+          <NotificationEmailsForm emails={storeSettings?.notificationEmails ?? []} />
         </div>
       </details>
 

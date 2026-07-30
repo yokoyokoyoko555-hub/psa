@@ -72,6 +72,21 @@ export function registrationVerificationHtml(params: { verifyUrl: string }): str
   `;
 }
 
+export function registrationCompleteHtml(params: { customerName: string; memberNo: string; appUrl: string }): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>会員登録が完了しました</h2>
+      <p>${escapeHtml(params.customerName)} 様</p>
+      <p>トレカビンクス PSA鑑定受付代行サービスへの会員登録が完了しました。</p>
+      <p style="color:#888;font-size:12px;">会員番号: ${escapeHtml(params.memberNo)}</p>
+      <p>さっそくPSA鑑定のお申込みができます。</p>
+      <p style="text-align:center; margin: 24px 0;">
+        <a href="${params.appUrl}/mypage" style="background:#6b0505;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;">マイページへ</a>
+      </p>
+    </div>
+  `;
+}
+
 export function passwordResetHtml(params: { resetUrl: string }): string {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
@@ -97,6 +112,43 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+export function inquiryReceivedHtml(params: {
+  customerName: string;
+  subject: string;
+  body: string;
+  appUrl: string;
+}): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>お問い合わせを受け付けました</h2>
+      <p>${escapeHtml(params.customerName)} 様</p>
+      <p>以下の内容でお問い合わせを受け付けました。担当者より順次ご返信いたしますので、今しばらくお待ちください。</p>
+      <p style="color:#888;font-size:12px;">件名: ${escapeHtml(params.subject)}</p>
+      <div style="background:#f9f9f9;border-radius:8px;padding:16px;white-space:pre-wrap;">${escapeHtml(params.body)}</div>
+      <p style="margin-top:16px;"><a href="${params.appUrl}/mypage">マイページで確認する</a></p>
+    </div>
+  `;
+}
+
+/** スタッフ宛の内部通知（新規問い合わせ・顧客からの返信）。顧客向けテンプレートと違いエスケープ不要（管理画面のみで表示）。 */
+export function staffInquiryNotificationHtml(params: {
+  customerName: string;
+  subject: string;
+  body: string;
+  isFollowUp: boolean;
+  appUrl: string;
+  inquiryId: string;
+}): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>${params.isFollowUp ? "顧客からの返信があります" : "新しいお問い合わせがあります"}</h2>
+      <p style="color:#888;font-size:12px;">顧客: ${escapeHtml(params.customerName)} ／ 件名: ${escapeHtml(params.subject)}</p>
+      <div style="background:#f9f9f9;border-radius:8px;padding:16px;white-space:pre-wrap;">${escapeHtml(params.body)}</div>
+      <p style="margin-top:16px;"><a href="${params.appUrl}/admin/inquiries/${params.inquiryId}">管理画面で確認する</a></p>
+    </div>
+  `;
+}
+
 export function inquiryReplyHtml(params: {
   customerName: string;
   subject: string;
@@ -111,6 +163,42 @@ export function inquiryReplyHtml(params: {
       <p style="color:#888;font-size:12px;">件名: ${escapeHtml(params.subject)}</p>
       <div style="background:#f9f9f9;border-radius:8px;padding:16px;white-space:pre-wrap;">${escapeHtml(params.replyText)}</div>
       <p style="margin-top:16px;"><a href="${params.appUrl}/mypage">マイページで確認する</a></p>
+    </div>
+  `;
+}
+
+export function returnReadyHtml(params: {
+  customerName: string;
+  applicationNo: string;
+  isStorePickup: boolean;
+  appUrl: string;
+}): string {
+  const actionLabel = params.isStorePickup ? "店頭でお受け取りいただけます" : "返送準備を進めます";
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>PSA鑑定が完了しました</h2>
+      <p>${escapeHtml(params.customerName)} 様</p>
+      <p>ご提出いただいたカードのPSA鑑定が完了し、${actionLabel}。</p>
+      <p style="color:#888;font-size:12px;">申込番号: ${escapeHtml(params.applicationNo)}</p>
+      <p><a href="${params.appUrl}/mypage">マイページで確認する</a></p>
+    </div>
+  `;
+}
+
+export function returnedHtml(params: {
+  customerName: string;
+  applicationNo: string;
+  isStorePickup: boolean;
+  appUrl: string;
+}): string {
+  const title = params.isStorePickup ? "店頭でのお受け取りが完了しました" : "返送が完了しました";
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>${title}</h2>
+      <p>${escapeHtml(params.customerName)} 様</p>
+      <p>ご提出いただいたカードの${params.isStorePickup ? "お受け取り" : "返送"}が完了しました。ありがとうございました。</p>
+      <p style="color:#888;font-size:12px;">申込番号: ${escapeHtml(params.applicationNo)}</p>
+      <p><a href="${params.appUrl}/mypage">マイページで確認する</a></p>
     </div>
   `;
 }

@@ -180,6 +180,24 @@ export async function registerCustomer(
     targetId: customer.id,
   });
 
+  // 登録完了メール（best-effort・失敗しても登録自体は成功として扱う）
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const { sendMail, registrationCompleteHtml } = await import("@/lib/mailer");
+      await sendMail({
+        to: customer.email,
+        subject: "【トレカビンクス】会員登録が完了しました",
+        html: registrationCompleteHtml({
+          customerName: fullName,
+          memberNo: customer.memberNo ?? "",
+          appUrl: process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "",
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to send registration complete email:", err);
+    }
+  }
+
   await createCustomerSession(customer.id);
   return { success: true };
 }

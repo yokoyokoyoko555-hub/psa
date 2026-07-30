@@ -81,6 +81,7 @@ export async function createDifferentialPaymentIntent(applicationId: string, use
     applicationId,
     description: payment.description ?? `代理申込 確定分請求 ${application.applicationNo}`,
     paymentMethodId: savedMethod?.stripePaymentMethodId,
+    receiptEmail: customer.email,
   });
 
   await prisma.payment.update({
@@ -213,6 +214,7 @@ export async function createUpchargePaymentIntent(upchargeId: string, useSavedCa
     applicationId: upcharge.card.applicationId,
     description: `Upcharge: ${upcharge.card.cardName}`,
     paymentMethodId: savedMethod?.stripePaymentMethodId,
+    receiptEmail: customer.email,
   });
 
   await prisma.upcharge.update({

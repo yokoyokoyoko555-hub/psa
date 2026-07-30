@@ -352,6 +352,7 @@ export async function createApplication(
       customerId: stripeCustomerId,
       applicationId: application.id,
       description: `PSA申込 ${application.applicationNo}`,
+      receiptEmail: customer.email,
     });
   } catch (err) {
     console.error("Failed to create Stripe PaymentIntent:", err);
@@ -605,6 +606,7 @@ export async function createStoreRequest(
       customerId: stripeCustomerId,
       applicationId: application.id,
       description: `PSA代理申込 先払い ${application.applicationNo}`,
+      receiptEmail: customer.email,
     });
   } catch (err) {
     console.error("Failed to create Stripe PaymentIntent:", err);

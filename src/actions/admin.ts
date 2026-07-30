@@ -488,7 +488,22 @@ async function advanceGroupReturnStatus(
 ): Promise<{ success: boolean; error?: string }> {
   await requireAdminOrStaff();
 
-  const group = await prisma.psaSubmissionGroup.findUnique({ where: { id: groupId } });
+  // 通知メール送付のため、グループに紐づく申込（旧: applications直結／新: cards経由。ADR-0076）を集約して取得する。
+  const group = await prisma.psaSubmissionGroup.findUnique({
+    where: { id: groupId },
+    include: {
+      applications: {
+        select: { id: true, applicationNo: true, returnMethod: true, customer: { select: { nameEncrypted: true, email: true } } },
+      },
+      cards: {
+        select: {
+          application: {
+            select: { id: true, applicationNo: true, returnMethod: true, customer: { select: { nameEncrypted: true, email: true } } },
+          },
+        },
+      },
+    },
+  });
   if (!group) return { success: false, error: "グループが見つかりません" };
   if (group.status === "PREPARING") {
     return { success: false, error: "先に発送完了（提出）を行ってください" };
@@ -503,6 +518,41 @@ async function advanceGroupReturnStatus(
     where: { id: groupId },
     data: stage === "READY" ? { returnReadyAt: new Date() } : { returnedAt: new Date() },
   });
+
+  // 対象申込（重複除去）ごとに顧客へ通知（best-effort・失敗してもステータス更新は成功扱い）
+  const appMap = new Map<string, { applicationNo: string; returnMethod: string; customerName: string; email: string }>();
+  for (const app of [...group.applications, ...group.cards.map((c) => c.application)]) {
+    if (!appMap.has(app.id)) {
+      appMap.set(app.id, {
+        applicationNo: app.applicationNo,
+        returnMethod: app.returnMethod,
+        customerName: decrypt(app.customer.nameEncrypted),
+        email: app.customer.email,
+      });
+    }
+  }
+  if (process.env.RESEND_API_KEY) {
+    const { returnReadyHtml, returnedHtml } = await import("@/lib/mailer");
+    const appUrl = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "";
+    for (const app of appMap.values()) {
+      const isStorePickup = app.returnMethod === "STORE_PICKUP";
+      try {
+        await sendMail({
+          to: app.email,
+          subject:
+            stage === "READY"
+              ? "【トレカビンクス】PSA鑑定が完了しました"
+              : `【トレカビンクス】${isStorePickup ? "店頭受取" : "返送"}が完了しました`,
+          html:
+            stage === "READY"
+              ? returnReadyHtml({ customerName: app.customerName, applicationNo: app.applicationNo, isStorePickup, appUrl })
+              : returnedHtml({ customerName: app.customerName, applicationNo: app.applicationNo, isStorePickup, appUrl }),
+        });
+      } catch (err) {
+        console.error(`Failed to send return status email for application ${app.applicationNo}:`, err);
+      }
+    }
+  }
 
   revalidatePath("/admin/psa-groups");
   revalidatePath("/admin/applications");
@@ -565,8 +615,9 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
       where: { id: upcharge.id },
       data: { notifiedAt: new Date() },
     });
-  } catch {
+  } catch (err) {
     // 通知メール失敗は握りつぶし、自動請求へ進む
+    console.error("Failed to send Upcharge notification email:", err);
   }
 
   // Stripe自動請求
@@ -583,6 +634,7 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
         paymentMethodId: savedMethod.stripePaymentMethodId,
         description: `Upcharge: ${card.cardName}`,
         referenceId: upcharge.id,
+        receiptEmail: card.customer.email,
       });
 
       await prisma.upcharge.update({

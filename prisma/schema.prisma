@@ -682,6 +682,8 @@ model StoreSettings {
   phone      String   @default("")
   // センタリング測定ツールの精度・操作性が実用に足りないため、開発が整うまで顧客画面から一時的に隠すスイッチ。ADR-0070
   centeringToolEnabled Boolean @default(true)
+  // 新規問い合わせ・顧客からの返信を通知するスタッフ宛メールアドレス（複数可）。未設定なら通知しない。
+  notificationEmails String[] @default([])
   updatedAt  DateTime @updatedAt
   updatedBy  String?
 

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { logOperation, getClientIp } from "@/lib/operation-log";
-import { sendMail, inquiryReplyHtml } from "@/lib/mailer";
+import { sendMail, inquiryReplyHtml, inquiryReceivedHtml, staffInquiryNotificationHtml } from "@/lib/mailer";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
@@ -16,6 +16,39 @@ async function requireAdminOrStaff() {
   if (!user?.id) throw new Error("Unauthorized");
   if (!["ADMIN", "STAFF"].includes(user.role ?? "")) throw new Error("Forbidden");
   return { id: user.id, role: user.role };
+}
+
+/** お問い合わせ受付・顧客からの返信を、管理画面の「お問い合わせ通知先」に設定された全アドレスへ通知する（best-effort）。 */
+async function notifyStaffOfInquiry(params: {
+  inquiryId: string;
+  customerName: string;
+  subject: string;
+  body: string;
+  isFollowUp: boolean;
+}) {
+  if (!process.env.RESEND_API_KEY) return;
+  const settings = await prisma.storeSettings.findUnique({ where: { id: "default" } });
+  const emails = settings?.notificationEmails ?? [];
+  if (emails.length === 0) return;
+
+  const appUrl = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "";
+  const html = staffInquiryNotificationHtml({
+    customerName: params.customerName,
+    subject: params.subject,
+    body: params.body,
+    isFollowUp: params.isFollowUp,
+    appUrl,
+    inquiryId: params.inquiryId,
+  });
+  const subjectLine = `【トレカビンクス】${params.isFollowUp ? "顧客からの返信" : "新しいお問い合わせ"}（${params.subject}）`;
+
+  for (const to of emails) {
+    try {
+      await sendMail({ to, subject: subjectLine, html });
+    } catch (err) {
+      console.error(`Failed to send staff inquiry notification to ${to}:`, err);
+    }
+  }
 }
 
 const createInquirySchema = z.object({
@@ -59,6 +92,35 @@ export async function createInquiry(
     targetType: "inquiries",
     targetId: inquiry.id,
     after: { subject: inquiry.subject },
+  });
+
+  const customerName = decrypt(customer.nameEncrypted);
+
+  // 顧客への受付確認メール（best-effort）
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await sendMail({
+        to: customer.email,
+        subject: `【トレカビンクス】お問い合わせを受け付けました（${inquiry.subject}）`,
+        html: inquiryReceivedHtml({
+          customerName,
+          subject: inquiry.subject,
+          body: inquiry.body,
+          appUrl: process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "",
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to send inquiry received email:", err);
+    }
+  }
+
+  // スタッフへの通知（best-effort）
+  await notifyStaffOfInquiry({
+    inquiryId: inquiry.id,
+    customerName,
+    subject: inquiry.subject,
+    body: inquiry.body,
+    isFollowUp: false,
   });
 
   revalidatePath("/admin/inquiries");
@@ -296,6 +358,15 @@ export async function replyToInquiryAsCustomer(
     targetType: "inquiries",
     targetId: inquiry.id,
     after: { subject: inquiry.subject },
+  });
+
+  // スタッフへの通知（best-effort）
+  await notifyStaffOfInquiry({
+    inquiryId: inquiry.id,
+    customerName: decrypt(customer.nameEncrypted),
+    subject: inquiry.subject,
+    body: parsed.data.body,
+    isFollowUp: true,
   });
 
   revalidatePath("/contact/history");
