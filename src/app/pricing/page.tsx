@@ -64,6 +64,33 @@ function ShippingInsuranceMatrix({ rows, region }: { rows: ShippingInsuranceRate
 
   return (
     <div className="space-y-4">
+      <div className="space-y-3 sm:hidden">
+        {valueBands.map((value) => (
+          <section key={`${value.min}-${value.max}`} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <h4 className="bg-gray-100 px-4 py-2.5 text-sm font-bold text-gray-800">
+              申告価格 {shortValueBand(value.max, region)}
+            </h4>
+            <div className="divide-y divide-gray-100">
+              {qtyBands.map((quantity) => {
+                const rate = findRate(value.min, value.max, quantity.min, quantity.max);
+                return (
+                  <div key={`${quantity.min}-${quantity.max}`} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+                    <span className="font-medium text-gray-600">{qtyBand(quantity.min, quantity.max)}</span>
+                    <span className="text-right font-bold text-gray-900">
+                      {rate
+                        ? quantity.max === null && rate.perCardSurcharge > 0
+                          ? `${rate.perCardSurcharge.toLocaleString()}円/枚 加算`
+                          : formatMoneyIn(rate.fee, "JPY")
+                        : "—"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+      <div className="hidden space-y-4 sm:block">
       {chunk(valueBands, VALUE_BAND_CHUNK_SIZE).map((cols, chunkIdx) => (
         <div key={chunkIdx} className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-sm border-collapse">
@@ -139,6 +166,7 @@ function ShippingInsuranceMatrix({ rows, region }: { rows: ShippingInsuranceRate
           </table>
         </div>
       ))}
+      </div>
     </div>
   );
 }
@@ -169,7 +197,7 @@ export default async function PricingPage() {
         }
       />
 
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <main className="pricing-page flex-1 w-full max-w-4xl mx-auto px-4 py-8 space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h1 className="text-xl font-bold text-gray-900 mb-2">PSA鑑定代行サービス 料金表</h1>
           <p className="text-sm text-gray-600">
@@ -214,29 +242,48 @@ export default async function PricingPage() {
                     {/* サービスレベル別鑑定料 */}
                     <div>
                       <p className="text-sm font-bold text-gray-700 mb-2">鑑定料金</p>
-                      <div className="overflow-x-auto">
+                      <div className="hidden overflow-x-auto sm:block">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
-                              <th className="text-left px-3 py-2 text-gray-600 font-medium">サービスレベル</th>
-                              <th className="text-right px-3 py-2 text-gray-600 font-medium">鑑定料（1枚）</th>
-                              <th className="text-right px-3 py-2 text-gray-600 font-medium">申告価格上限</th>
+                              <th className="text-left px-3 py-2 text-gray-600 font-medium whitespace-nowrap">サービスレベル</th>
+                              <th className="text-right px-3 py-2 text-gray-600 font-medium whitespace-nowrap">鑑定料（1枚）</th>
+                              <th className="text-right px-3 py-2 text-gray-600 font-medium whitespace-nowrap">申告価格上限</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {tiers.map((tier) => (
                               <tr key={tier.id}>
-                                <td className="px-3 py-2 text-gray-900">{tier.name}</td>
-                                <td className="px-3 py-2 text-right font-medium text-gray-900">
+                                <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{tier.name}</td>
+                                <td className="px-3 py-2 text-right font-medium text-gray-900 whitespace-nowrap">
                                   {formatMoney(tier.pricePerCard, region)}
                                 </td>
-                                <td className="px-3 py-2 text-right text-gray-600">
+                                <td className="px-3 py-2 text-right text-gray-600 whitespace-nowrap">
                                   {tier.maxDeclaredValue === null ? "なし" : formatMoneyInt(tier.maxDeclaredValue, region)}
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                      <div className="space-y-2 sm:hidden">
+                        {tiers.map((tier) => (
+                          <section key={tier.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                            <h4 className="mb-3 whitespace-nowrap text-[15px] font-bold tracking-tight text-gray-900">{tier.name}</h4>
+                            <dl className="grid grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <dt className="text-xs text-gray-500">鑑定料（1枚）</dt>
+                                <dd className="mt-1 font-bold text-gray-900">{formatMoney(tier.pricePerCard, region)}</dd>
+                              </div>
+                              <div className="text-right">
+                                <dt className="text-xs text-gray-500">申告価格上限</dt>
+                                <dd className="mt-1 font-medium text-gray-700">
+                                  {tier.maxDeclaredValue === null ? "なし" : formatMoneyInt(tier.maxDeclaredValue, region)}
+                                </dd>
+                              </div>
+                            </dl>
+                          </section>
+                        ))}
                       </div>
                     </div>
 
@@ -260,7 +307,8 @@ export default async function PricingPage() {
                       ) : (
                         <div className="space-y-4">
                           {legacyShipping.length > 0 && (
-                            <div className="overflow-x-auto">
+                            <>
+                            <div className="hidden overflow-x-auto sm:block">
                               <p className="text-xs text-gray-500 mb-1">送料（返却方法・申込金額帯別）</p>
                               <table className="w-full text-sm">
                                 <thead className="bg-gray-50 border-b border-gray-200">
@@ -285,9 +333,22 @@ export default async function PricingPage() {
                                 </tbody>
                               </table>
                             </div>
+                            <div className="space-y-2 sm:hidden">
+                              {legacyShipping.map((r) => (
+                                <div key={r.id} className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="font-bold text-gray-900">{r.returnMethod === "STORE_PICKUP" ? "店頭受取" : "配送"}</span>
+                                    <span className="font-bold text-gray-900">{formatMoneyIn(r.fee, "JPY")}</span>
+                                  </div>
+                                  <p className="mt-2 text-xs text-gray-500">申込金額 {valueBand(r.minAmount, r.maxAmount, region)}</p>
+                                </div>
+                              ))}
+                            </div>
+                            </>
                           )}
                           {legacyInsurance.length > 0 && (
-                            <div className="overflow-x-auto">
+                            <>
+                            <div className="hidden overflow-x-auto sm:block">
                               <p className="text-xs text-gray-500 mb-1">保険料（申告額帯別）</p>
                               <table className="w-full text-sm">
                                 <thead className="bg-gray-50 border-b border-gray-200">
@@ -308,6 +369,17 @@ export default async function PricingPage() {
                                 </tbody>
                               </table>
                             </div>
+                            <div className="space-y-2 sm:hidden">
+                              {legacyInsurance.map((r) => (
+                                <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm">
+                                  <span className="text-gray-600">{valueBand(r.minValue, r.maxValue, region)}</span>
+                                  <span className="shrink-0 font-bold text-gray-900">
+                                    {r.feeRate ? `${r.feeRate}%` : formatMoneyIn(r.fee, "JPY")}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            </>
                           )}
                           {legacyShipping.length === 0 && legacyInsurance.length === 0 && (
                             <p className="text-sm text-gray-400">現在準備中です。</p>
@@ -323,7 +395,7 @@ export default async function PricingPage() {
                   <div key={itemType}>{body}</div>
                 ) : (
                   <details key={itemType} className="border border-gray-200 rounded-lg p-4">
-                    <summary className="font-bold text-gray-800 cursor-pointer select-none">
+                    <summary className="font-bold text-gray-800 cursor-pointer select-none whitespace-nowrap text-[13px] tracking-tight sm:text-base sm:tracking-normal">
                       {ITEM_TYPE_LABELS[itemType] ?? itemType}
                     </summary>
                     <div className="mt-4">{body}</div>

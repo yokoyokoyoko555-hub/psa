@@ -44,6 +44,12 @@ body {
   }
 }
 
+/* 料金表の名称は日本語の単語途中で分断しない。 */
+.pricing-page summary {
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
 /* 数字入力の上下スピナー（矢印）を全画面で非表示 */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
