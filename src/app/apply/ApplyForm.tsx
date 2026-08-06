@@ -922,24 +922,53 @@ export default function ApplyForm({
               <h2 className="font-bold text-gray-800">
                 {editingIndex !== null ? `${fieldLabels.entryLabel}を編集` : `${fieldLabels.entryLabel}情報入力`}
               </h2>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">サービスレベル *</label>
-                <select
-                  className={inputCls}
-                  value={draft.customServiceLevelId ?? ""}
-                  onChange={(e) => setDraftField("customServiceLevelId", e.target.value || null)}
-                >
-                  <option value="" disabled>
-                    選択してください
-                  </option>
-                  {tierOptionsToShow.map((tier) => (
-                    <option key={tier.id} value={tier.id}>
-                      {tier.name}（{formatMoney(tier.pricePerCard, region)}/{fieldLabels.quantityUnit}・上限
-                      {tier.maxDeclaredValue === null ? "なし" : formatMoneyInt(tier.maxDeclaredValue, region)}）
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <fieldset>
+                <legend className="mb-2 block text-xs text-gray-500">サービスレベル *</legend>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {tierOptionsToShow.map((tier) => {
+                    const selected = draft.customServiceLevelId === tier.id;
+                    return (
+                      <label
+                        key={tier.id}
+                        className={`flex min-h-20 cursor-pointer items-center gap-3 rounded-xl border-2 p-3 transition ${
+                          selected
+                            ? "border-brand-500 bg-brand-50"
+                            : "border-gray-200 bg-white hover:border-brand-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="customServiceLevelId"
+                          value={tier.id}
+                          checked={selected}
+                          onChange={() => setDraftField("customServiceLevelId", tier.id)}
+                          className="sr-only"
+                        />
+                        <span
+                          aria-hidden="true"
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                            selected ? "border-brand-600" : "border-gray-300"
+                          }`}
+                        >
+                          {selected && <span className="h-2.5 w-2.5 rounded-full bg-brand-600" />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block break-keep font-bold text-gray-900">{tier.name}</span>
+                          <span className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-gray-500">
+                            <span className="font-bold text-brand-700">
+                              {formatMoney(tier.pricePerCard, region)}/{fieldLabels.quantityUnit}
+                            </span>
+                            <span>
+                              上限 {tier.maxDeclaredValue === null ? "なし" : formatMoneyInt(tier.maxDeclaredValue, region)}
+                            </span>
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {!draft.customServiceLevelId && <p className="mt-2 text-xs text-gray-400">サービスレベルを選択してください</p>}
+              </fieldset>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">{fieldLabels.releaseYearLabel}</label>
