@@ -113,7 +113,12 @@ export async function createPaidInvoice(params: {
     metadata: { applicationId: params.applicationId },
   });
 
-  await stripe.invoices.finalizeInvoice(invoice.id!, { auto_advance: false });
+  const finalized = await stripe.invoices.finalizeInvoice(invoice.id!, { auto_advance: false });
+  // 合計金額が0円の請求書はfinalize時点でStripe側が自動的にstatus="paid"にするため、
+  // その場合にpay()を呼ぶと「Invoice is already paid」エラーになる。既にpaidならそのまま返す。
+  if (finalized.status === "paid") {
+    return finalized;
+  }
   return stripe.invoices.pay(invoice.id!, { paid_out_of_band: true });
 }
 
