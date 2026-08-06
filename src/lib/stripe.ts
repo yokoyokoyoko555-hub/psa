@@ -81,6 +81,42 @@ export async function chargeOffSession(params: {
   });
 }
 
+/**
+ * 決済（PaymentIntent）が既に完了した申込について、インボイス制度対応の適格請求書PDFを
+ * 生成するためだけにStripe Invoiceを作成する。実際の課金はしない（paid_out_of_bandで支払済み扱いにする）。
+ * PDFはinvoice_pdfのURLから取得し、こちらのメール（Resend）で送付する運用。
+ */
+export async function createPaidInvoice(params: {
+  customerId: string;
+  applicationId: string;
+  description: string;
+  /** 明細行。合計がapplication.totalAmountと一致するように呼び出し側で調整すること。 */
+  lineItems: { description: string; amount: number }[];
+}) {
+  const stripe = getStripe();
+
+  for (const item of params.lineItems) {
+    await stripe.invoiceItems.create({
+      customer: params.customerId,
+      currency: "jpy",
+      amount: Math.round(item.amount),
+      description: item.description,
+    });
+  }
+
+  const invoice = await stripe.invoices.create({
+    customer: params.customerId,
+    collection_method: "send_invoice",
+    days_until_due: 0,
+    auto_advance: false,
+    description: params.description,
+    metadata: { applicationId: params.applicationId },
+  });
+
+  await stripe.invoices.finalizeInvoice(invoice.id!, { auto_advance: false });
+  return stripe.invoices.pay(invoice.id!, { paid_out_of_band: true });
+}
+
 export async function createCheckoutSubscriptionSession(params: {
   customerId: string;
   priceId: string;

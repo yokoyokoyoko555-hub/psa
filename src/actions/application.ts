@@ -5,8 +5,8 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
-import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe } from "@/lib/stripe";
-import { sendTemplate } from "@/lib/mailer";
+import { createCustomer as createStripeCustomer, createPaymentIntent, createPaidInvoice, getStripe } from "@/lib/stripe";
+import { sendTemplate, sendMail, paymentReceiptHtml } from "@/lib/mailer";
 import { formatMoneyIn, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { pricingSettingId } from "@/lib/pricing-setting-id";
@@ -394,6 +394,75 @@ const confirmPaymentSchema = z.object({
   paymentIntentId: z.string().min(1),
 });
 
+/**
+ * 決済完了申込の適格請求書PDFを生成しメールで送付する（PoC: まず自己入力の初回決済のみ対象）。
+ * 決済（PaymentIntent）は既に完了しているため、Stripe Invoiceは実際には課金せず
+ * paid_out_of_bandで支払済み扱いにし、PDF生成のためだけに使う。best-effort。
+ */
+async function sendPaymentReceipt(
+  application: {
+    id: string;
+    applicationNo: string;
+    totalAmount: number;
+    psaFeeTotal: number;
+    autographFeeTotal: number;
+    agencyFeeTotal: number;
+    handlingFee: number;
+    shippingFee: number;
+    insuranceFee: number;
+    discountAmount: number;
+    campaignName: string | null;
+  },
+  customer: { stripeCustomerId: string | null; email: string; nameEncrypted: string }
+) {
+  if (!process.env.RESEND_API_KEY || !customer.stripeCustomerId) return;
+  try {
+    const items: { description: string; amount: number }[] = [];
+    const psaFee = Math.round(application.psaFeeTotal + application.autographFeeTotal);
+    if (psaFee > 0) items.push({ description: "PSA鑑定料", amount: psaFee });
+    if (application.agencyFeeTotal > 0) items.push({ description: "代理入力手数料", amount: application.agencyFeeTotal });
+    if (application.handlingFee > 0) items.push({ description: "事務手数料", amount: application.handlingFee });
+    if (application.shippingFee + application.insuranceFee > 0) {
+      items.push({ description: "送料・保険料", amount: application.shippingFee + application.insuranceFee });
+    }
+    if (application.discountAmount > 0) {
+      items.push({
+        description: `キャンペーン割引${application.campaignName ? `（${application.campaignName}）` : ""}`,
+        amount: -application.discountAmount,
+      });
+    }
+    // 内訳の合計が実際の請求額とズレないよう、差分があれば調整行を足して必ず一致させる
+    const sum = items.reduce((s, i) => s + i.amount, 0);
+    const diff = Math.round(application.totalAmount - sum);
+    if (diff !== 0) items.push({ description: "調整額", amount: diff });
+
+    const invoice = await createPaidInvoice({
+      customerId: customer.stripeCustomerId,
+      applicationId: application.id,
+      description: `PSA申込 ${application.applicationNo}`,
+      lineItems: items,
+    });
+
+    if (!invoice.invoice_pdf) return;
+    const pdfRes = await fetch(invoice.invoice_pdf);
+    if (!pdfRes.ok) return;
+    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+
+    await sendMail({
+      to: customer.email,
+      subject: `【トレカビンクス】ご請求書（${application.applicationNo}）`,
+      html: paymentReceiptHtml({
+        customerName: decrypt(customer.nameEncrypted),
+        applicationNo: application.applicationNo,
+        appUrl: process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "",
+      }),
+      attachments: [{ filename: `invoice-${application.applicationNo}.pdf`, content: pdfBuffer.toString("base64") }],
+    });
+  } catch (err) {
+    console.error(`Failed to send payment receipt for application ${application.applicationNo}:`, err);
+  }
+}
+
 export async function confirmApplicationPayment(
   input: z.infer<typeof confirmPaymentSchema>
 ): Promise<{ success: boolean; error?: string; status?: string }> {
@@ -499,6 +568,9 @@ export async function confirmApplicationPayment(
     applicationNo: application.applicationNo,
     amount: formatMoneyIn(application.totalAmount, "JPY"),
   });
+
+  // 適格請求書PDFの送付（PoC: まず自己入力の初回決済のみ対象。best-effort）
+  await sendPaymentReceipt(application, customer);
 
   revalidatePath("/mypage");
   revalidatePath("/mypage/submission-booking");

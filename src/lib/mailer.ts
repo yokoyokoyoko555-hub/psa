@@ -6,6 +6,8 @@ interface MailOptions {
   to: string;
   subject: string;
   html: string;
+  /** PDF等の添付ファイル（Resend APIはBase64エンコードされたcontentを要求する）。 */
+  attachments?: { filename: string; content: string }[];
 }
 
 export async function sendMail(options: MailOptions) {
@@ -24,6 +26,7 @@ export async function sendMail(options: MailOptions) {
       to: options.to,
       subject: options.subject,
       html: options.html,
+      ...(options.attachments ? { attachments: options.attachments } : {}),
     }),
   });
   if (!res.ok) {
@@ -83,6 +86,18 @@ export function registrationCompleteHtml(params: { customerName: string; memberN
       <p style="text-align:center; margin: 24px 0;">
         <a href="${params.appUrl}/mypage" style="background:#6b0505;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;">マイページへ</a>
       </p>
+    </div>
+  `;
+}
+
+export function paymentReceiptHtml(params: { customerName: string; applicationNo: string; appUrl: string }): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>ご請求書（領収書）</h2>
+      <p>${escapeHtml(params.customerName)} 様</p>
+      <p>お支払いいただいたお申込みのご請求書（適格請求書）をPDFで添付いたします。</p>
+      <p style="color:#888;font-size:12px;">申込番号: ${escapeHtml(params.applicationNo)}</p>
+      <p><a href="${params.appUrl}/mypage">マイページで確認する</a></p>
     </div>
   `;
 }
