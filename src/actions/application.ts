@@ -415,7 +415,15 @@ async function sendPaymentReceipt(
   },
   customer: { stripeCustomerId: string | null; email: string; nameEncrypted: string }
 ) {
-  if (!process.env.RESEND_API_KEY || !customer.stripeCustomerId) return;
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`[receipt] skip ${application.applicationNo}: RESEND_API_KEY not set`);
+    return;
+  }
+  if (!customer.stripeCustomerId) {
+    console.log(`[receipt] skip ${application.applicationNo}: customer has no stripeCustomerId`);
+    return;
+  }
+  console.log(`[receipt] start ${application.applicationNo}`);
   try {
     const items: { description: string; amount: number }[] = [];
     const psaFee = Math.round(application.psaFeeTotal + application.autographFeeTotal);
@@ -443,9 +451,16 @@ async function sendPaymentReceipt(
       lineItems: items,
     });
 
-    if (!invoice.invoice_pdf) return;
+    console.log(`[receipt] invoice created ${application.applicationNo}: id=${invoice.id} pdf=${invoice.invoice_pdf}`);
+    if (!invoice.invoice_pdf) {
+      console.log(`[receipt] skip ${application.applicationNo}: invoice has no invoice_pdf`);
+      return;
+    }
     const pdfRes = await fetch(invoice.invoice_pdf);
-    if (!pdfRes.ok) return;
+    if (!pdfRes.ok) {
+      console.log(`[receipt] skip ${application.applicationNo}: pdf fetch failed status=${pdfRes.status}`);
+      return;
+    }
     const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
 
     await sendMail({
@@ -458,8 +473,9 @@ async function sendPaymentReceipt(
       }),
       attachments: [{ filename: `invoice-${application.applicationNo}.pdf`, content: pdfBuffer.toString("base64") }],
     });
+    console.log(`[receipt] sent ${application.applicationNo}`);
   } catch (err) {
-    console.error(`Failed to send payment receipt for application ${application.applicationNo}:`, err);
+    console.error(`[receipt] failed ${application.applicationNo}:`, err);
   }
 }
 
