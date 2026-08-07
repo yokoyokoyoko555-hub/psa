@@ -90,20 +90,13 @@ export function registrationCompleteHtml(params: { customerName: string; memberN
   `;
 }
 
-export function paymentReceiptHtml(params: {
-  customerName: string;
-  applicationNo: string;
-  appUrl: string;
-  /** 実際の決済（Charge）に紐づくStripe発行の領収書ページURL。ADR: 適格請求書PDFとは別に、決済の証跡として案内する。 */
-  receiptUrl?: string;
-}): string {
+export function paymentReceiptHtml(params: { customerName: string; applicationNo: string; appUrl: string }): string {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2>ご請求書（領収書）</h2>
+      <h2>ご請求書・領収書</h2>
       <p>${escapeHtml(params.customerName)} 様</p>
-      <p>お支払いいただいたお申込みのご請求書（適格請求書）をPDFで添付いたします。</p>
+      <p>お支払いいただいたお申込みのご請求書（適格請求書）と領収書をPDFで添付いたします。</p>
       <p style="color:#888;font-size:12px;">申込番号: ${escapeHtml(params.applicationNo)}</p>
-      ${params.receiptUrl ? `<p><a href="${params.receiptUrl}">領収書（決済証明）を確認する</a></p>` : ""}
       <p><a href="${params.appUrl}/mypage">マイページで確認する</a></p>
     </div>
   `;

@@ -81,10 +81,19 @@ export async function chargeOffSession(params: {
   });
 }
 
+async function fetchPdfBuffer(url: string): Promise<Buffer | null> {
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return Buffer.from(await res.arrayBuffer());
+}
+
 /**
  * 決済（PaymentIntent）が既に完了した申込について、インボイス制度対応の適格請求書PDFを
  * 生成するためだけにStripe Invoiceを作成する。実際の課金はしない（paid_out_of_bandで支払済み扱いにする）。
- * PDFはinvoice_pdfのURLから取得し、こちらのメール（Resend）で送付する運用。
+ *
+ * Stripeのinvoice_pdfはその時点のstatusに応じて内容が変わる（未払い時は"Invoice"＝請求書、
+ * 支払済み後は"Receipt"＝領収書のレイアウトで再生成される）。そのため、finalize直後（未払い状態）と
+ * pay()直後（支払済み状態）の2回同じURLを取得することで、請求書PDFと領収書PDFの両方を得られる。
  */
 export async function createPaidInvoice(params: {
   customerId: string;
@@ -92,7 +101,7 @@ export async function createPaidInvoice(params: {
   description: string;
   /** 明細行。合計がapplication.totalAmountと一致するように呼び出し側で調整すること。 */
   lineItems: { description: string; amount: number }[];
-}) {
+}): Promise<{ invoicePdf: Buffer | null; receiptPdf: Buffer | null }> {
   const stripe = getStripe();
 
   // 先にdraft請求書を作成し、明細を"顧客の未請求プール"ではなくこのinvoice IDに直接紐付ける。
@@ -118,12 +127,14 @@ export async function createPaidInvoice(params: {
   }
 
   const finalized = await stripe.invoices.finalizeInvoice(invoice.id!, { auto_advance: false });
+  const invoicePdf = finalized.invoice_pdf ? await fetchPdfBuffer(finalized.invoice_pdf) : null;
+
   // 合計金額が0円の請求書はfinalize時点でStripe側が自動的にstatus="paid"にするため、
-  // その場合にpay()を呼ぶと「Invoice is already paid」エラーになる。既にpaidならそのまま返す。
-  if (finalized.status === "paid") {
-    return finalized;
-  }
-  return stripe.invoices.pay(invoice.id!, { paid_out_of_band: true });
+  // その場合にpay()を呼ぶと「Invoice is already paid」エラーになる。既にpaidならそのままにする。
+  const paid = finalized.status === "paid" ? finalized : await stripe.invoices.pay(invoice.id!, { paid_out_of_band: true });
+  const receiptPdf = paid.invoice_pdf ? await fetchPdfBuffer(paid.invoice_pdf) : null;
+
+  return { invoicePdf, receiptPdf };
 }
 
 export async function createCheckoutSubscriptionSession(params: {

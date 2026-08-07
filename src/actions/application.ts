@@ -413,8 +413,7 @@ async function sendPaymentReceipt(
     discountAmount: number;
     campaignName: string | null;
   },
-  customer: { stripeCustomerId: string | null; email: string; nameEncrypted: string },
-  receiptUrl?: string | null
+  customer: { stripeCustomerId: string | null; email: string; nameEncrypted: string }
 ) {
   if (!process.env.RESEND_API_KEY) {
     console.log(`[receipt] skip ${application.applicationNo}: RESEND_API_KEY not set`);
@@ -445,35 +444,38 @@ async function sendPaymentReceipt(
     const diff = Math.round(application.totalAmount - sum);
     if (diff !== 0) items.push({ description: "調整額", amount: diff });
 
-    const invoice = await createPaidInvoice({
+    const { invoicePdf, receiptPdf } = await createPaidInvoice({
       customerId: customer.stripeCustomerId,
       applicationId: application.id,
       description: `PSA申込 ${application.applicationNo}`,
       lineItems: items,
     });
 
-    console.log(`[receipt] invoice created ${application.applicationNo}: id=${invoice.id} pdf=${invoice.invoice_pdf}`);
-    if (!invoice.invoice_pdf) {
-      console.log(`[receipt] skip ${application.applicationNo}: invoice has no invoice_pdf`);
+    console.log(
+      `[receipt] invoice created ${application.applicationNo}: invoicePdf=${!!invoicePdf} receiptPdf=${!!receiptPdf}`
+    );
+    if (!invoicePdf && !receiptPdf) {
+      console.log(`[receipt] skip ${application.applicationNo}: no PDF was generated`);
       return;
     }
-    const pdfRes = await fetch(invoice.invoice_pdf);
-    if (!pdfRes.ok) {
-      console.log(`[receipt] skip ${application.applicationNo}: pdf fetch failed status=${pdfRes.status}`);
-      return;
+
+    const attachments: { filename: string; content: string }[] = [];
+    if (invoicePdf) {
+      attachments.push({ filename: `invoice-${application.applicationNo}.pdf`, content: invoicePdf.toString("base64") });
     }
-    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+    if (receiptPdf) {
+      attachments.push({ filename: `receipt-${application.applicationNo}.pdf`, content: receiptPdf.toString("base64") });
+    }
 
     await sendMail({
       to: customer.email,
-      subject: `【トレカビンクス】ご請求書（${application.applicationNo}）`,
+      subject: `【トレカビンクス】ご請求書・領収書（${application.applicationNo}）`,
       html: paymentReceiptHtml({
         customerName: decrypt(customer.nameEncrypted),
         applicationNo: application.applicationNo,
         appUrl: process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "",
-        receiptUrl: receiptUrl ?? undefined,
       }),
-      attachments: [{ filename: `invoice-${application.applicationNo}.pdf`, content: pdfBuffer.toString("base64") }],
+      attachments,
     });
     console.log(`[receipt] sent ${application.applicationNo}`);
   } catch (err) {
@@ -506,7 +508,7 @@ export async function confirmApplicationPayment(
 
   const stripe = getStripe();
   const paymentIntent = await stripe.paymentIntents.retrieve(parsed.data.paymentIntentId, {
-    expand: ["payment_method", "latest_charge"],
+    expand: ["payment_method"],
   });
 
   if (paymentIntent.status !== "succeeded") {
@@ -515,9 +517,6 @@ export async function confirmApplicationPayment(
     }
     return { success: false, status: paymentIntent.status, error: "決済が完了していません" };
   }
-
-  const receiptUrl =
-    typeof paymentIntent.latest_charge === "object" ? paymentIntent.latest_charge?.receipt_url : null;
 
   await prisma.$transaction(async (tx) => {
     await tx.payment.update({
@@ -591,7 +590,7 @@ export async function confirmApplicationPayment(
   });
 
   // 適格請求書PDFの送付（PoC: まず自己入力の初回決済のみ対象。best-effort）
-  await sendPaymentReceipt(application, customer, receiptUrl);
+  await sendPaymentReceipt(application, customer);
 
   revalidatePath("/mypage");
   revalidatePath("/mypage/submission-booking");
