@@ -111,6 +111,9 @@ export async function createPaidInvoice(params: {
     auto_advance: false,
     description: params.description,
     metadata: { applicationId: params.applicationId },
+    // invoices.createはデフォルトでは直前に作成したpending invoice itemsを含めない（exclude）ため、
+    // 明示的にincludeを指定しないと明細ゼロ・¥0円の空請求書が作られてしまう。
+    pending_invoice_items_behavior: "include",
   });
 
   const finalized = await stripe.invoices.finalizeInvoice(invoice.id!, { auto_advance: false });
