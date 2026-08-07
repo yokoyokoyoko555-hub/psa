@@ -413,7 +413,8 @@ async function sendPaymentReceipt(
     discountAmount: number;
     campaignName: string | null;
   },
-  customer: { stripeCustomerId: string | null; email: string; nameEncrypted: string }
+  customer: { stripeCustomerId: string | null; email: string; nameEncrypted: string },
+  receiptUrl?: string | null
 ) {
   if (!process.env.RESEND_API_KEY) {
     console.log(`[receipt] skip ${application.applicationNo}: RESEND_API_KEY not set`);
@@ -470,6 +471,7 @@ async function sendPaymentReceipt(
         customerName: decrypt(customer.nameEncrypted),
         applicationNo: application.applicationNo,
         appUrl: process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "",
+        receiptUrl: receiptUrl ?? undefined,
       }),
       attachments: [{ filename: `invoice-${application.applicationNo}.pdf`, content: pdfBuffer.toString("base64") }],
     });
@@ -504,7 +506,7 @@ export async function confirmApplicationPayment(
 
   const stripe = getStripe();
   const paymentIntent = await stripe.paymentIntents.retrieve(parsed.data.paymentIntentId, {
-    expand: ["payment_method"],
+    expand: ["payment_method", "latest_charge"],
   });
 
   if (paymentIntent.status !== "succeeded") {
@@ -513,6 +515,9 @@ export async function confirmApplicationPayment(
     }
     return { success: false, status: paymentIntent.status, error: "決済が完了していません" };
   }
+
+  const receiptUrl =
+    typeof paymentIntent.latest_charge === "object" ? paymentIntent.latest_charge?.receipt_url : null;
 
   await prisma.$transaction(async (tx) => {
     await tx.payment.update({
@@ -586,7 +591,7 @@ export async function confirmApplicationPayment(
   });
 
   // 適格請求書PDFの送付（PoC: まず自己入力の初回決済のみ対象。best-effort）
-  await sendPaymentReceipt(application, customer);
+  await sendPaymentReceipt(application, customer, receiptUrl);
 
   revalidatePath("/mypage");
   revalidatePath("/mypage/submission-booking");

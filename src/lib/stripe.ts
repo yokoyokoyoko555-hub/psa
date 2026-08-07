@@ -95,15 +95,9 @@ export async function createPaidInvoice(params: {
 }) {
   const stripe = getStripe();
 
-  for (const item of params.lineItems) {
-    await stripe.invoiceItems.create({
-      customer: params.customerId,
-      currency: "jpy",
-      amount: Math.round(item.amount),
-      description: item.description,
-    });
-  }
-
+  // 先にdraft請求書を作成し、明細を"顧客の未請求プール"ではなくこのinvoice IDに直接紐付ける。
+  // pending_invoice_items_behaviorで顧客のプールごと拾う方式だと、過去に別の申込で作られた
+  // 未消化の明細まで一緒に取り込まれてしまうため（実際に発生した不具合）。
   const invoice = await stripe.invoices.create({
     customer: params.customerId,
     collection_method: "send_invoice",
@@ -111,10 +105,17 @@ export async function createPaidInvoice(params: {
     auto_advance: false,
     description: params.description,
     metadata: { applicationId: params.applicationId },
-    // invoices.createはデフォルトでは直前に作成したpending invoice itemsを含めない（exclude）ため、
-    // 明示的にincludeを指定しないと明細ゼロ・¥0円の空請求書が作られてしまう。
-    pending_invoice_items_behavior: "include",
   });
+
+  for (const item of params.lineItems) {
+    await stripe.invoiceItems.create({
+      customer: params.customerId,
+      invoice: invoice.id,
+      currency: "jpy",
+      amount: Math.round(item.amount),
+      description: item.description,
+    });
+  }
 
   const finalized = await stripe.invoices.finalizeInvoice(invoice.id!, { auto_advance: false });
   // 合計金額が0円の請求書はfinalize時点でStripe側が自動的にstatus="paid"にするため、
