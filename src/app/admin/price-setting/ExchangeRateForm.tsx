@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveExchangeRate } from "@/actions/pricing";
+import { saveExchangeRate, testFetchExchangeRate } from "@/actions/pricing";
 
 export default function ExchangeRateForm({
   usdJpyRate,
@@ -29,6 +29,8 @@ export default function ExchangeRateForm({
   const [min, setMin] = useState(minRate != null ? String(minRate) : "");
   const [max, setMax] = useState(maxRate != null ? String(maxRate) : "");
   const [message, setMessage] = useState("");
+  const [isTesting, startTest] = useTransition();
+  const [testResult, setTestResult] = useState("");
 
   const rateNum = parseFloat(rate) || 0;
   const marginNum = parseFloat(margin) || 0;
@@ -46,6 +48,16 @@ export default function ExchangeRateForm({
       });
       setMessage(res.success ? "保存しました" : res.error ?? "保存に失敗しました");
       if (res.success) router.refresh();
+    });
+  }
+
+  function test() {
+    setTestResult("");
+    startTest(async () => {
+      const res = await testFetchExchangeRate();
+      setTestResult(
+        res.success ? `取得成功: $1 = ¥${res.rate}（この場では保存されません）` : `取得失敗: ${res.error ?? "不明なエラー"}`
+      );
     });
   }
 
@@ -120,6 +132,17 @@ export default function ExchangeRateForm({
             )}
           </p>
         )}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={test}
+            disabled={isTesting}
+            className="border border-gray-300 text-gray-700 font-bold px-4 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
+          >
+            {isTesting ? "取得中..." : "今すぐ取得テスト"}
+          </button>
+          {testResult && <span className="text-sm text-gray-700">{testResult}</span>}
+        </div>
       </div>
 
       <div className="flex items-center justify-end gap-3">

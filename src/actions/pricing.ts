@@ -240,3 +240,15 @@ export async function saveExchangeRate(
   revalidatePath("/admin/price-setting");
   return { success: true };
 }
+
+/** 為替レート自動取得APIの疎通確認用。DBには保存せず、取得できた値をそのまま返すだけ。 */
+export async function testFetchExchangeRate(): Promise<{ success: boolean; rate?: number; error?: string }> {
+  await requireAdmin();
+  try {
+    const { fetchUsdJpyRateFromApi } = await import("@/lib/exchange-rate");
+    const rate = await fetchUsdJpyRateFromApi();
+    return { success: true, rate };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
