@@ -664,11 +664,16 @@ model PricingSetting {
 
 // USD→JPY為替レート（PSA US決済のJPY一本化用）。1行のみ運用（id="default"固定）。ADR-0031
 model ExchangeRate {
-  id            String   @id
-  usdJpyRate    Float // 実勢レート（例: 155.00 = $1あたりの円）
-  marginPercent Float    @default(0) // 上乗せ%。実効レート = usdJpyRate × (1 + marginPercent/100)
-  updatedAt     DateTime @updatedAt
-  updatedBy     String?
+  id                 String    @id
+  usdJpyRate         Float // 実勢レート（例: 155.00 = $1あたりの円）。自動更新有効時はAPI取得値、それ以外は手動入力値
+  marginPercent      Float     @default(0) // 上乗せ%。実効レート = usdJpyRate × (1 + marginPercent/100)
+  autoUpdate         Boolean   @default(false) // trueの場合、毎日自動でusdJpyRateをAPI取得値に更新する
+  minRate            Float? // 自動更新の下限（安全弁）。取得値がこれを下回ったら更新を見送る
+  maxRate            Float? // 自動更新の上限（安全弁）。取得値がこれを超えたら更新を見送る
+  lastAutoFetchAt    DateTime? // 直近の自動取得（成功・見送り問わず）試行日時
+  lastAutoFetchError String? // 直近の自動取得が失敗/見送りだった場合の理由（成功時はnull）
+  updatedAt          DateTime  @updatedAt
+  updatedBy          String?
 
   @@map("exchange_rates")
 }

@@ -213,6 +213,9 @@ const EXCHANGE_RATE_ID = "default";
 const exchangeRateSchema = z.object({
   usdJpyRate: z.number().positive(),
   marginPercent: z.number().min(0),
+  autoUpdate: z.boolean(),
+  minRate: z.number().positive().nullable(),
+  maxRate: z.number().positive().nullable(),
 });
 
 /** USD→JPY為替レート（PSA US決済のJPY一本化用）を保存。1行のみ運用。ADR-0031 */
@@ -222,6 +225,13 @@ export async function saveExchangeRate(
   const user = await requireAdmin();
   const parsed = exchangeRateSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: "入力内容を確認してください" };
+  if (
+    parsed.data.minRate != null &&
+    parsed.data.maxRate != null &&
+    parsed.data.minRate > parsed.data.maxRate
+  ) {
+    return { success: false, error: "下限は上限以下にしてください" };
+  }
   await prisma.exchangeRate.upsert({
     where: { id: EXCHANGE_RATE_ID },
     update: { ...parsed.data, updatedBy: user.id },

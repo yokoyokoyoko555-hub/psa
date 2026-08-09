@@ -63,6 +63,11 @@ export default async function PriceSettingPage() {
           <ExchangeRateForm
             usdJpyRate={exchangeRate?.usdJpyRate ?? 150}
             marginPercent={exchangeRate?.marginPercent ?? 0}
+            autoUpdate={exchangeRate?.autoUpdate ?? false}
+            minRate={exchangeRate?.minRate ?? null}
+            maxRate={exchangeRate?.maxRate ?? null}
+            lastAutoFetchAt={exchangeRate?.lastAutoFetchAt ?? null}
+            lastAutoFetchError={exchangeRate?.lastAutoFetchError ?? null}
           />
         </div>
       </details>
