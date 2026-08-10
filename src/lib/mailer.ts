@@ -102,6 +102,18 @@ export function paymentReceiptHtml(params: { customerName: string; applicationNo
   `;
 }
 
+/** スタッフ宛の内部通知（為替レート自動取得の失敗・範囲外スキップ）。 */
+export function exchangeRateFetchFailedHtml(params: { reason: string; appUrl: string }): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>為替レートの自動取得に失敗しました</h2>
+      <p>本日分の為替レート自動更新が行われませんでした。手動での確認・入力をお願いします。</p>
+      <p style="background:#f9f9f9;border-radius:8px;padding:16px;">${escapeHtml(params.reason)}</p>
+      <p style="margin-top:16px;"><a href="${params.appUrl}/admin/price-setting">管理画面で確認する</a></p>
+    </div>
+  `;
+}
+
 export function passwordResetHtml(params: { resetUrl: string }): string {
   return `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">

@@ -17,9 +17,28 @@ export async function fetchUsdJpyRateFromApi(): Promise<number> {
   return rate;
 }
 
+/** 為替レート自動取得の失敗・範囲外スキップをスタッフへメール通知（best-effort、再試行はしない）。 */
+async function notifyStaffOfExchangeRateFailure(reason: string) {
+  if (!process.env.RESEND_API_KEY) return;
+  const settings = await prisma.storeSettings.findUnique({ where: { id: "default" } });
+  const emails = settings?.notificationEmails ?? [];
+  if (emails.length === 0) return;
+
+  const { sendMail, exchangeRateFetchFailedHtml } = await import("./mailer");
+  const appUrl = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "";
+  const html = exchangeRateFetchFailedHtml({ reason, appUrl });
+  for (const to of emails) {
+    try {
+      await sendMail({ to, subject: "【トレカビンクス】為替レート自動取得の失敗", html });
+    } catch (err) {
+      console.error(`[exchange-rate] failed to notify ${to}:`, err);
+    }
+  }
+}
+
 /**
- * 為替レートの自動更新。1日1回まで（既に当日分を試行済みならスキップ）。
- * 決済に直結する値のため、min/maxの安全弁を外れた取得値は反映せずlastAutoFetchErrorに記録するのみ。
+ * 為替レートの自動更新。1日1回まで（既に当日分を試行済みならスキップ）。失敗・範囲外時は再試行せず、
+ * スタッフに通知して手動対応に委ねる（決済に直結する値のため、自動リトライで無理に反映はしない）。
  */
 export async function runAutoExchangeRateUpdateIfDue(): Promise<void> {
   const current = await prisma.exchangeRate.findUnique({ where: { id: EXCHANGE_RATE_ID } });
@@ -35,14 +54,13 @@ export async function runAutoExchangeRateUpdateIfDue(): Promise<void> {
     const aboveMax = current.maxRate != null && rate > current.maxRate;
 
     if (belowMin || aboveMax) {
+      const reason = `取得値 ${rate} が設定範囲（${current.minRate ?? "下限なし"}〜${current.maxRate ?? "上限なし"}）外のため更新を見送りました`;
       await prisma.exchangeRate.update({
         where: { id: EXCHANGE_RATE_ID },
-        data: {
-          lastAutoFetchAt: new Date(),
-          lastAutoFetchError: `取得値 ${rate} が設定範囲（${current.minRate ?? "下限なし"}〜${current.maxRate ?? "上限なし"}）外のため更新を見送りました`,
-        },
+        data: { lastAutoFetchAt: new Date(), lastAutoFetchError: reason },
       });
       console.error(`[exchange-rate] auto-update skipped: rate ${rate} out of bounds`);
+      await notifyStaffOfExchangeRateFailure(reason);
       return;
     }
 
@@ -52,10 +70,12 @@ export async function runAutoExchangeRateUpdateIfDue(): Promise<void> {
     });
     console.log(`[exchange-rate] auto-updated to ${rate}`);
   } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
     await prisma.exchangeRate.update({
       where: { id: EXCHANGE_RATE_ID },
-      data: { lastAutoFetchAt: new Date(), lastAutoFetchError: err instanceof Error ? err.message : String(err) },
+      data: { lastAutoFetchAt: new Date(), lastAutoFetchError: reason },
     });
     console.error("[exchange-rate] auto-update failed:", err);
+    await notifyStaffOfExchangeRateFailure(reason);
   }
 }
