@@ -87,6 +87,37 @@ async function fetchPdfBuffer(url: string): Promise<Buffer | null> {
   return Buffer.from(await res.arrayBuffer());
 }
 
+// プロセス内キャッシュ（長時間稼働するNodeプロセス前提。再起動時はStripe側の既存レートを再利用する）。
+let cachedJctTaxRateId: string | null = null;
+const JCT_TAX_RATE_METADATA_KEY = "psa_system_jct_10";
+
+/**
+ * 消費税10%・税込（inclusive）のTax Rateを取得または作成する。適格請求書要件の「適用税率」
+ * 「税率ごとに区分した消費税額等」をStripeの請求書PDFに表示させるために、明細ごとに紐付ける。
+ */
+async function getOrCreateJctTaxRate(): Promise<string> {
+  if (cachedJctTaxRateId) return cachedJctTaxRateId;
+  const stripe = getStripe();
+
+  const existing = await stripe.taxRates.list({ active: true, limit: 100 });
+  const found = existing.data.find((tr) => tr.metadata?.app === JCT_TAX_RATE_METADATA_KEY);
+  if (found) {
+    cachedJctTaxRateId = found.id;
+    return found.id;
+  }
+
+  const created = await stripe.taxRates.create({
+    display_name: "消費税",
+    percentage: 10,
+    inclusive: true,
+    country: "JP",
+    tax_type: "jct",
+    metadata: { app: JCT_TAX_RATE_METADATA_KEY },
+  });
+  cachedJctTaxRateId = created.id;
+  return created.id;
+}
+
 /**
  * 決済（PaymentIntent）が既に完了した申込について、インボイス制度対応の適格請求書PDFを
  * 生成するためだけにStripe Invoiceを作成する。実際の課金はしない（paid_out_of_bandで支払済み扱いにする）。
@@ -99,10 +130,11 @@ export async function createPaidInvoice(params: {
   customerId: string;
   applicationId: string;
   description: string;
-  /** 明細行。合計がapplication.totalAmountと一致するように呼び出し側で調整すること。 */
+  /** 明細行。合計がapplication.totalAmountと一致するように呼び出し側で調整すること。金額は常に税込。 */
   lineItems: { description: string; amount: number }[];
 }): Promise<{ invoicePdf: Buffer | null; receiptPdf: Buffer | null }> {
   const stripe = getStripe();
+  const taxRateId = await getOrCreateJctTaxRate();
 
   // 先にdraft請求書を作成し、明細を"顧客の未請求プール"ではなくこのinvoice IDに直接紐付ける。
   // pending_invoice_items_behaviorで顧客のプールごと拾う方式だと、過去に別の申込で作られた
@@ -114,6 +146,8 @@ export async function createPaidInvoice(params: {
     auto_advance: false,
     description: params.description,
     metadata: { applicationId: params.applicationId },
+    // 料金は全て税込（内税）のため、明細の税込金額をそのまま表示しつつ税率・税額を内訳表示させる。ADR-0032
+    rendering: { amount_tax_display: "include_inclusive_tax" },
   });
 
   for (const item of params.lineItems) {
@@ -123,6 +157,7 @@ export async function createPaidInvoice(params: {
       currency: "jpy",
       amount: Math.round(item.amount),
       description: item.description,
+      tax_rates: [taxRateId],
     });
   }
 

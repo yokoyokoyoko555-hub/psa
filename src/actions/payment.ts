@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { getStripe, createPaymentIntent } from "@/lib/stripe";
 import { toStripeAmount, stripeCurrency } from "@/lib/currency";
+import { sendPaymentReceiptEmail } from "@/lib/payment-receipt";
 
 export async function deletePaymentMethod(methodId: string) {
   const session = await getCustomerSession();
@@ -178,6 +179,16 @@ export async function confirmDifferentialPayment(
     }
   }
 
+  // 適格請求書PDF・領収書PDFの送付（best-effort）
+  await sendPaymentReceiptEmail({
+    applicationId: application.id,
+    applicationNo: application.applicationNo,
+    description: payment.description ?? `代理申込 確定分請求 ${application.applicationNo}`,
+    totalAmount: payment.amount,
+    lineItems: [{ description: payment.description ?? "確定分請求", amount: payment.amount }],
+    customer,
+  });
+
   revalidatePath(`/mypage/applications/${application.id}`);
   return { success: true };
 }
@@ -251,6 +262,7 @@ export async function confirmUpchargePayment(
       customerId: customer.id,
       stripePaymentIntentId: parsed.data.paymentIntentId,
     },
+    include: { card: { select: { cardName: true, applicationId: true, application: { select: { applicationNo: true } } } } },
   });
   if (!upcharge) return { success: false, error: "Upchargeが見つかりません" };
   if (upcharge.status === "PAID") return { success: true };
@@ -301,6 +313,16 @@ export async function confirmUpchargePayment(
       });
     }
   }
+
+  // 適格請求書PDF・領収書PDFの送付（best-effort）
+  await sendPaymentReceiptEmail({
+    applicationId: upcharge.card.applicationId,
+    applicationNo: upcharge.card.application.applicationNo,
+    description: `Upcharge: ${upcharge.card.cardName}`,
+    totalAmount: upcharge.upchargeAmount,
+    lineItems: [{ description: `Upcharge: ${upcharge.card.cardName}`, amount: upcharge.upchargeAmount }],
+    customer,
+  });
 
   revalidatePath("/mypage/applications");
   return { success: true };

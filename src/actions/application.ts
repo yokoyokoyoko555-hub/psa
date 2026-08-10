@@ -5,8 +5,9 @@ import { getCustomerSession } from "@/lib/customer-auth";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { calculateFees } from "@/lib/fee-calculator";
 import { generateApplicationNo, generateCardNo } from "@/lib/number-generator";
-import { createCustomer as createStripeCustomer, createPaymentIntent, createPaidInvoice, getStripe } from "@/lib/stripe";
-import { sendTemplate, sendMail, paymentReceiptHtml } from "@/lib/mailer";
+import { createCustomer as createStripeCustomer, createPaymentIntent, getStripe } from "@/lib/stripe";
+import { sendTemplate } from "@/lib/mailer";
+import { sendPaymentReceiptEmail } from "@/lib/payment-receipt";
 import { formatMoneyIn, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
 import { logOperation, getClientIp } from "@/lib/operation-log";
 import { pricingSettingId } from "@/lib/pricing-setting-id";
@@ -395,9 +396,8 @@ const confirmPaymentSchema = z.object({
 });
 
 /**
- * 決済完了申込の適格請求書PDFを生成しメールで送付する（PoC: まず自己入力の初回決済のみ対象）。
- * 決済（PaymentIntent）は既に完了しているため、Stripe Invoiceは実際には課金せず
- * paid_out_of_bandで支払済み扱いにし、PDF生成のためだけに使う。best-effort。
+ * 決済完了申込の適格請求書PDF・領収書PDFを送付する（自己入力初回決済・代理入力先払い共通）。
+ * Applicationの料金内訳フィールドから明細を組み立て、共通処理（payment-receipt.ts）に委譲する。
  */
 async function sendPaymentReceipt(
   application: {
@@ -415,72 +415,29 @@ async function sendPaymentReceipt(
   },
   customer: { stripeCustomerId: string | null; email: string; nameEncrypted: string }
 ) {
-  if (!process.env.RESEND_API_KEY) {
-    console.log(`[receipt] skip ${application.applicationNo}: RESEND_API_KEY not set`);
-    return;
+  const items: { description: string; amount: number }[] = [];
+  const psaFee = Math.round(application.psaFeeTotal + application.autographFeeTotal);
+  if (psaFee > 0) items.push({ description: "PSA鑑定料", amount: psaFee });
+  if (application.agencyFeeTotal > 0) items.push({ description: "代理入力手数料", amount: application.agencyFeeTotal });
+  if (application.handlingFee > 0) items.push({ description: "事務手数料", amount: application.handlingFee });
+  if (application.shippingFee + application.insuranceFee > 0) {
+    items.push({ description: "送料・保険料", amount: application.shippingFee + application.insuranceFee });
   }
-  if (!customer.stripeCustomerId) {
-    console.log(`[receipt] skip ${application.applicationNo}: customer has no stripeCustomerId`);
-    return;
-  }
-  console.log(`[receipt] start ${application.applicationNo}`);
-  try {
-    const items: { description: string; amount: number }[] = [];
-    const psaFee = Math.round(application.psaFeeTotal + application.autographFeeTotal);
-    if (psaFee > 0) items.push({ description: "PSA鑑定料", amount: psaFee });
-    if (application.agencyFeeTotal > 0) items.push({ description: "代理入力手数料", amount: application.agencyFeeTotal });
-    if (application.handlingFee > 0) items.push({ description: "事務手数料", amount: application.handlingFee });
-    if (application.shippingFee + application.insuranceFee > 0) {
-      items.push({ description: "送料・保険料", amount: application.shippingFee + application.insuranceFee });
-    }
-    if (application.discountAmount > 0) {
-      items.push({
-        description: `キャンペーン割引${application.campaignName ? `（${application.campaignName}）` : ""}`,
-        amount: -application.discountAmount,
-      });
-    }
-    // 内訳の合計が実際の請求額とズレないよう、差分があれば調整行を足して必ず一致させる
-    const sum = items.reduce((s, i) => s + i.amount, 0);
-    const diff = Math.round(application.totalAmount - sum);
-    if (diff !== 0) items.push({ description: "調整額", amount: diff });
-
-    const { invoicePdf, receiptPdf } = await createPaidInvoice({
-      customerId: customer.stripeCustomerId,
-      applicationId: application.id,
-      description: `PSA申込 ${application.applicationNo}`,
-      lineItems: items,
+  if (application.discountAmount > 0) {
+    items.push({
+      description: `キャンペーン割引${application.campaignName ? `（${application.campaignName}）` : ""}`,
+      amount: -application.discountAmount,
     });
-
-    console.log(
-      `[receipt] invoice created ${application.applicationNo}: invoicePdf=${!!invoicePdf} receiptPdf=${!!receiptPdf}`
-    );
-    if (!invoicePdf && !receiptPdf) {
-      console.log(`[receipt] skip ${application.applicationNo}: no PDF was generated`);
-      return;
-    }
-
-    const attachments: { filename: string; content: string }[] = [];
-    if (invoicePdf) {
-      attachments.push({ filename: `invoice-${application.applicationNo}.pdf`, content: invoicePdf.toString("base64") });
-    }
-    if (receiptPdf) {
-      attachments.push({ filename: `receipt-${application.applicationNo}.pdf`, content: receiptPdf.toString("base64") });
-    }
-
-    await sendMail({
-      to: customer.email,
-      subject: `【トレカビンクス】ご請求書・領収書（${application.applicationNo}）`,
-      html: paymentReceiptHtml({
-        customerName: decrypt(customer.nameEncrypted),
-        applicationNo: application.applicationNo,
-        appUrl: process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "",
-      }),
-      attachments,
-    });
-    console.log(`[receipt] sent ${application.applicationNo}`);
-  } catch (err) {
-    console.error(`[receipt] failed ${application.applicationNo}:`, err);
   }
+
+  await sendPaymentReceiptEmail({
+    applicationId: application.id,
+    applicationNo: application.applicationNo,
+    description: `PSA申込 ${application.applicationNo}`,
+    totalAmount: application.totalAmount,
+    lineItems: items,
+    customer,
+  });
 }
 
 export async function confirmApplicationPayment(
@@ -833,6 +790,9 @@ export async function confirmStorePrepayPayment(
     applicationNo: application.applicationNo,
     amount: formatMoneyIn(application.totalAmount, "JPY"),
   });
+
+  // 適格請求書PDF・領収書PDFの送付（best-effort）
+  await sendPaymentReceipt(application, customer);
 
   revalidatePath("/mypage");
   revalidatePath("/mypage/submission-booking");

@@ -6,6 +6,7 @@ import { decrypt } from "@/lib/crypto";
 import { generateGroupNo, generateCardNo } from "@/lib/number-generator";
 import { logOperation } from "@/lib/operation-log";
 import { chargeOffSession } from "@/lib/stripe";
+import { sendPaymentReceiptEmail } from "@/lib/payment-receipt";
 import { calculateFees } from "@/lib/fee-calculator";
 import { sendMail, sendTemplate, upchargeNotificationHtml } from "@/lib/mailer";
 import { formatMoneyIn, formatMoneyInt, roundMoney, stripeCurrency, toStripeAmount } from "@/lib/currency";
@@ -582,7 +583,7 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
 
   const card = await prisma.card.findUniqueOrThrow({
     where: { id: parsed.cardId },
-    include: { customer: true, application: { select: { region: true } } },
+    include: { customer: true, application: { select: { region: true, applicationNo: true } } },
   });
 
   const customerName = decrypt(card.customer.nameEncrypted);
@@ -644,6 +645,16 @@ export async function createUpcharge(input: z.infer<typeof upchargeSchema>) {
           stripePaymentIntentId: pi.id,
           paidAt: new Date(),
         },
+      });
+
+      // 適格請求書PDF・領収書PDFの送付（best-effort）
+      await sendPaymentReceiptEmail({
+        applicationId: card.applicationId,
+        applicationNo: card.application.applicationNo,
+        description: `Upcharge: ${card.cardName}`,
+        totalAmount: parsed.upchargeAmount,
+        lineItems: [{ description: `Upcharge: ${card.cardName}`, amount: parsed.upchargeAmount }],
+        customer: card.customer,
       });
     } catch {
       await prisma.upcharge.update({
