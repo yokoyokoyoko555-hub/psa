@@ -41,10 +41,6 @@ export default function AdminShell({
 
   const navigation = (
     <>
-      <div className="border-b border-gray-700 p-4">
-        <p className="text-xs text-gray-400">トレカビンクス</p>
-        <p className="font-bold">PSA管理システム</p>
-      </div>
       <div className="grid grid-cols-2 gap-1 border-b border-gray-700 p-2" role="tablist" aria-label="鑑定受付/販売の切替">
         {SECTION_TABS.map((tab) => {
           const firstHref = navItems.find((item) => item.section === tab.id)?.href;
