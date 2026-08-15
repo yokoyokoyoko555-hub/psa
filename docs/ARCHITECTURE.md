@@ -63,13 +63,13 @@ psa-system/
 │   │   │   ├── applications/[id]/   # 申込詳細・カード進捗
 │   │   │   ├── submission-booking/  # カード提出予約カレンダー
 │   │   │   └── settings/            # 登録情報・返送先・保存カード管理
-│   │   ├── admin/                   # 管理画面（layout=force-dynamic + 認証）
+│   │   ├── admin/                   # 管理画面（layout=force-dynamic + 認証）。サイドバーは「鑑定受付」「販売」の2タブ（ADR-0079）
 │   │   │   ├── login/ dashboard/
 │   │   │   ├── customers/[id]/ applications/[id]/
 │   │   │   ├── submission-bookings/ # 提出予約カレンダー
-│   │   │   ├── cards/[id]/          # ステータス更新/グレード登録/Upcharge
 │   │   │   ├── psa-groups/          # PSA提出グループ
-│   │   │   └── settings/            # 料金/送料/保険料設定（ADMINのみ）
+│   │   │   ├── ebay/                # 販売タブ（eBay委託販売。Phase 2以降で拡充。ADR-0077/0078/0079）
+│   │   │   └── general-settings/    # 料金/送料/保険料/サイドバー設定等（ADMINのみ）
 │   │   └── api/                     # APIルート（§5）
 │   ├── actions/             # Server Actions（mutationの主役）
 │   │   ├── customer.ts      # 登録/ログイン/ログアウト/プロフィール
@@ -168,6 +168,7 @@ Upcharge分岐: UPCHARGE_UNPAID → UPCHARGE_PAID
 | customer.ts | registerCustomer / loginCustomer / logoutCustomer / getCustomerProfile | 顧客 |
 | application.ts | createApplication / getMyApplications / getApplicationDetail | 顧客 |
 | admin.ts | getDashboardStats / updateCardStatus / createPsaSubmissionGroup / submitPsaGroup / recordGrade / createUpcharge / getAdminCards / getAdminCustomers | ADMIN or STAFF |
+| card-grading.ts | registerCardGrade（PSAグレード登録＋個体分割。[ADR-0077](DECISIONS.md)） | ADMIN or STAFF |
 | submission-booking.ts | upsertSubmissionBooking / cancelSubmissionBooking / cancelSubmissionBookingByAdmin | 顧客 / ADMIN or STAFF |
 | inquiry.ts | createInquiry / getInquiries / getInquiryDetail / replyToInquiry | 顧客 / ADMIN or STAFF |
 | legal-document.ts | getLegalDocument / getFooterLegalDocuments / ensureLegalDocument / getLegalDocuments / createLegalDocument / updateLegalDocument / deleteLegalDocument | 公開 / ADMIN or STAFF |

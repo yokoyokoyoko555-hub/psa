@@ -64,7 +64,7 @@
 
 ### 優先度: 高
 - 🟡 **本番SMTP接続**（最優先）— メール認証（登録・確認リンク24h）／**パスワードリセット（1h）**／各種通知の実送信に必須。SMTP未設定時はテスト用に画面へリンク表示する実装。本番値の設定が必要
-- 🟡 **本番Stripe接続＋シークレット差し替え** — `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`、テストPW `Admin1234!` 等、`ENCRYPTION_KEY`/`NEXTAUTH_SECRET` の本番値確認
+- 🟡 **本番Stripe接続＋シークレット差し替え** — `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`、テストPW `Admin1234!` 等、`ENCRYPTION_KEY`/`NEXTAUTH_SECRET` の本番値確認。**本番アカウント自体の作成・設定も必要**（Tax ID `T3011501030985`等はSandbox限定の値のため、本番アカウントで別途再設定が必要）
 - ✅ **AIプラン課金配線（Phase 0）** — 完了。本番 Railway に env 配線済（`STRIPE_CENTERING_PRICE_ID`・`CENTERING_DEV_UNLOCK=false`）、Stripe側設定・実加入は横山確認済（2026-06-28）。詳細は上記「センタリング測定ツール」参照
 - 🟡 **代理申込の決済通電** — 画面・データ・フローは実装済み（顧客の依頼→管理「要対応」→当社がカード明細/料金入力）。残りは「当社が請求作成→顧客が請求を決済する」導線（[ADR-0011](DECISIONS.md)）
 - 🟡 **Stripe Elements 統合** — 通常申込の実カード決済は実装済み。代理申込の顧客決済ページへの横展開は未実装
@@ -83,6 +83,39 @@
 - 🟡 申込フォームの一時保存はlocalStorage実装（同一端末のみ復元可）。複数端末で再開するならDBドラフト化が必要
 - 🟡 お知らせ/通知（全体向けは実装済み。個別配信/既読管理は未実装）
 - 🟡 自動テスト導入（最低限、料金計算 `fee-calculator` とセンタリング純関数 `lib/centering`・ステータス遷移）※下記「低」の包括導入の前哨
+- ❌ **トップページ作り込み** — 未着手。ドメイン方針確定（2026-08-11、横山判断）: 現行ドメイン`binksgrading.com`をそのまま使い、新規ドメイン取得・サブドメイン（grading./listing.）は行わない。鑑定サービス・出品（eBay委託販売）サービスは同一ドメイン内のパス分け（例: `/grading`, `/listing`等。実際のパスは未確定）で構成する
+- 🟡 **顧客画面・管理画面のスマホ対応** — モバイル対応自体は実装済み（過去コミット参照）だが、**最終確認パス（実機/主要ブレークポイントでの通し確認）がまだ**。2026-08-11にトップページ/ログインページ（375px幅）は横スクロール無しを確認済み。ログイン後の画面（マイページ・申込フォーム・管理画面）はブラウザ操作系ツールがタイムアウトし未確認のまま残っている（DOM読み取り自体は正常に動作したため、ページ自体の問題ではなく確認環境側の制約と思われる）
+
+### eBay委託販売（問屋型）・輸出機能（[EBAY_CONSIGNMENT_SALES_SPEC.md](EBAY_CONSIGNMENT_SALES_SPEC.md) / ADR-0077〜0085・[DECISIONS.md](DECISIONS.md)参照）
+
+**実装済み**（2026-08-10〜11。型チェック/ビルド確認済み。詳しい経緯はADR-0077〜0085）
+- Phase 0調査、事業スキームを買取→委託販売（問屋型）へ転換
+- Phase 1: 個体カード分割（`registerCardGrade`）、PSAグレード登録UI、スタッフ向け画像アップロード
+- 所有権/保管モデル（`CardOwnership`/`CardCustody`/`InventoryLocation`）
+- 管理画面「鑑定受付」「販売」2タブ分割
+- 手数料率テーブル（`CommissionRateTier`）と委託契約有効期限パターン（`ListingDurationOption`）— どちらも`/admin/ebay/settings`でCRUD可、プラットフォーム非依存設計
+- 出品形式はオークション専業（Buy It Now廃止。技術的にeBay Sell Inventory APIで対応可と確認済み）
+
+**事業判断はほぼ確定**（残りは下記「未確定」のみ。それ以外はADR-0081〜0085で確定済み: サービス名称・委託契約有効期限[30/60/90日選択]・オークションサイクル7日・振込手数料は顧客負担・途中解除不可・eBay送料別請求・為替レートは既存機能流用・保存年限7年・保険料率2%・最低見込価格は顧客自身が入力・返品時は差額請求・月次エクスポート機能を用意）
+
+**未確定（要事業判断）**
+- 手数料率テーブルの実際の%（横山より別途連絡予定）
+- 輸出配送業者・署名基準
+- 委託・問屋営業の法令要件、消費税・インボイス処理（行政書士/税理士へ問い合わせ文面送付済み、回答待ち）
+- 返品時の返送送料・為替差損・eBay手数料の詳細な負担配分
+
+**未着手（実装）**
+- Phase 1残: `db push`でのスキーマ反映確認・実データでの動作確認
+- `ConsignmentAgreement`本体（委託契約・電子同意・出品条件提示）— 上記の未確定事業判断が残っているため着手保留
+- Phase 3〜5本体（eBay出品API連携・注文/精算・発送/輸出）
+- Fanatics Collect/Goldin連携（保留。一旦eBayのみで進める方針）
+
+**外部作業（横山側）**
+- eBay Developer Account/Sandbox登録（未着手。Phase 3着手前に必要）
+- eBay Managed Payments用Payoneer口座（審査中）
+- ⏸ **eBay Developer Account/Sandbox登録は横山側の作業**（Phase 3着手前に必要。Developer Program登録→Sandboxキーセット作成→テストユーザーでの動作確認→Productionキーセット作成（Marketplace Account Deletion通知対応必須）→Seller HubでBusiness Policies設定、の順）
+- ⏸ **eBayセラーアカウントのManaged Payments入金先としてPayoneer口座を登録中**（横山側の作業、2026-08-11時点）。法人名義（K.K.TURUPURUN／屋号TorecaBinks）で登録、書類提出まで完了しPayoneer側の審査（Verification）待ち。完了後eBay側の「Complete verification with Payoneer」も解消される見込み。これはeBay Developer Account/Sandbox（API連携用）とは別トラック（実販売アカウントの入金設定）
+- 📌 既知の制約: 個体分割後、申込詳細の「カード枚数」表示（`application.cards.length`）は元のグループ行＋分割後の個体行を両方カウントするため、分割済みカードがあると実際の物理枚数より多く表示される。表示精度の改善は次回対応（元行を枚数集計から除外する等）
 
 ### 優先度: 低 / 技術的負債
 - 🟡 `railway.json` の `startCommand` が旧 `prisma migrate deploy && npm start` のまま（現状は `npm start` 内の `db push` で実害なし。整理推奨。§DECISIONS-0006）
@@ -119,6 +152,8 @@
 ### 保留 / 調査 / owner:横山
 - ⏸ 予約周りの整理: **MINT・グレサを横山が確認**→仕様確定後に着手。
 - ⏸ 郵送受付の整理／郵送QR（顧客印刷→同梱）: **一旦保留**。郵送が大量化した際の管理用に再検討。
+- ⏸ **預り証・納品書**: pull型（push通知でなくオンデマンド取得）で将来実装する方針のみ合意済み。実装は未着手（[[project-custody-receipt-deferred]]参照）。
+- ❌ **代理入力の鑑定料請求で別カードが登録できない、という指摘**: 原因特定済み（2026-08-11、横山確認）。Upcharge（追加請求）は既存Cardにしか使えず、明細確定後に見つかった新規/別のカードを登録して請求する経路が存在しない（`UpchargeForm.tsx`のカード選択は`application.cards`からのみ、`createUpcharge`も既存Card前提）。ADR-0020「段階4」（明細確定後の差額追加請求）が未実装であることの一部と一致。**修正はADR-0020段階4の実装として着手する**（新規カード登録＋請求を1フローにする設計が必要）
 
 ---
 

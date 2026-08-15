@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import { generateDownloadUrl } from "@/lib/s3";
 import UpchargeForm from "@/components/UpchargeForm";
 import MarkReceivedButton from "@/components/MarkReceivedButton";
 import CardListItem from "@/components/CardListItem";
@@ -98,10 +99,37 @@ export default async function AdminApplicationDetailPage({
       : Boolean(application.receivedAt);
   const needsGroupAssignment = !isDraft && !isCancelled && hasCardsInHand && allGroups.length === 0;
 
+  // 個体分割（eBay出品基盤。ADR-0077）: 分割元カード番号・分割済み個体数・画像の署名付きURLを付加する
+  const cardNoById = new Map(application.cards.map((c) => [c.id, c.cardNo]));
+  const splitChildCountById = new Map<string, number>();
+  for (const c of application.cards) {
+    if (c.splitFromCardId) {
+      splitChildCountById.set(c.splitFromCardId, (splitChildCountById.get(c.splitFromCardId) ?? 0) + 1);
+    }
+  }
+  const imageUrlById = new Map<string, { front: string | null; back: string | null }>();
+  await Promise.all(
+    application.cards.map(async (c) => {
+      if (!c.frontImageKey && !c.backImageKey) return;
+      const [front, back] = await Promise.all([
+        c.frontImageKey ? generateDownloadUrl(c.frontImageKey) : Promise.resolve(null),
+        c.backImageKey ? generateDownloadUrl(c.backImageKey) : Promise.resolve(null),
+      ]);
+      imageUrlById.set(c.id, { front, back });
+    })
+  );
+  const enrichedCards = application.cards.map((c) => ({
+    ...c,
+    splitFromCardNo: c.splitFromCardId ? cardNoById.get(c.splitFromCardId) ?? null : null,
+    splitChildCount: splitChildCountById.get(c.id) ?? 0,
+    frontImageUrl: imageUrlById.get(c.id)?.front ?? null,
+    backImageUrl: imageUrlById.get(c.id)?.back ?? null,
+  }));
+
   // カード単位でサービスレベルが異なる場合（代理入力の明細確定時など。ADR-0038）に、
   // 提出先・アイテム種別・サービスレベルがひと目でわかるようグループ化して表示する。
-  const cardGroupMap = new Map<string, typeof application.cards>();
-  for (const card of application.cards) {
+  const cardGroupMap = new Map<string, typeof enrichedCards>();
+  for (const card of enrichedCards) {
     const key = card.customServiceLevelName ?? resolveServiceLevel(application);
     const bucket = cardGroupMap.get(key);
     if (bucket) bucket.push(card);

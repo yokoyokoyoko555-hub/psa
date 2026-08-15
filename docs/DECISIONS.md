@@ -870,7 +870,7 @@
 
 ## ADR-0075: PSA提出グループにグループ全体を通したカード行番号（`groupLineNo`）を追加
 
-- 日付: 2026-07-16 / 状態: Accepted（実装済）
+- 日付: 2026-07-16 / 状態: Accepted（実装済）。「PSA鑑定結果個別入力機能は導入しない」という判断は、eBay出品対象カードの範囲に限り [ADR-0077](#adr-0077-ebay条件付買取輸出機能に向けた個体カード基盤の設計psaグレード個別登録の復活個体分割番号体系) によりSuperseded（それ以外の運用・実装は本ADRのまま有効）。
 - 背景: 別々の顧客が同名カードを持ち込み、同じPSA提出グループにまとめて提出すると、PSAからは名称単位でまとめて返却されることがある（例: 田中さんのルフィ2枚＋鈴木さんのルフィ1枚→PSAからはルフィ計3枚として返る）。`Card`は元々`applicationId`単位で別レコードのため顧客の取り違えは起きないが、「どの現物がどの行か」を現物側（鑑定書番号の若い順）と突き合わせる手段が無かった。PSA鑑定結果（グレード・証明書番号）を個別入力する管理画面機能は運用上の手間（自動化できない）を理由に見送り、代わりに**提出前に現物へ貼るライン番号を用意し、返却時は鑑定書番号の若い順との手作業照合で判別する**方針とした。
 - 決定:
   - `Card.groupLineNo Int?`を追加。PSA提出グループ内の申込の追加順（`createdAt`昇順）→各申込内の`lineNo`昇順で並べた、グループ全体を通した連番。**同一顧客・同一カード名の複数枚は1行（`quantity`枚数表記）にまとめ、別の顧客は必ず別行にする**（カードの個体ごとには分けない。同一顧客の複数枚同士の判別までは業務上不要なため）。
@@ -882,7 +882,7 @@
 
 ## ADR-0076: PSA提出グループをカード単位（サービスレベル別）に変更し、自己入力でも1申込内で複数サービスレベルを選べるように
 
-- 日付: 2026-07-16 / 状態: Accepted（実装済）
+- 日付: 2026-07-16 / 状態: Accepted（実装済）。「PSA鑑定結果個別入力機能は導入しない」という判断は、eBay出品対象カードの範囲に限り [ADR-0077](#adr-0077-ebay条件付買取輸出機能に向けた個体カード基盤の設計psaグレード個別登録の復活個体分割番号体系) によりSuperseded（それ以外の運用・実装は本ADRのまま有効）。
 - 背景: 代理入力（STORE）は元々カードごとに異なるサービスレベルを選べる仕組み（`Card.customServiceLevelId`、ADR-0038）だったが、PSA提出グループは申込単位（ADR-0021）で1つの提出先・アイテム種別・サービスレベルしか持てなかった。PSAは実際にはサービスレベルごとに別々の申請（Sub#）が必要なため、1申込内にサービスレベルが混在すると提出グループの管理が実態と合わなくなっていた。また自己入力（CUSTOMER）は`Application.customServiceLevelId`が申込全体で1つだけのため、そもそも1回の申込で複数サービスレベルを選べなかった。
 - 決定:
   - **PSA提出グループの新規作成をカード単位に変更**。`Card.psaSubmissionGroupId`（ADR-0021で未使用のまま残置されていたカラム）を復活させ、`createPsaSubmissionGroup`はカードID配列を受け取ってグループを作る。グループ未割当一覧は「申込×サービスレベル」の束（`getUngroupedCardBundles`）単位で表示し、同じ申込でもサービスレベルが違えば別々の束として選べる。作成時に提出先・アイテム種別・サービスレベルが揃っているか検証し、グループのそれら3項目をこの時点で確定する（以降`submitPsaGroup`での選択は不要になる）。
@@ -893,3 +893,136 @@
   - PSA鑑定結果（グレード・証明書番号）の個別入力機能は導入しない（ADR-0075と同じ判断）。
 - 影響: `prisma/schema.prisma`（新規`PsaSubmissionGroupApplication`モデル追加、非破壊）、`src/actions/admin.ts`（`createPsaSubmissionGroup`/`computeGroupCardLines`/`submitPsaGroup`/`getDashboardActionItems`修正、`getUngroupedCardBundles`追加）、`src/actions/application.ts`（`createApplication`/`previewFees`/`draftCardSchema`をカード単位タイア対応に変更）、`src/lib/application-status.ts`（`getApplicationGroups`/`computeListDisplayStatus`追加）、`src/app/admin/psa-groups/*`、`src/app/admin/applications/{page,[id]/page}.tsx`、`src/app/mypage/applications/{page,[id]/page}.tsx`、`src/app/admin/dashboard/page.tsx`、`src/app/apply/ApplyForm.tsx`。
 - 未対応: 一覧画面（管理・顧客とも）で複数グループにまたがる申込は簡易ステータスを「複数グループ」とだけ表示し、詳細ページでのみグループごとの内訳を見られる（一覧上での正確なステータス集約は行っていない）。ローカル環境にDBが無いため、実画面での動作確認（特に自己入力の複数サービスレベル申込・決済フロー）はできていない。
+
+## ADR-0077: eBay条件付買取輸出機能に向けた個体カード基盤の設計（PSAグレード個別登録の復活・個体分割・番号体系）
+
+- 日付: 2026-08-10
+- 状態: Accepted（Phase 0調査完了・Phase 1の個体カード基盤は実装済み）
+- 文脈: 仕様書の旧0.1版（当時のファイル名 `EBAY_CONDITIONAL_PURCHASE_SPEC.md`、現行は [docs/EBAY_CONSIGNMENT_SALES_SPEC.md](EBAY_CONSIGNMENT_SALES_SPEC.md)）に基づき、鑑定済みカードのeBay販売機能を追加する。同仕様は「出品前に現物1枚＝`Card`レコード1件へ展開されていること」を前提とするが、現行実装はADR-0075/ADR-0076で「PSA鑑定結果（グレード・証明書番号）の個別入力機能は導入しない」と明示的に決定しており、`quantity`>1の`Card`行は個体ごとの`psaCertNo`/`psaGrade`を保持できない。また画像アップロードもクライアント側が未配線（TASKS.md）。これらの前提を解消する設計をPhase 0調査（横山ヒアリング含む）で確定した。
+- 決定:
+  1. **PSAグレード登録UIを復活・新設する**。ADR-0075/ADR-0076の「個別入力機能は導入しない」判断を、eBay出品対象カードの範囲に限りSupersede。既存の「鑑定書番号の若い順との手作業照合」運用（`groupLineNo`）自体は変更しない（eBay対象外カードは従来運用のまま）。
+  2. **個体分割はPSAグレード登録のタイミングで行う**。申込〜PSA提出までは`quantity`でグループ管理する現行方式を維持。グレード登録時にスタッフが個体ごとの証明番号・グレードを入力すると、新しい個体`Card`レコード（`quantity=1`）を実際の返却枚数分だけ作成する（システムが自動生成）。
+  3. **返却枚数が申告`quantity`と不一致でもエラーにしない**。スタッフが実際に登録した個体数をそのまま採用する（例: 3枚申告→2枚しか返却されない場合は2件のみ作成）。差異は備考（`internalNotes`等）に記録する。
+  4. **分割元のグループ行（`quantity`>1）はそのまま保持し、`CardStatusHistory`も元行に残す**。新しく作る個体`Card`レコードは分割時点から新規に履歴を開始し、元行の履歴はコピーしない。元行と個体行の対応は新しい参照列（例: `splitFromCardId`）で追跡する。
+  5. **個体`Card`レコードの`cardNo`は既存の採番ルール（`generateCardNo()`、`CARD-YYYYMMDD-####`）で新規発行する**（分割日基準の連番）。PSAの証明書番号は既存の`psaCertNo`列にそのまま格納し、当社管理番号（`cardNo`：QR・現物照合・社内追跡用）とPSA証明番号（`psaCertNo`：PSA側の識別・eBay出品説明文用）を役割分担して両方保持する。`cardNo`のフォーマットは変更しない。
+  6. **画像アップロードは当社スタッフが実施する運用とする**（S3アップロードフローを新規配線）。PSA公式APIによる証明書番号からの画像自動取得は、利用規約・対応年代（画像なしの古い鑑定の存在）が未確認のため、MVPでは採用しない。将来、下書き自動反映の補助機能として再検討。
+  7. **eBay出品画像はeBayのMedia API（`createImageFromFile`）でeBay側にホストする**。当社S3の画像は公開設定にせず、サーバ側でS3から取得しeBay Media APIへ転送する方式とする。S3公開プレフィックスやCloudFront等の追加公開インフラは導入しない。
+  8. 仕様書§22の要事業判断15項目は一括確定せず、**各Phaseの着手前に必要な項目のみ順次確認する**運用とする（大半はPhase 2の条件付買取契約に関わり、Phase 1の基盤実装には影響しないため）。
+- 影響: ADR-0075/ADR-0076の「PSA鑑定結果個別入力機能は導入しない」は、eBay出品対象カードの範囲でSuperseded by ADR-0077（両ADR冒頭に注記）。Phase 1で`Card.splitFromCardId`/`gradingSplitCompletedAt`、PSAグレード登録UI（`CardGradingForm`/`registerCardGrade`）、スタッフ向けS3画像アップロードを実装済み。eBay Media API連携はPhase 3で実装する。
+- 未対応: `db push`でのスキーマ反映確認、実データでの個体分割確認、S3→eBay Media API転送。個体分割後に申込詳細のカード枚数が元行と個体行を重複集計する既知の表示課題がある（TASKS.md参照）。
+
+## ADR-0078: eBay輸出事業スキームを「条件付買取」から「委託販売（問屋型）」へ転換
+
+- 日付: 2026-08-11
+- 状態: Accepted（事業スキーム転換・設計方針確定。詳細スキーマ・画面は未実装）
+- 文脈: [ADR-0077](#adr-0077-ebay条件付買取輸出機能に向けた個体カード基盤の設計psaグレード個別登録の復活個体分割番号体系)までは仕様書の旧0.1版（当時のファイル名 `EBAY_CONDITIONAL_PURCHASE_SPEC.md`、現行は [docs/EBAY_CONSIGNMENT_SALES_SPEC.md](EBAY_CONSIGNMENT_SALES_SPEC.md)）の「当社が顧客から買い取ってから輸出販売する（条件付買取）」スキームを前提に進めていた。しかし買取スキームは①古物営業法上の非対面本人確認義務（写真付き身分証アップロード等、ゼロから構築が必要）、②固定買取価格の査定・改定・買取代金の支払管理など運用負荷が大きいことが分かり、横山と協議のうえ**委託販売（商法上の問屋営業に相当する構造）へ転換**することにした。
+- 決定:
+  1. **事業スキームを委託販売（問屋型）に転換**。顧客の所有権はeBay購入者への引渡しが完了するまで顧客に残る（当社は所有権を一切取得しない）。当社は**自己の名義でeBay上の売主となり**、購入者と直接契約する（商法557条以下の問屋営業に相当）。経済的な帰属は顧客だが、対外的な契約主体は当社。
+  2. **買取という概念を廃止**。固定買取価格の事前査定・合意、買取代金支払債務、`CardPurchase`/`PurchasePayment`/`ConditionalPurchaseAgreement`等の「買取」を前提とするモデル設計はすべて「委託販売」用に置き換える（`ConsignmentAgreement`/`ConsignmentSettlement`/`SettlementPayment`。詳細は改訂した仕様書を参照）。
+  3. **手数料体系は価格帯ごとの段階率**とする（既存の送料・保険マトリクス`ShippingInsuranceRate`と同じ発想。ADR-0015）。固定額・一律%ではなく、成約価格帯に応じた手数料率テーブルを管理画面で設定できるようにする。率の初期値は要事業判断（改訂仕様書§22）。
+  4. **出品期間終了時に売れ残った場合、顧客に「返却」または「再出品」を選択させる**。自動値下げ再出品などの自動化はMVPでは行わない。
+  5. **本人確認義務の要否が変わる**。「個人からの買取」に伴う古物営業法の非対面本人確認義務は、委託販売（問屋型）では基本的に生じない見込みだが、委託・問屋営業に別の規制（商法上の問屋営業に関する規定、古物営業法上も「委託を受けて売買のあっせんをする行為」が古物競りあっせん業に該当し得る等）がかかる可能性があるため、**「本人確認は不要」と断定せず、行政書士・管轄警察署へ改めて確認する**。ADR-0077で決めた「身分証画像アップロード機能を土台として先に実装する」方針自体は維持し、確認の結果次第でオン/オフできる形にしておく。
+  6. **返品・為替差損等のリスク分担が変わる**。買取スキームでは「買取成立後の返品・返金・為替・eBay手数料・配送事故・価格変動リスクは当社が負担」としていたが、委託販売では経済的所有者が顧客のままのため、これらのリスク分担（特に発送後返品時の精算・為替差損の扱い）は自明ではない。**契約書上どちらが負担するかは要事業判断として改訂仕様書§22に追加**し、Phase 2〜5着手前に確定する。
+  7. Phase 1で実装済みの個体カード基盤（個体分割・PSAグレード登録・画像アップロード）は**買取/委託どちらのスキームでも共通に必要**なため変更しない（ADR-0077の決定はそのまま有効）。
+- 影響: [docs/EBAY_CONSIGNMENT_SALES_SPEC.md](EBAY_CONSIGNMENT_SALES_SPEC.md)へ名称変更し、委託販売（問屋型）前提に全面改訂（文書版0.2）。ADR-0077自体はSupersededにしない（個体カード基盤の決定は引き続き有効なため）が、同ADR内で前提としていた「買取」という語は改訂仕様書には登場しない。Phase 2以降のデータモデル・画面設計はすべて改訂後の仕様書に従う。
+- 未対応: 委託・問屋営業に伴う法令上の要否確認（本人確認、契約書式、消費税処理）は未確認。返品・為替リスクの負担者は未確定。サービス名称も未確定（「ビンクスで委託」等を検討中）。
+
+## ADR-0079: 管理画面を「鑑定受付」「販売」の2タブに分割（ナビゲーション＋DBドメイン分離）
+
+- 日付: 2026-08-11
+- 状態: Accepted（実装済）
+- 文脈: eBay委託販売機能の追加にあたり、横山より「鑑定受付（PSA）と販売（eBay）は事業としてつながっているが異なるため、管理画面はタブで切り替えられるようにしたい。DB設計もそこをしっかり」という要望があった。既存の管理画面ナビゲーション（`AdminNavItem`）は単一フラットなリストで、href/iconはコード側`ADMIN_NAV_DEFAULTS`固定・label/sortOrderのみDB編集可という設計（ADR-0059）だった。
+- 決定:
+  1. **`ADMIN_NAV_DEFAULTS`の各項目に`section: "PSA" | "EBAY"`を追加**。href/iconと同様に**コード固定でDBカラムは追加しない**（既存のhref/icon固定方針をそのまま踏襲。無用なスキーマ変更を避ける）。`AdminNavItem`テーブル自体には列を追加していない。
+  2. **`AdminShell`にセクションタブ（🎴鑑定受付／🌏販売）を追加**。現在のパス名から`navItems`を検索して所属セクションを判定し、サイドバーにはアクティブセクションのnavItemsのみを表示する。タブをクリックすると該当セクションの最初のnavItemへ遷移する（クライアント側のみのトグルではなく、既存のパス駆動ナビゲーションと一貫させた）。
+  3. **`/admin/general-settings`のサイドバー並び替えUI（`AdminNavOrderForm`）もセクションごとに2つの独立したドラッグリストへ分割**。保存時はセクションごとに`sortOrder`を振り直す（全項目共通の1つの順序空間にはしない）。
+  4. **eBay委託販売の管理画面は新設ルート`/admin/ebay/*`配下に集約**し、`ADMIN_NAV_DEFAULTS`へ`section: "EBAY"`で追記していく。既存のPSA側ルート（`/admin/applications`等）は一切変更しない（[AGENTS.md §7]の「公開API/ルートの削除・パス変更禁止」に抵触しないため）。まず`/admin/ebay`にPhase 2以降の実装状況を示すスタブページのみ作成した。
+  5. **DBドメインも「つながっているが異なる」を反映する設計を再確認・維持**（[ADR-0078](DECISIONS.md)の`docs/EBAY_CONSIGNMENT_SALES_SPEC.md`§9で既に設計済み）: 鑑定受付側のモデル群（`Application`/`Card`/`PsaSubmissionGroup`等）と販売側のモデル群（`ConsignmentAgreement`/`ConsignmentSettlement`/`CommissionRateTier`/`EbayListing`/`EbayOrder`等）は責務を統合せず別モデルとし、`Card.id`を介した外部キー参照のみで連結する。販売側のテーブルにPSA側の列を持たせたり、その逆をしたりしない。
+- 影響: `src/lib/admin-nav-defaults.ts`（`section`追加、`AdminNavSection`型export、eBayスタブnav項目追加）、`src/actions/admin-nav.ts`（`getAdminNavItems`が`section`を返すよう変更）、`src/components/AdminShell.tsx`（タブUI・セクションフィルタ追加）、`src/app/admin/general-settings/AdminNavOrderForm.tsx`（セクション別グルーピングへ書き換え）、新規`src/app/admin/ebay/page.tsx`（スタブ）。スキーマ変更なし。
+- 未対応: Phase 2以降、`/admin/ebay/agreements`等の画面を追加するたびに`ADMIN_NAV_DEFAULTS`へ`section: "EBAY"`のエントリを追記する運用が前提（本ADRのタブ機構は自動的にそれらを拾う）。
+
+## ADR-0080: 販売代行機能をプラットフォーム非依存設計に変更（将来のFanatics Collect/Goldin対応を見据えて）
+
+- 日付: 2026-08-11
+- 状態: Accepted（`CommissionRateTier`のみ実装済み。他モデルは設計方針の記録）
+- 文脈: 横山より、参考にしている競合サービス（グレサ／gradingservices.jp）が「鑑定」「販売（eBay/Fanatics Collect/Goldin等）」「買取」の3本柱で構成されていることを踏まえ、「一旦同等にしたい」との要望があった。ヒアリングの結果、(1)買取機能は含めない（[ADR-0078](DECISIONS.md)の委託販売方針を維持）、(2)販売チャネルはeBayに限定せず複数プラットフォームを最初から視野に入れたい、(3)「同等にしたい」の主眼は事業モデル（鑑定代行＋販売代行が連携する構造）である、ことを確認した。(2)を受けて、実装済みの`CommissionRateTier`をはじめ、これから作る出品・注文まわりのモデルをeBay専用名で設計すると将来のリネームコストが大きいため、今のうちにプラットフォーム非依存の設計へ変更する。
+- 決定:
+  1. **`SalesPlatform` enum（`EBAY`/`FANATICS_COLLECT`/`GOLDIN`）を新設**。後者2つは選択肢として存在するのみで、連携（API・出品・注文取得等）は未実装のプレースホルダー（ADR-0023のPACK/COMICサービスレベルと同じ扱い）。
+  2. **`CommissionRateTier`に`platform`列を追加**（デフォルト`EBAY`）。保存アクション（`saveCommissionRateTiers`）は指定プラットフォームの行のみ全置換するよう変更（他プラットフォームの行を巻き込んで削除しない）。管理画面（`/admin/ebay/settings`）は当面eBay固定表示で機能追加はせず、他プラットフォームは「準備中」の注記のみ。
+  3. **`CardCustodyStatus.HELD_FOR_EBAY`を`HELD_FOR_LISTING`へリネーム**。本機能は未リリースで実データが存在しないため、[AGENTS.md §3]の「enum値の削除は要相談」に抵触する実害はないと判断し、確認なしでリネームした。
+  4. **仕様書（`docs/EBAY_CONSIGNMENT_SALES_SPEC.md`）§9.9以降で今後実装する`EbayListing`/`EbayOrder`/`EbayAccount`/`EbayShipment`/`EbayFinancialTransaction`等は、実装時にプラットフォーム非依存の名称（`Listing`/`Order`/`PlatformAccount`/`Shipment`/`FinancialTransaction`等、`platform`列で区別）へ変更する方針**とする。ドキュメント本文・ファイル名は当面「EBAY」を残す（現時点でeBayのみが実装対象であるため、「一旦」の趣旨とも合致）。
+  5. `ConsignmentAgreement`/`ConsignmentSettlement`等、カード起点で汎用的に設計済みのモデルは変更不要（元々プラットフォーム名を含んでいない）。
+- 影響: `prisma/schema.prisma`（`SalesPlatform`追加、`CommissionRateTier.platform`追加、`CardCustodyStatus`のenum値リネーム。非破壊、実データなし）、`src/actions/ebay-settings.ts`（platform引数対応）、`src/app/admin/ebay/settings/{page.tsx,CommissionRateTierForm.tsx}`（platform="EBAY"固定で呼び出し）。Fanatics Collect/Goldinの実連携（OAuth・出品・注文取得API）は本ADRの対象外で未着手。
+- 未対応: `EbayListing`等の実際のプラットフォーム非依存リネームはPhase 3着手時に反映する。Fanatics Collect/GoldinのAPI一次調査を実施（2026-08-11）。公開のセルフサービスAPIは確認できず、両者とも人手ベースの委託審査プロセスである可能性が高い（Goldinは出品者側にも別途consignment feeが発生する模様）。eBayと同じ自動出品設計をそのまま流用できない可能性があり、対応するかどうか・する場合の設計（スタッフ手動連携）は要事業判断。
+- 追記（2026-08-11、横山判断）: 販売チャネルは**一旦eBayのみ**で進める。Fanatics Collect/Goldinは`SalesPlatform`の選択肢としては残すが連携実装は着手しない。
+
+## ADR-0081: eBay委託販売の事業判断（サービス名称・契約有効期限・振込手数料）を確定し、有効期限パターンを管理画面設定化
+
+- 日付: 2026-08-11
+- 状態: Accepted（`ListingDurationOption`実装済み。`ConsignmentAgreement`本体は引き続き未実装）。決定4（GTC出品前提）は[ADR-0083](DECISIONS.md)によりSuperseded（出品形式をオークション専業に変更したため）。決定1〜3・5は有効のまま。
+- 文脈: 仕様書§22の要事業判断のうち、外部確認が不要な項目（サービス名称・契約有効期限・振込手数料負担者）を横山と確定した。あわせて「eBay出品期間」をどう扱うかが論点になった。
+- 決定:
+  1. **サービス名称は「トレカビンクス出品代行サービス」で確定**。
+  2. **振込手数料は顧客負担**とする（精算額から差し引く）。
+  3. **委託契約の有効期限は複数パターンから顧客が選択する**方式とする。固定の管理者設定値1つではなく、`ListingDurationOption`（`platform`/`days`/`label`/`sortOrder`/`isActive`）として**管理画面で追加・編集・削除・非表示（isActive）できる**ようにした（[ADR-0025](DECISIONS.md)の`CustomServicePrice`と同じCRUDパターン）。初期提案値は**30日／60日／90日**（お試し／標準／じっくり）。
+  4. **「eBay出品期間」は独立して持たず、委託契約の有効期限と一体化する**。eBayの固定価格出品はGood 'Til Cancelled（GTC、自動更新）で公開し、当社システム側が`ListingDurationOption.days`で選ばれた日数の終了時点で出品を取り下げる。顧客に「契約期間」と「出品期間」を別々に選ばせない（UXの単純化）。
+  5. 手数料率テーブル（[ADR-0080](DECISIONS.md)）と同様、`ListingDurationOption`も`platform`列を持ち、将来Fanatics Collect/Goldinを追加する場合はプラットフォームごとに別のパターンを設定できる。
+- 影響: `prisma/schema.prisma`に`ListingDurationOption`追加（非破壊）。`src/actions/ebay-settings.ts`に`getListingDurationOptions`/`saveListingDurationOption`/`deleteListingDurationOption`追加。`/admin/ebay/settings`に有効期限パターンのCRUD UIを追加（`ListingDurationOptionForm`）。管理画面はまだ初期データ未投入（seedしていない。CommissionRateTierと同様、管理画面から手動登録する運用）。
+- 未対応: `ConsignmentAgreement`実装時に、顧客が選んだ`ListingDurationOption`のスナップショット（日数・ラベル）をどう契約に持たせるか（IDのみ参照か値をコピーするか）は実装時に確定する。GTC出品の自動取り下げジョブ（Railway Cron等）はPhase 3〜4で実装する。
+
+## ADR-0082: eBay委託販売の事業判断（振込サイクル・途中解除条件・Best Offer自動応答・送料）を確定
+
+- 日付: 2026-08-11
+- 状態: Accepted（設計確定。`ConsignmentAgreement`/精算処理の実装は未着手）。決定3（Best Offer自動応答）は[ADR-0083](DECISIONS.md)によりSuperseded（出品形式をオークション専業に変更し、Best Offer自体が存在しなくなったため）。決定1（振込までの営業日数）は[ADR-0085](DECISIONS.md)によりSuperseded（返品リスクを踏まえ支払いタイミングを見直したため）。決定2・4は有効のまま。
+- 文脈: 仕様書§22のうち外部確認不要な残り項目を横山と確定した。判断にあたり競合グレサ（gradingservices.jp）のeBay代理販売FAQ（https://gradingservices.jp/ebay-faq/）を参照したが、**グレサのeBay代理販売はオークション形式でBuy It Nowを受け付けておらず**（Best Offer自体が存在しない）、当社が設計する固定価格出品とは仕組みが異なるため参考にできる情報は限定的だった（振込は「毎週木曜時点のPayPalレートで計算」とあるのみで具体的営業日数の記載なし）。
+- 決定:
+  1. **精算成立から振込までの営業日数は5営業日以内**とする。
+  2. **支払後・発送前キャンセルは、顧客都合での自由な取り下げを認めない**（契約期間中は拘束）。既存仕様（§13.2、`CANCEL_PENDING`としてADMIN判断を必須にする）の運用はそのまま維持し、顧客が自由に取り下げられる例外は設けない。
+  3. **Best Offerは最低希望価格（`minimumSalePriceUsdMinor`）以上のオファーを全て自動承認**する。段階的な閾値（最低希望価格より高い一定割合以上のみ等）は設けない。
+  4. **eBay送料は商品価格に含めず、購入者へ別請求**とする（eBayの送料設定機能を利用）。
+- 影響: `ConsignmentAgreement`実装時、Best Offer自動承認ロジックは`minimumSalePriceUsdMinor`のみを閾値とする単純な比較で実装できる（追加の割合計算は不要）。精算トランザクション（§12）の`paymentDueAt`は`settledAt`+5営業日で算出する。出品時のeBay Offer作成で送料はBusiness Policy（Fulfillment Policy）側の設定に委ね、商品価格には含めない。
+- 未対応: 「5営業日」の起算点（`settledAt`基準か`triggeredAt`基準か）、祝日・年末年始等の営業日カレンダーの扱いは実装時に確定する。
+
+## ADR-0083: 出品形式をオークション専業に変更（Buy It Now廃止）
+
+- 日付: 2026-08-11
+- 状態: Accepted（設計確定。`ConsignmentAgreement`/eBay出品連携の実装は未着手）
+- 文脈: 横山より「うちもオークション形式あるよね？」との指摘があり、競合3社（グレサのeBay代理販売／Fanatics Collect／Goldin）を確認したところ、**3社ともオークション形式のみで固定価格出品（Buy It Now／VAULT）を受け付けていない**ことが判明した（グレサ: 「オークション形式のみになります。Buy It Nowは現在受け付けていません」。Fanatics Collect: 「ウィークリーオークション、プレミアオークション形式のみになります。VAULTは現在受け付けていません」。Goldinは社名の通りオークション専業）。この業界慣行を踏まえ、横山が「オークションのみ（Buy It Now廃止）」を明示的に決定した。
+- 決定:
+  1. **eBay出品はオークション形式のみとし、Buy It Now（固定価格出品）は行わない**。仕様書§2.1/§2.2を入れ替える（「Buy It Now」を削除、「eBayオークション」をMVPスコープに含める）。
+  2. **技術的には引き続き現行のeBay Sell Inventory API（REST）で実現可能**と確認した。`Offer`の`format`フィールドは`FIXED_PRICE`と`AUCTION`の両方をサポートしており、レガシーのXML Trading API（`AddItem`/`ListingType=Chinese`）へ切り替える必要はない。§10（eBay API要件）の全体構成（Inventory Item→Offer→Publish）は維持し、`format: AUCTION`と関連フィールド（開始価格・予約価格）を使う。
+  3. **Best Offer（最低希望価格以上を自動承認。[ADR-0082](DECISIONS.md)決定3）を廃止**。オークションにBest Offerという概念はない。代わりに**予約価格（リザーブプライス）**を設定できるようにする（`ConsignmentAgreement.reservePriceUsdMinor`。nullable=リザーブなし＝1円/1セントから開始も可）。
+  4. **委託契約の有効期限（`ListingDurationOption`、[ADR-0081](DECISIONS.md)）とeBayの1回のオークション期間は別物として扱う**。eBayのオークションは1/3/5/7/10日の中から選ぶ固定期間で、GTC（自動更新）は使えない。委託契約の有効期限（例: 60日）を実現するには、**1回のオークションが不成立（不落札）で終了するたびに、当社側の自動処理で新しいオークションを再出品し続け、契約有効期限に達したら§5.5の「返却／再出品を顧客に選択させる」フローに入る**設計にする。1回あたりのオークション期間（何日サイクルで回すか）は顧客が選ぶものではなく、運用上の設定値とする（初期値は7日を想定。競合各社も週次サイクル運用）。
+  5. `ConsignmentAgreement`のフィールド名を仕様変更に合わせて修正: `listingPriceUsdMinor`→`startingPriceUsdMinor`（開始価格）、`minimumSalePriceUsdMinor`→`reservePriceUsdMinor`（予約価格）、`allowBestOffer`は削除。
+- 影響: `docs/EBAY_CONSIGNMENT_SALES_SPEC.md`のスコープ（§2.1/2.2）、用語（§3）、価格ルール（§7.2）、データモデル（§9.5）、要事業判断（§22）を本ADRに合わせて改訂する。`ListingDurationOption`実装自体（[ADR-0081](DECISIONS.md)）はそのまま流用できる（意味が「委託契約全体の有効期限」に純化される）。まだ`ConsignmentAgreement`本体・eBay出品連携のコードは存在しないため、破壊的変更にはならない。
+- 追記（2026-08-11、横山確定）: **1回あたりのオークションサイクルは7日（週次）で確定**。**委託契約の有効期限到達時、リザーブ未達（入札ゼロ・入札はあったが予約価格未達）で終了した場合も、通常の「売れ残り」と同じフロー（§5.5、顧客に返却／再出品を選ばせる）で統一的に扱う**（不落札の理由による分岐はしない）。
+- 未対応: 自動再出品ジョブの詳細設計（Railway Cron等、Phase 3〜4）。
+
+## ADR-0084: eBay委託販売の事業判断（為替レート・保存年限・再出品時の価格改定）を確定
+
+- 日付: 2026-08-11
+- 状態: Accepted（設計確定。`ConsignmentAgreement`/精算処理の実装は未着手）
+- 文脈: 仕様書§22の残項目のうち、既存機能の流用・法令調査・グレサ参考で判断できるものを確定した。
+- 決定:
+  1. **為替レートは既存の`lib/exchange-rate.ts`（`ExchangeRate`モデル、Frankfurter API日次自動取得＋上下限チェック＋範囲外はスタッフ通知）をそのまま流用する**。新規実装は行わない。`ConsignmentSettlement.exchangeRateUsed`/`exchangeRateSource`は精算実行時点の`ExchangeRate.usdJpyRate`をスナップショットする。
+  2. **委託契約・輸出証憑の保存年限は7年**とする。関税法上の輸出書類保存義務（輸出許可日翌日から5年）と法人税法上の帳簿書類保存義務（原則7年、欠損金がある事業年度は10年）の両方を満たす、長い方の期間を採用した。
+  3. **保険料率はグレサ・Fanatics Collectと同水準の申告価格の2%を参考値とする**（両社ともサイト上で「申告価格の2%」「補償は申告価格と市場価格の低い方」と公開していることを確認）。最終値は輸出配送業者確定後に見直す。
+  4. **再出品時の価格改定（開始価格・予約価格の見直し）は任意**とする（変更してもしなくてもよい。§5.5のUI設計に反映）。
+- 影響: 為替レート関連の新規実装は不要（既存流用）。輸出証憑・契約書の保存設計（S3ライフサイクル等）は7年を前提に実装する。保険料設定はPhase 5（発送・輸出）で確定値を入れる。
+- 未対応（保留・追加調査が必要と判明）:
+  - **委託・問屋営業の法令要件確認**（行政書士・警察）、**消費税・インボイス処理**（税理士）: 問い合わせ文面を作成済み（別途送付）。回答待ち。
+  - 手数料率テーブルの実際の%はまだ未確定（横山より別途連絡予定）。
+
+## ADR-0085: eBay委託販売の事業判断（最低見込価格の扱い・保険料率・保存書類の運用・返品リスク対応で振込タイミングを見直し）
+
+- 日付: 2026-08-11
+- 状態: Accepted（設計確定。`ConsignmentAgreement`/精算処理の実装は未着手）
+- 文脈: [ADR-0084](DECISIONS.md)の未対応事項（最低見込価格の自動化、発送後返品時のリスク分担）について横山と協議した。特に返品リスクについては、eBay Managed Paymentsの入金タイミング（新規セラーは最初の90日間保留されることが多いが、実績がつくと購入者の支払いから1〜2営業日で入金され、返品期間30日が明ける前に入金される）と、競合グレサの運用（販売開始から最短1ヶ月半〜3ヶ月で精算、精算後キャンセルは差額を請求する仕組みを明記）を確認し、[ADR-0082](DECISIONS.md)決定1（振込は精算成立から5営業日以内）は返品クローバック（eBayから入金後に返品が起き当社が返金義務を負うが、既に顧客へ振込済みのため回収が必要になる）のリスクが高いと判断した。
+- 決定:
+  1. **「最低見込価格」は当社が自動算出せず、顧客自身に調べてもらう**。`ConsignmentAgreement.customerDesiredPriceUsdMinor`（顧客が希望する開始価格として入力する既存設計。§9.5）をそのまま使う。PriceCharting等サードパーティAPIの追加調査・連携は行わない。出品対象グレードの下限（足切り）も新設せず、顧客が希望価格を提示できるかどうかで実質的に選別される運用とする。
+  2. **保険料率は申告価格の2%で確定**（グレサ・Fanatics Collectと同条件。[ADR-0084](DECISIONS.md)決定3の「参考値」から確定に格上げ）。輸出配送業者・署名基準は引き続き未確定（横山が別途情報提供予定）。
+  3. **委託契約・輸出証憑（7年保存。[ADR-0084](DECISIONS.md)決定2）は月次でエクスポートできるようにし、横山が自社のGoogleドライブへ格納する運用とする**。システム側で無期限に保持し続けることを前提とせず、月次エクスポート機能（CSV/PDF等の形式は実装時に確定）を用意する。
+  4. **[ADR-0082](DECISIONS.md)決定1「精算成立から振込までの営業日数は5営業日以内」を撤回し、「配達完了から35日後」に変更**。起算点を精算成立ではなく配達完了（`EbayShipment.deliveredAt`相当）にすることで、eBayの標準返品期間（30日）を安全に超える。グレサの「最短1ヶ月半〜3ヶ月」よりは短いが、顧客体験を優先しつつ返品リスクを実務上十分カバーできる日数として35日を採用。
+  5. **精算後（振込後）に返品が発生した場合は、グレサと同様に差額を顧客へ請求する**仕組みを設ける（§13.3の要事業判断だった「返金請求可否」を「請求する」で確定）。具体的な請求フロー（既存Upchargeの流用可否等）は実装時に確定する。
+- 影響: `ConsignmentSettlement.paymentDueAt`は`EbayShipment.deliveredAt` + 35日で算出するよう設計変更（[ADR-0082](DECISIONS.md)時点の「`settledAt`+5営業日」から変更）。`ConsignmentAgreement`に出品対象グレードの下限フィールドは追加しない。輸出証憑・契約書関連のS3設計に、月次エクスポート機能を追加する（Phase 5）。返品時の差額請求ロジックはPhase 4/5の実装時に設計する。
+- 未対応: 配達完了の確定タイミング（eBay配送追跡APIのDelivered時点を正とするか、当社の梱包・発送記録と別に持つか）、月次エクスポートの具体的なファイル形式・自動化方法、差額請求フローの詳細設計は実装時に確定する。

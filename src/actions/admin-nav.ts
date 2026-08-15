@@ -40,7 +40,7 @@ export async function getAdminNavItems() {
     .map((row) => {
       const def = defsById.get(row.id);
       if (!def) return null; // コード側で廃止された項目（DBに残っていても表示しない）
-      return { id: row.id, href: def.href, icon: def.icon, label: row.label, sortOrder: row.sortOrder };
+      return { id: row.id, href: def.href, icon: def.icon, label: row.label, sortOrder: row.sortOrder, section: def.section };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null)
     .sort((a, b) => a.sortOrder - b.sortOrder);

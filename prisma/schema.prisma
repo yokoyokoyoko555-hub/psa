@@ -212,6 +212,7 @@ model Customer {
   subscriptions Subscription[]
   centeringMeasurements CenteringMeasurement[]
   inquiries     Inquiry[]
+  cardOwnerships CardOwnership[]
 
   @@map("customers")
 }
@@ -416,6 +417,15 @@ model Card {
   psaGrade             String? // PSA Grade (10, 9, 8, ...)
   psaGradedAt          DateTime?
 
+  // 個体分割（eBay出品基盤。ADR-0077）: PSAグレード登録時、quantity>=1のこの行から
+  // 現物1枚=quantity1の個体Cardを実返却枚数分だけ生成する。元行はそのまま残し履歴も維持、
+  // 個体行は分割時点からの新規履歴を持つ（元行の履歴はコピーしない）。
+  splitFromCardId      String?
+  splitFromCard        Card?     @relation("CardSplit", fields: [splitFromCardId], references: [id])
+  splitChildren        Card[]    @relation("CardSplit")
+  // 元行が個体分割済み（このタイムスタンプ以降、元行はeBay等の以降フローの対象外。再分割は不可）
+  gradingSplitCompletedAt DateTime?
+
   // カード情報
   lineNo        Int? // 申込内の入力順（1始まり）。お客様が店頭提出時にカードへ付けるライン番号と対応。ADR-0062
   groupLineNo   Int? // PSA提出グループ全体を通した連番（1始まり）。同一顧客の同名カードは1行にまとめ、
@@ -474,6 +484,9 @@ model Card {
   application        Application         @relation(fields: [applicationId], references: [id])
   psaSubmissionGroup PsaSubmissionGroup? @relation(fields: [psaSubmissionGroupId], references: [id])
   upcharges          Upcharge[]
+  ownership          CardOwnership?
+  ownershipHistory   CardOwnershipHistory[]
+  custody            CardCustody?
 
   @@map("cards")
 }
@@ -978,4 +991,136 @@ model SavedPaymentMethod {
   createdAt             DateTime @default(now())
 
   @@map("saved_payment_methods")
+}
+
+// ===== CONSIGNMENT SALES (鑑定代行＋販売代行の連携。eBay以外の複数プラットフォームを見据えた設計) =====
+// 鑑定受付側（Application/Card等）とは責務を分離し、Card.idの参照のみで連結する。ADR-0078/0079/0080
+// MVPで実装するのはeBayのみだが、将来Fanatics Collect/Goldin等を追加する前提でモデル名・列名は
+// プラットフォーム非依存にする（ADR-0080）。
+
+enum SalesPlatform {
+  EBAY
+  FANATICS_COLLECT // 将来対応。現状は選択肢として存在するのみで連携未実装
+  GOLDIN // 同上
+}
+
+// 成約価格帯ごとの手数料率マトリクス（プラットフォーム別）。既存のShippingInsuranceRateと同じ「価格帯→率」の設計。
+// MVPはUS固定運用のためregion列は持たない（将来の地域拡張時に追加検討）。
+model CommissionRateTier {
+  id                    String        @id @default(cuid())
+  platform              SalesPlatform @default(EBAY)
+  minSaleAmountUsdMinor Int // 成約価格帯の下限（USDセント）
+  maxSaleAmountUsdMinor Int? // 上限（null=上限なし）
+  commissionRate        Float // 手数料率（%）
+  sortOrder             Int           @default(0)
+  isActive              Boolean       @default(true)
+  updatedAt             DateTime      @updatedAt
+  updatedBy             String?
+
+  @@index([platform])
+  @@map("commission_rate_tiers")
+}
+
+// 委託契約の有効期限（プラットフォーム上の出品期間を兼ねる。GTC/自動更新出品を当社側でこの日数まで維持し取り下げる）。
+// 顧客が申請時にこの中から選択する。管理画面で追加・編集・削除・非表示（isActive）ができる。ADR-0081
+model ListingDurationOption {
+  id        String        @id @default(cuid())
+  platform  SalesPlatform @default(EBAY)
+  days      Int // 契約有効期限＝出品維持日数
+  label     String // 顧客向け表示名（例: 「お試し」）
+  sortOrder Int           @default(0)
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([platform])
+  @@map("listing_duration_options")
+}
+
+// 所有・保管の管理（仕様書§8.3/§9.1-9.4）。問屋型スキームのため所有権は常に顧客のまま。
+// 個体分割（registerCardGrade）時に個体Cardごと自動作成する。ADR-0078
+enum CardOwnershipStatus {
+  CUSTOMER_OWNED
+  CONSIGNED
+  SOLD_TO_BUYER
+}
+
+enum CardCustodyStatus {
+  AT_STORE
+  AT_PSA
+  IN_RETURN_TRANSIT
+  HELD_FOR_LISTING // 出品保留中（プラットフォーム非依存の名称。旧HELD_FOR_EBAY。ADR-0080）
+  PACKING
+  IN_EXPORT_TRANSIT
+  DELIVERED_TO_BUYER
+  RETURNED_TO_COMPANY
+  RETURNED_TO_CUSTOMER
+}
+
+enum CardCustodianType {
+  COMPANY
+  CUSTOMER
+}
+
+model CardOwnership {
+  id              String              @id @default(cuid())
+  cardId          String              @unique
+  ownerCustomerId String // 問屋型スキームでは常に顧客（当社が所有者になることはない）
+  status          CardOwnershipStatus @default(CUSTOMER_OWNED)
+  acquiredAt      DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  card  Card     @relation(fields: [cardId], references: [id])
+  owner Customer @relation(fields: [ownerCustomerId], references: [id])
+
+  @@map("card_ownerships")
+}
+
+model CardOwnershipHistory {
+  id             String               @id @default(cuid())
+  cardId         String
+  fromStatus     CardOwnershipStatus?
+  fromCustomerId String?
+  toStatus       CardOwnershipStatus
+  toCustomerId   String?
+  reason         String?
+  sourceType     String?
+  sourceId       String?
+  changedAt      DateTime             @default(now())
+  changedBy      String?
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("card_ownership_histories")
+}
+
+model InventoryLocation {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  locationType String?
+  isActive     Boolean  @default(true)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  custodyRecords CardCustody[]
+
+  @@map("inventory_locations")
+}
+
+model CardCustody {
+  id                  String            @id @default(cuid())
+  cardId              String            @unique
+  custodianType       CardCustodianType @default(COMPANY)
+  inventoryLocationId String?
+  shelfCode           String?
+  boxCode             String?
+  status              CardCustodyStatus @default(AT_STORE)
+  updatedAt           DateTime          @updatedAt
+
+  card              Card               @relation(fields: [cardId], references: [id])
+  inventoryLocation InventoryLocation? @relation(fields: [inventoryLocationId], references: [id])
+
+  @@map("card_custodies")
 }

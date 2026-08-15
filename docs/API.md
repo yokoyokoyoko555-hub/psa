@@ -13,7 +13,7 @@
 |--------|---------|------|--------|
 | `/api/auth/[...nextauth]` | GET/POST | — | NextAuth v5 ハンドラ（管理者ログイン） |
 | `/api/health` | GET | なし | `SELECT 1` 成功で `{status:"ok"}`、失敗で 503 |
-| `/api/s3/presign` | POST | 顧客セッション | in: `{ cardId|tempId, type:"front"|"back"|"damage", contentType }` / out: `{ uploadUrl, key }` |
+| `/api/s3/presign` | POST | 顧客セッション or 管理者/スタッフ(NextAuth) | in: `{ cardId|tempId, type:"front"|"back"|"damage", contentType }` / out: `{ uploadUrl, key }`。スタッフ利用時は`staff-temp/{userId}/{tempId}/...`にキー発行（PSAグレード登録用。[ADR-0077](DECISIONS.md)） |
 | `/api/qrcode` | GET | NextAuth | `?cardId=…` → カード識別QR（PNG） |
 | `/api/stripe/webhook` | POST | Stripe署名 | 決済イベント処理（下記） |
 | `/api/admin/service-prices` | PUT | NextAuth(ADMIN) | in: `[{ id, pricePerCard, agencyFee }]` |
@@ -83,6 +83,9 @@
 | `getAdminCustomers(params)` | ADMIN/STAFF | 顧客一覧 |
 | `cancelSubmissionBookingByAdmin(id)` | ADMIN/STAFF | 提出予約をキャンセル |
 | `upsertSubmissionCalendarDay(input)` | ADMIN/STAFF | 予約受付不可日・発送日を設定 |
+| `registerCardGrade(cardId, units[])`（card-grading.ts） | ADMIN/STAFF | PSAグレード登録＋個体分割。実返却数分の個体Card（quantity=1・psaCertNo/psaGrade/画像キー）を生成し、元行に`gradingSplitCompletedAt`を設定。[ADR-0077](DECISIONS.md) |
+| `getCommissionRateTiers()`（ebay-settings.ts） | 閲覧はADMIN/STAFF | 手数料率テーブル一覧取得 |
+| `saveCommissionRateTiers(tiers[])`（ebay-settings.ts） | ADMINのみ | 手数料率テーブルを全置換保存（`ShippingInsuranceRate`と同じdelete-all-recreate方式）。[ADR-0078](DECISIONS.md)/[ADR-0079](DECISIONS.md) |
 
 料金設定の更新は `PUT /api/admin/service-prices`（**ADMINのみ**）。
 

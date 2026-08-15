@@ -4,7 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-type NavItem = { href: string; label: string; icon: string };
+type AdminNavSection = "PSA" | "EBAY";
+type NavItem = { href: string; label: string; icon: string; section: AdminNavSection };
+
+const SECTION_TABS: { id: AdminNavSection; label: string; icon: string }[] = [
+  { id: "PSA", label: "鑑定受付", icon: "🎴" },
+  { id: "EBAY", label: "販売", icon: "🌏" },
+];
 
 export default function AdminShell({
   children,
@@ -28,14 +34,39 @@ export default function AdminShell({
     setOpen(false);
   }
 
+  // 現在のパスが属するセクション（鑑定受付/販売）をタブの見た目に反映する。ADR-0079
+  const activeSection: AdminNavSection =
+    navItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.section ?? "PSA";
+  const visibleNavItems = navItems.filter((item) => item.section === activeSection);
+
   const navigation = (
     <>
       <div className="border-b border-gray-700 p-4">
         <p className="text-xs text-gray-400">トレカビンクス</p>
         <p className="font-bold">PSA管理システム</p>
       </div>
+      <div className="grid grid-cols-2 gap-1 border-b border-gray-700 p-2" role="tablist" aria-label="鑑定受付/販売の切替">
+        {SECTION_TABS.map((tab) => {
+          const firstHref = navItems.find((item) => item.section === tab.id)?.href;
+          const active = activeSection === tab.id;
+          return (
+            <Link
+              key={tab.id}
+              href={firstHref ?? "#"}
+              role="tab"
+              aria-selected={active}
+              className={`flex min-h-10 items-center justify-center gap-1.5 rounded-lg text-xs font-bold transition ${
+                active ? "bg-brand-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
+              }`}
+            >
+              <span aria-hidden="true">{tab.icon}</span>
+              <span>{tab.label}</span>
+            </Link>
+          );
+        })}
+      </div>
       <nav className="flex-1 overflow-y-auto py-3" aria-label="管理メニュー">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link

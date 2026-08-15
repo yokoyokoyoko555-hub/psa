@@ -6,6 +6,7 @@ import { updateCardDetails, updateCardPsaLineOverride } from "@/actions/admin";
 import { formatMoneyInt } from "@/lib/currency";
 import { CARD_DISPLAY_LABELS, buildPsaLine, buildCardTitle, containsJapanese } from "@/lib/card-display";
 import CopyButton from "@/components/CopyButton";
+import CardGradingForm from "@/components/CardGradingForm";
 
 export type CardListItemData = {
   id: string;
@@ -21,6 +22,14 @@ export type CardListItemData = {
   quantity: number;
   autographRequested: boolean;
   psaLineOverride: string | null;
+  // 個体分割（eBay出品基盤。ADR-0077）
+  psaCertNo: string | null;
+  psaGrade: string | null;
+  gradingSplitCompletedAt: Date | null;
+  splitFromCardNo: string | null; // 分割元カードのcardNo（個体行のみ）
+  splitChildCount: number; // このカードから分割済みの個体数（元行のみ意味を持つ）
+  frontImageUrl: string | null;
+  backImageUrl: string | null;
 };
 
 /** 申込詳細のカード1行。表示のほか、入力ミス訂正用に識別情報（タイトル・発行年・カード名・カード番号・レアリティ・言語）をその場で編集できる。 */
@@ -41,6 +50,10 @@ export default function CardListItem({
   const [lineDraft, setLineDraft] = useState("");
   const [lineLoading, setLineLoading] = useState(false);
   const [lineError, setLineError] = useState("");
+  const [showGrading, setShowGrading] = useState(false);
+
+  // 個体分割対象になれるのは、まだ個体行でなく（splitFromCardNoが無い）、かつ未登録の元行のみ
+  const canRegisterGrade = !card.splitFromCardNo && !card.gradingSplitCompletedAt;
 
   const displayLabels = CARD_DISPLAY_LABELS[itemType] ?? CARD_DISPLAY_LABELS.TRADING_CARD;
   // 自動生成（発行年月・タイトル・出版社の英語変換）が不十分な場合は、行コピーの内容を直接上書きできる。
@@ -147,6 +160,25 @@ export default function CardListItem({
                 >
                   編集
                 </button>
+                {canRegisterGrade && !showGrading && (
+                  <button
+                    type="button"
+                    onClick={() => setShowGrading(true)}
+                    className="text-xs text-brand-600 hover:text-brand-700 border border-brand-200 bg-brand-50 rounded px-1.5 py-0.5"
+                  >
+                    グレード登録
+                  </button>
+                )}
+                {card.gradingSplitCompletedAt && (
+                  <span className="text-xs bg-green-50 text-green-700 rounded-full px-2 py-0.5">
+                    個体分割済み（{card.splitChildCount}件）
+                  </span>
+                )}
+                {card.splitFromCardNo && (
+                  <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 font-mono">
+                    分割元: {card.splitFromCardNo}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -209,6 +241,34 @@ export default function CardListItem({
                 <span>{displayLabels.secondaryLabel}: {card.language}</span>
                 <span>{card.quantity}{displayLabels.quantityUnit}</span>
               </p>
+              {(card.psaCertNo || card.psaGrade) && (
+                <p className="mt-1 text-xs text-gray-600">
+                  PSA証明書番号: <span className="font-mono">{card.psaCertNo ?? "-"}</span>　グレード:{" "}
+                  <span className="font-bold">{card.psaGrade ?? "-"}</span>
+                </p>
+              )}
+              {(card.frontImageUrl || card.backImageUrl) && (
+                <div className="mt-2 flex gap-2">
+                  {card.frontImageUrl && (
+                    <a href={card.frontImageUrl} target="_blank" rel="noreferrer">
+                      <img src={card.frontImageUrl} alt="表面" className="w-16 h-16 object-cover rounded border border-gray-200" />
+                    </a>
+                  )}
+                  {card.backImageUrl && (
+                    <a href={card.backImageUrl} target="_blank" rel="noreferrer">
+                      <img src={card.backImageUrl} alt="裏面" className="w-16 h-16 object-cover rounded border border-gray-200" />
+                    </a>
+                  )}
+                </div>
+              )}
+              {showGrading && (
+                <CardGradingForm
+                  cardId={card.id}
+                  cardNo={card.cardNo}
+                  defaultQuantity={card.quantity}
+                  onDone={() => setShowGrading(false)}
+                />
+              )}
             </>
           ) : (
             <form onSubmit={handleSubmit} className="mt-2 space-y-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
