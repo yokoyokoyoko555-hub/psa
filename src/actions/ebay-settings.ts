@@ -72,7 +72,7 @@ export async function saveCommissionRateTiers(
   return { success: true };
 }
 
-/** 委託契約の有効期限パターン一覧。閲覧はADMIN/STAFF可、変更はADMINのみ（仕様書§4.2）。ADR-0081 */
+/** 買取契約の有効期限パターン一覧。閲覧はADMIN/STAFF可、変更はADMINのみ（仕様書§4.2）。ADR-0081/0087 */
 export async function getListingDurationOptions(platform?: SalesPlatform) {
   return prisma.listingDurationOption.findMany({
     where: platform ? { platform } : undefined,

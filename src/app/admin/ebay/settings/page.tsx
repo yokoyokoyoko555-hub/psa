@@ -7,7 +7,7 @@ import ListingDurationOptionForm from "./ListingDurationOptionForm";
 const groupCls = "bg-white rounded-xl border border-gray-200 p-6";
 
 /**
- * 販売タブの設定画面。現状は手数料率テーブル・委託契約の有効期限パターンのみ、eBayのみ対応。
+ * 販売タブの設定画面。現状は手数料率テーブル・買取契約の有効期限パターンのみ、eBayのみ対応。
  * データモデルはプラットフォーム非依存（SalesPlatform）で設計しているため、
  * Fanatics Collect/Goldin等を追加する際はここにプラットフォーム切替を足すだけでよい。ADR-0080/0081
  */
@@ -30,7 +30,7 @@ export default async function AdminEbaySettingsPage() {
       </div>
 
       <div className={groupCls}>
-        <h2 className="font-bold text-gray-900 mb-4">委託契約の有効期限パターン（eBay）</h2>
+        <h2 className="font-bold text-gray-900 mb-4">買取契約の有効期限パターン（eBay）</h2>
         <ListingDurationOptionForm platform="EBAY" options={durationOptions} />
       </div>
     </div>

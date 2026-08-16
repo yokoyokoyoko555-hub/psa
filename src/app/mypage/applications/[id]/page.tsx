@@ -179,7 +179,7 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
                       href={`/mypage/ebay/cards/${card.id}`}
                       className="mt-3 inline-block text-sm text-brand-600 hover:underline"
                     >
-                      eBayで委託販売を申し込む →
+                      eBayで買取を申し込む →
                     </Link>
                   )}
                 </div>

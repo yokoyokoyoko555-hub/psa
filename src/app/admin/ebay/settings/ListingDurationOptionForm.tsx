@@ -19,7 +19,7 @@ function emptyDraft(nextSortOrder: number): Draft {
 
 const inputCls = "border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 w-full";
 
-/** 委託契約の有効期限パターン（出品維持日数）の管理画面CRUD。ADR-0081 */
+/** 買取契約の有効期限パターン（出品維持日数）の管理画面CRUD。ADR-0081/0087 */
 export default function ListingDurationOptionForm({
   platform,
   options,
@@ -81,7 +81,7 @@ export default function ListingDurationOptionForm({
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
-        委託契約の有効期限（＝出品を維持する日数）を、顧客が申請時に選べるパターンとして設定します。
+        買取契約の有効期限（＝出品を維持する日数）を、顧客が申請時に選べるパターンとして設定します。
       </p>
 
       <div className="space-y-2">
