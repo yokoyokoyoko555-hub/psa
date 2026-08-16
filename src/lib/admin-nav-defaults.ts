@@ -16,7 +16,9 @@ export const ADMIN_NAV_DEFAULTS = [
   // メールテンプレート・アカウントは「各種設定」内のセクションへ統合したため、サイドバー項目としては廃止。ADR-0070
   // 販売（eBay委託販売）タブ。Phase 2以降、画面を追加するごとにここへ section: "EBAY" で追記していく。ADR-0079
   { id: "ebay", href: "/admin/ebay", icon: "🌏", label: "販売ダッシュボード", sortOrder: 0, section: "EBAY" },
-  { id: "ebay-settings", href: "/admin/ebay/settings", icon: "💱", label: "販売設定", sortOrder: 1, section: "EBAY" },
+  { id: "ebay-agreements", href: "/admin/ebay/agreements", icon: "📝", label: "買取契約", sortOrder: 1, section: "EBAY" },
+  { id: "ebay-identity", href: "/admin/ebay/identity-verifications", icon: "🪪", label: "本人確認審査", sortOrder: 2, section: "EBAY" },
+  { id: "ebay-settings", href: "/admin/ebay/settings", icon: "💱", label: "販売設定", sortOrder: 3, section: "EBAY" },
 ] as const;
 
 export type AdminNavSection = "PSA" | "EBAY";

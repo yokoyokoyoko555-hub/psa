@@ -41,8 +41,8 @@ const saveSchema = z.object({ platform: platformEnum, tiers: z.array(tierSchema)
 /**
  * 手数料率テーブルを指定プラットフォーム分のみ全置換で保存する（既存のShippingInsuranceRateと同じ
  * delete-all-recreate方式だが、他プラットフォームの行は消さない。ADR-0080）。
- * ADMINのみ変更可（仕様書§4.2）。改定は既存の有効な委託契約に遡及適用しない方針は
- * ConsignmentAgreement実装時に契約側で率をスナップショットする形で担保する（本Actionはテーブル自体の更新のみ）。
+ * ADMINのみ変更可（仕様書§4.2）。改定は既存の有効な買取契約に遡及適用しない方針は
+ * PurchaseAgreement実装時に契約側で率をスナップショットする形で担保する（本Actionはテーブル自体の更新のみ）。
  */
 export async function saveCommissionRateTiers(
   input: z.infer<typeof saveSchema>

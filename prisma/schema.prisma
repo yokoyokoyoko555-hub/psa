@@ -196,6 +196,7 @@ model Customer {
   passwordHash        String
   stripeCustomerId    String?   @unique
   emailVerified       DateTime?
+  identityVerifiedAt  DateTime? // eBay買取の本人確認完了日時。最新のAPPROVED済みIdentityVerificationを反映。ADR-0087
   isActive            Boolean   @default(true)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -213,6 +214,9 @@ model Customer {
   centeringMeasurements CenteringMeasurement[]
   inquiries     Inquiry[]
   cardOwnerships CardOwnership[]
+  purchaseAgreements PurchaseAgreement[]
+  cardPurchases CardPurchase[]
+  identityVerifications IdentityVerification[]
 
   @@map("customers")
 }
@@ -487,6 +491,8 @@ model Card {
   ownership          CardOwnership?
   ownershipHistory   CardOwnershipHistory[]
   custody            CardCustody?
+  purchaseAgreements PurchaseAgreement[]
+  purchase           CardPurchase?
 
   @@map("cards")
 }
@@ -1033,6 +1039,8 @@ model ListingDurationOption {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
+  agreements PurchaseAgreement[]
+
   @@index([platform])
   @@map("listing_duration_options")
 }
@@ -1041,7 +1049,8 @@ model ListingDurationOption {
 // 個体分割（registerCardGrade）時に個体Cardごと自動作成する。ADR-0078
 enum CardOwnershipStatus {
   CUSTOMER_OWNED
-  CONSIGNED
+  PURCHASE_RESERVED // 条件付買取契約が成立し、eBay落札待ち（買取条件成就待ち）。ADR-0087
+  COMPANY_OWNED // eBay落札成立・買取成立により当社所有へ移転済み
   SOLD_TO_BUYER
 }
 
@@ -1123,4 +1132,150 @@ model CardCustody {
   inventoryLocation InventoryLocation? @relation(fields: [inventoryLocationId], references: [id])
 
   @@map("card_custodies")
+}
+
+// 委託販売契約（仕様書§9.5、ADR-0078/0081/0083/0085/0086）。1カードにつき有効な契約は1件のみ
+// （運用側でチェック。DBの複合unique制約は入れない＝過去契約を残す設計のため）。
+// ADR-0087で委託販売から条件付買取へ再転換。旧ConsignmentAgreementを改称・改修。
+enum PurchaseAgreementStatus {
+  DRAFT
+  UNDER_REVIEW
+  AWAITING_CUSTOMER_AGREEMENT
+  ACTIVE
+  PRICE_REVISION_PENDING
+  PURCHASE_TRIGGERED // eBay落札・支払い完了で買取条件成就（所有権移転前）
+  PURCHASE_COMPLETED // 買取成立・所有権移転済み
+  UNSOLD_AWAITING_CUSTOMER_CHOICE
+  RELISTED
+  RETURN_REQUESTED
+  EXPIRED
+  CANCELLED
+  SUSPENDED
+}
+
+enum UnsoldAction {
+  RETURN
+  RELIST
+}
+
+// 条件付買取契約（eBayオークションで落札が成立することを条件に、当社が顧客からカードを買い取る契約）。ADR-0087
+model PurchaseAgreement {
+  id                          String                  @id @default(cuid())
+  agreementNo                 String                  @unique // PUR-YYYYMMDD-####
+  cardId                      String
+  customerId                  String
+  platform                    SalesPlatform           @default(EBAY)
+  status                      PurchaseAgreementStatus @default(DRAFT)
+  customerDesiredPriceUsdMinor Int // 顧客希望開始価格（USDセント）
+  startingPriceUsdMinor       Int? // 当社承認後の確定開始価格（審査完了時に設定）
+  reservePriceUsdMinor        Int? // 予約価格（任意。null=リザーブなし）
+  listingDurationOptionId     String?
+  listingExpiresAt            DateTime? // agreedAt + ListingDurationOption.daysで確定時に算出
+  unsoldAction                UnsoldAction?
+  unsoldChoiceAt              DateTime?
+  termsVersion                String?
+  termsSnapshot                String? // 同意時点の契約本文スナップショット
+  agreedAt                    DateTime?
+  agreedIpAddress             String?
+  agreedUserAgent             String?
+  approvedBy                  String? // userId（審査したADMIN/STAFF）
+  approvedAt                  DateTime?
+  cancelledAt                 DateTime?
+  cancellationReason          String?
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
+
+  card                Card                   @relation(fields: [cardId], references: [id])
+  customer            Customer               @relation(fields: [customerId], references: [id])
+  listingDurationOption ListingDurationOption? @relation(fields: [listingDurationOptionId], references: [id])
+  purchase            CardPurchase?
+
+  @@index([cardId])
+  @@index([customerId])
+  @@index([status])
+  @@map("purchase_agreements")
+}
+
+// 買取成立の記録（eBay落札・支払い完了時に作成。Phase 4でeBay注文連携実装時に実際にトリガーする）。
+// 旧仕様書v0.1 §9.6を踏襲。ADR-0087
+model CardPurchase {
+  id                     String    @id @default(cuid())
+  purchaseNo             String    @unique // PCH-YYYYMMDD-####
+  agreementId            String    @unique
+  cardId                 String    @unique
+  customerId             String
+  ebayOrderId            String?
+  purchasePriceJpy       Int? // 落札額－手数料から算出した買取価格（円）
+  triggeredAt            DateTime? // eBay支払い完了を確認した日時
+  purchasedAt            DateTime? // 買取成立（所有権移転）日時
+  ownershipTransferredAt DateTime?
+  paymentDueAt           DateTime? // 買取代金の支払期限
+  cancelledAt            DateTime?
+  cancellationReason     String?
+  antiqueLedgerReference String? // 古物台帳の参照情報
+  createdAt              DateTime  @default(now())
+
+  agreement PurchaseAgreement @relation(fields: [agreementId], references: [id])
+  card      Card              @relation(fields: [cardId], references: [id])
+  customer  Customer          @relation(fields: [customerId], references: [id])
+  payment   PurchasePayment?
+
+  @@map("card_purchases")
+}
+
+enum PurchasePaymentStatus {
+  NOT_DUE
+  DUE
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+// 買取代金の支払い管理（銀行振込・手動運用）。旧仕様書v0.1 §9.7を踏襲。ADR-0087
+model PurchasePayment {
+  id                  String                 @id @default(cuid())
+  cardPurchaseId      String                 @unique
+  amountJpy           Int
+  status              PurchasePaymentStatus  @default(NOT_DUE)
+  bankReferenceMasked String?
+  scheduledAt         DateTime?
+  paidAt              DateTime?
+  failedAt            DateTime?
+  failureReason       String?
+  processedBy         String? // userId
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  cardPurchase CardPurchase @relation(fields: [cardPurchaseId], references: [id])
+
+  @@map("purchase_payments")
+}
+
+// 本人確認（古物営業法対応。ADR-0087）。アカウント単位・出品申請前に完了させる運用。
+// 複数回申請しうる（却下→再提出）ため履歴として持ち、Customer.identityVerifiedAtは
+// 最新のAPPROVED済みレコードの承認日時を反映する。
+enum IdentityVerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model IdentityVerification {
+  id              String                     @id @default(cuid())
+  customerId      String
+  status          IdentityVerificationStatus @default(PENDING)
+  documentType    String // 例: 運転免許証／マイナンバーカード／パスポート
+  frontImageKey   String
+  backImageKey    String?
+  submittedAt     DateTime                   @default(now())
+  reviewedBy      String? // userId（審査したADMIN/STAFF）
+  reviewedAt      DateTime?
+  rejectionReason String?
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@map("identity_verifications")
 }

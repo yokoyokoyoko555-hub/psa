@@ -8,11 +8,11 @@ import type { AdminNavSection } from "@/lib/admin-nav-defaults";
 type NavRow = { id: string; icon: string; label: string; sortOrder: number; section: AdminNavSection };
 
 const SECTION_LABELS: Record<AdminNavSection, string> = {
-  PSA: "鑑定受付",
-  EBAY: "販売（eBay）",
+  PSA: "鑑定",
+  EBAY: "出品（eBay）",
 };
 
-/** 表示順はドラッグ&ドロップで決める（数値入力欄は「0」に戻って入力しづらいため廃止）。セクション（鑑定受付/販売）ごとに分けて並び替える。ADR-0079 */
+/** 表示順はドラッグ&ドロップで決める（数値入力欄は「0」に戻って入力しづらいため廃止）。セクション（鑑定/出品）ごとに分けて並び替える。ADR-0079 */
 export default function AdminNavOrderForm({ items }: { items: NavRow[] }) {
   const router = useRouter();
   const sections: AdminNavSection[] = ["PSA", "EBAY"];

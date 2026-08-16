@@ -86,36 +86,43 @@
 - ❌ **トップページ作り込み** — 未着手。ドメイン方針確定（2026-08-11、横山判断）: 現行ドメイン`binksgrading.com`をそのまま使い、新規ドメイン取得・サブドメイン（grading./listing.）は行わない。鑑定サービス・出品（eBay委託販売）サービスは同一ドメイン内のパス分け（例: `/grading`, `/listing`等。実際のパスは未確定）で構成する
 - 🟡 **顧客画面・管理画面のスマホ対応** — モバイル対応自体は実装済み（過去コミット参照）だが、**最終確認パス（実機/主要ブレークポイントでの通し確認）がまだ**。2026-08-11にトップページ/ログインページ（375px幅）は横スクロール無しを確認済み。ログイン後の画面（マイページ・申込フォーム・管理画面）はブラウザ操作系ツールがタイムアウトし未確認のまま残っている（DOM読み取り自体は正常に動作したため、ページ自体の問題ではなく確認環境側の制約と思われる）
 
-### eBay委託販売（問屋型）・輸出機能（[EBAY_CONSIGNMENT_SALES_SPEC.md](EBAY_CONSIGNMENT_SALES_SPEC.md) / ADR-0077〜0085・[DECISIONS.md](DECISIONS.md)参照）
+### eBay条件付買取・輸出機能（[EBAY_CONSIGNMENT_SALES_SPEC.md](EBAY_CONSIGNMENT_SALES_SPEC.md)、内容は買取モデルが正 / ADR-0077〜0087・[DECISIONS.md](DECISIONS.md)参照）
 
-**実装済み**（2026-08-10〜11。型チェック/ビルド確認済み。詳しい経緯はADR-0077〜0085）
-- Phase 0調査、事業スキームを買取→委託販売（問屋型）へ転換
-- Phase 1: 個体カード分割（`registerCardGrade`）、PSAグレード登録UI、スタッフ向け画像アップロード
-- 所有権/保管モデル（`CardOwnership`/`CardCustody`/`InventoryLocation`）
-- 管理画面「鑑定受付」「販売」2タブ分割
-- 手数料率テーブル（`CommissionRateTier`）と委託契約有効期限パターン（`ListingDurationOption`）— どちらも`/admin/ebay/settings`でCRUD可、プラットフォーム非依存設計
+**実装済み**（2026-08-10〜16。詳しい経緯はADR-0077〜0087）
+- Phase 0調査、事業スキームを買取→委託販売（問屋型）→買取（本人確認事前必須）と再検討し確定（[ADR-0087](DECISIONS.md)）
+- Phase 1: 個体カード分割（`registerCardGrade`）、PSAグレード登録UI、スタッフ向け画像アップロード（型チェック/ビルド確認済み）
+- 所有権/保管モデル（`CardOwnership`/`CardCustody`/`InventoryLocation`。所有状態は`CUSTOMER_OWNED`/`PURCHASE_RESERVED`/`COMPANY_OWNED`/`SOLD_TO_BUYER`の4状態）
+- 管理画面「鑑定」「出品」2タブ分割
+- 手数料率テーブル（`CommissionRateTier`）と買取契約有効期限パターン（`ListingDurationOption`）— どちらも`/admin/ebay/settings`でCRUD可、プラットフォーム非依存設計
 - 出品形式はオークション専業（Buy It Now廃止。技術的にeBay Sell Inventory APIで対応可と確認済み）
+- **本人確認フロー**（`IdentityVerification`。[ADR-0087](DECISIONS.md)）: 顧客が`/mypage/verify-identity`で身分証表裏画像を提出→`/admin/ebay/identity-verifications`でADMIN/STAFFが承認/却下→承認で`Customer.identityVerifiedAt`更新。カード単位のトグルではなく、アカウント単位・買取申込み前必須の常時有効フロー
+- **Phase 2コア: `PurchaseAgreement`（買取契約）実装**（2026-08-16。[ADR-0087](DECISIONS.md)。旧`ConsignmentAgreement`から改称・改修）
+  - 顧客: `/mypage/applications/[id]`のカード行から「eBayで買取を申し込む」→`/mypage/ebay/cards/[cardId]`で買取可能条件チェック（本人確認未完了なら`/mypage/verify-identity`への導線を表示）・希望価格/出品期間入力・電子同意
+  - 管理: `/admin/ebay/agreements`で申請一覧・開始価格/予約価格の審査提示
+  - 契約書本文は`src/lib/purchase-terms.ts`に草案あり（**法務レビュー未了、本番の電子同意取得には未使用にすること**）
+  - **未検証**: G:ドライブ/C:\psaとも型チェック・ビルドを実施できていない（2026-08-16時点、下記参照）
 
-**事業判断はほぼ確定**（残りは下記「未確定」のみ。それ以外はADR-0081〜0085で確定済み: サービス名称・委託契約有効期限[30/60/90日選択]・オークションサイクル7日・振込手数料は顧客負担・途中解除不可・eBay送料別請求・為替レートは既存機能流用・保存年限7年・保険料率2%・最低見込価格は顧客自身が入力・返品時は差額請求・月次エクスポート機能を用意）
+**事業判断はほぼ確定**（ADR-0081〜0085で確定: サービス名称・買取契約有効期限[30/60/90日選択]・オークションサイクル7日・振込手数料は顧客負担・途中解除不可・eBay送料別請求・為替レートは既存機能流用・保存年限7年・保険料率2%・配送業者DHL・最低見込価格は顧客自身が入力）。返品時の扱いはADR-0087で買取前提に再整理（所有権が既に当社へ移転済みのため顧客への差額請求は生じない）。「未確定＝実装ブロッカー」ではないことをADR-0086で明確化し、手数料率実値未入力のままPhase 2実装に着手した
 
-**未確定（要事業判断）**
-- 手数料率テーブルの実際の%（横山より別途連絡予定）
-- 輸出配送業者・署名基準
-- 委託・問屋営業の法令要件、消費税・インボイス処理（行政書士/税理士へ問い合わせ文面送付済み、回答待ち）
-- 返品時の返送送料・為替差損・eBay手数料の詳細な負担配分
+**未確定（要事業判断、実装のブロッカーではない）**
+- 手数料率テーブルの実際の%（横山より別途連絡予定。`/admin/ebay/settings`から後で入力可）
+- 輸出配送業者はDHLで確定。署名基準等はPhase 5着手時に確定
+- 買取（古物営業法）に伴う本人確認の具体的方式、消費税・インボイス処理（行政書士/税理士へ問い合わせ文面送付済み、回答待ち。本人確認自体は必須実装として着手済み）
+- 買取価格算定時の端数処理、古物台帳の記帳方法（`CardPurchase.antiqueLedgerReference`の運用方法）
 
 **未着手（実装）**
-- Phase 1残: `db push`でのスキーマ反映確認・実データでの動作確認
-- `ConsignmentAgreement`本体（委託契約・電子同意・出品条件提示）— 上記の未確定事業判断が残っているため着手保留
-- Phase 3〜5本体（eBay出品API連携・注文/精算・発送/輸出）
+- Phase 1残・Phase 2残とも: `db push`でのスキーマ反映確認、実データでの動作確認、型チェック/ビルド確認
+- Phase 3〜5本体（eBay出品API連携・注文/買取成立処理・発送/輸出）
 - Fanatics Collect/Goldin連携（保留。一旦eBayのみで進める方針）
 
 **外部作業（横山側）**
-- eBay Developer Account/Sandbox登録（未着手。Phase 3着手前に必要）
-- eBay Managed Payments用Payoneer口座（審査中）
-- ⏸ **eBay Developer Account/Sandbox登録は横山側の作業**（Phase 3着手前に必要。Developer Program登録→Sandboxキーセット作成→テストユーザーでの動作確認→Productionキーセット作成（Marketplace Account Deletion通知対応必須）→Seller HubでBusiness Policies設定、の順）
-- ⏸ **eBayセラーアカウントのManaged Payments入金先としてPayoneer口座を登録中**（横山側の作業、2026-08-11時点）。法人名義（K.K.TURUPURUN／屋号TorecaBinks）で登録、書類提出まで完了しPayoneer側の審査（Verification）待ち。完了後eBay側の「Complete verification with Payoneer」も解消される見込み。これはeBay Developer Account/Sandbox（API連携用）とは別トラック（実販売アカウントの入金設定）
-- 📌 既知の制約: 個体分割後、申込詳細の「カード枚数」表示（`application.cards.length`）は元のグループ行＋分割後の個体行を両方カウントするため、分割済みカードがあると実際の物理枚数より多く表示される。表示精度の改善は次回対応（元行を枚数集計から除外する等）
+- eBay Developer Account/Sandbox登録（未着手。Phase 3着手前に必要。Developer Program登録→Sandboxキーセット作成→テストユーザーでの動作確認→Productionキーセット作成[Marketplace Account Deletion通知対応必須]→Seller HubでBusiness Policies設定、の順）
+- eBay Managed Payments用Payoneer口座（審査中。法人名義K.K.TURUPURUN／屋号TorecaBinksで登録、書類提出済み）
+- ドメインは新規取得せず現行`binksgrading.com`をそのまま使用し、鑑定・出品はパス分けで構成する方針（2026-08-11）
+
+**既知の制約**
+- 個体分割後、申込詳細の「カード枚数」表示（`application.cards.length`）は元のグループ行＋分割後の個体行を両方カウントするため、分割済みカードがあると実際の物理枚数より多く表示される。表示精度の改善は次回対応（元行を枚数集計から除外する等）
+- 代理入力の鑑定料請求で別カードが登録できない問題: 原因特定済み（Upchargeが既存Cardにしか使えない）。ADR-0020「段階4」の実装として対応予定、未着手
 
 ### 優先度: 低 / 技術的負債
 - 🟡 `railway.json` の `startCommand` が旧 `prisma migrate deploy && npm start` のまま（現状は `npm start` 内の `db push` で実害なし。整理推奨。§DECISIONS-0006）

@@ -8,8 +8,8 @@ type AdminNavSection = "PSA" | "EBAY";
 type NavItem = { href: string; label: string; icon: string; section: AdminNavSection };
 
 const SECTION_TABS: { id: AdminNavSection; label: string; icon: string }[] = [
-  { id: "PSA", label: "鑑定受付", icon: "🎴" },
-  { id: "EBAY", label: "販売", icon: "🌏" },
+  { id: "PSA", label: "鑑定", icon: "🎴" },
+  { id: "EBAY", label: "出品", icon: "🌏" },
 ];
 
 export default function AdminShell({
@@ -41,7 +41,7 @@ export default function AdminShell({
 
   const navigation = (
     <>
-      <div className="grid grid-cols-2 gap-1 border-b border-gray-700 p-2" role="tablist" aria-label="鑑定受付/販売の切替">
+      <div className="grid grid-cols-2 gap-1 border-b border-gray-700 p-2" role="tablist" aria-label="鑑定/出品の切替">
         {SECTION_TABS.map((tab) => {
           const firstHref = navItems.find((item) => item.section === tab.id)?.href;
           const active = activeSection === tab.id;

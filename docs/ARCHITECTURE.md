@@ -68,7 +68,7 @@ psa-system/
 │   │   │   ├── customers/[id]/ applications/[id]/
 │   │   │   ├── submission-bookings/ # 提出予約カレンダー
 │   │   │   ├── psa-groups/          # PSA提出グループ
-│   │   │   ├── ebay/                # 販売タブ（eBay委託販売。Phase 2以降で拡充。ADR-0077/0078/0079）
+│   │   │   ├── ebay/                # 出品タブ（eBay条件付買取。Phase 2以降で拡充。ADR-0077/0079/0087）
 │   │   │   └── general-settings/    # 料金/送料/保険料/サイドバー設定等（ADMINのみ）
 │   │   └── api/                     # APIルート（§5）
 │   ├── actions/             # Server Actions（mutationの主役）

@@ -6,15 +6,18 @@
 
 ---
 
-## モデル一覧（20。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)、eBay委託販売関連は[EBAY_CONSIGNMENT_SALES_SPEC.md](EBAY_CONSIGNMENT_SALES_SPEC.md)参照）
+## モデル一覧（20。他に`PricingSetting`/`ShippingInsuranceRate`等は[PRICING.md](PRICING.md)、eBay買取関連は[EBAY_CONSIGNMENT_SALES_SPEC.md](EBAY_CONSIGNMENT_SALES_SPEC.md)参照。同ファイルはファイル名と内容が一致していないが、内容は条件付買取モデルが正。[ADR-0087](DECISIONS.md)）
 
-販売代行（eBay委託販売、将来Fanatics Collect/Goldin等も見据えたプラットフォーム非依存設計。[ADR-0080](DECISIONS.md)）関連で実装済みのモデル:
+販売代行（eBay条件付買取、将来Fanatics Collect/Goldin等も見据えたプラットフォーム非依存設計。[ADR-0080](DECISIONS.md)）関連で実装済みのモデル:
 - `CommissionRateTier`（プラットフォーム[`SalesPlatform`: EBAY/FANATICS_COLLECT/GOLDIN。後2つは未連携のプレースホルダー]×成約価格帯[USDセント]→手数料率[%]のマトリクス。`ShippingInsuranceRate`と同じ「価格帯→率」設計。MVPは各プラットフォームともUS固定運用のため`region`列なし。実際に稼働しているのは`platform=EBAY`のみ。[ADR-0078](DECISIONS.md)/[ADR-0079](DECISIONS.md)/[ADR-0080](DECISIONS.md)）
-- `ListingDurationOption`（委託契約の有効期限＝出品維持日数のパターン。`platform`×`days`×`label`。管理画面で追加・編集・削除・非表示可（`CustomServicePrice`と同じCRUD）。eBay出品期間はこれと一体化（GTC出品＋当社側で期限管理）。[ADR-0081](DECISIONS.md)）
-- `CardOwnership`/`CardOwnershipHistory`（所有権状態。問屋型スキームのため`ownerCustomerId`は常に顧客、`status`は`CUSTOMER_OWNED`/`CONSIGNED`/`SOLD_TO_BUYER`。個体分割（`registerCardGrade`）時に個体Cardごと自動作成）
+- `ListingDurationOption`（買取契約の有効期限＝出品維持日数のパターン。`platform`×`days`×`label`。管理画面で追加・編集・削除・非表示可（`CustomServicePrice`と同じCRUD）。eBay出品期間はこれと一体化（GTC出品＋当社側で期限管理）。[ADR-0081](DECISIONS.md)）
+- `CardOwnership`/`CardOwnershipHistory`（所有権状態。`ownerCustomerId`は買取成立前は常に顧客、`status`は`CUSTOMER_OWNED`/`PURCHASE_RESERVED`（買取条件成就待ち）/`COMPANY_OWNED`（買取成立・当社所有）/`SOLD_TO_BUYER`。個体分割（`registerCardGrade`）時に個体Cardごと自動作成。[ADR-0087](DECISIONS.md)）
 - `CardCustody`/`InventoryLocation`（物理保管状態・保管場所。`custodianType`は`COMPANY`/`CUSTOMER`、`status`は`AT_STORE`等9種。個体分割時に`AT_STORE`で自動作成。`InventoryLocation`はレコードのみ用意、CRUD画面は未実装）
+- `IdentityVerification`（古物営業法対応の本人確認。カード単位ではなくアカウント単位で、買取申込みより前に完了させる必須フロー。顧客が身分証表裏画像を提出→ADMIN/STAFFが審査、で承認時に`Customer.identityVerifiedAt`を更新。トグルではなく常時必須。[ADR-0087](DECISIONS.md)）
+- `PurchaseAgreement`（買取契約。旧`ConsignmentAgreement`を改称・改修。カードごとに顧客が申請（本人確認完了が前提）→ADMIN/STAFFが開始価格・予約価格を審査提示→顧客が電子同意、で`status`が`UNDER_REVIEW`→`AWAITING_CUSTOMER_AGREEMENT`→`ACTIVE`と遷移する。同意成立時に`CardOwnership.status`を`PURCHASE_RESERVED`へ変更。契約書本文は`src/lib/purchase-terms.ts`に草案があるが**法務レビュー未了**。[ADR-0087](DECISIONS.md)）
+- `CardPurchase`/`PurchasePayment`（買取条件成就（eBay落札・支払完了）時に作成する買取実績・買取代金支払い。旧`ConsignmentSettlement`/`SettlementPayment`に相当。`antiqueLedgerReference`で古物台帳との接続を用意。[ADR-0087](DECISIONS.md)）
 
-`ConsignmentAgreement`等の契約・精算系モデルは未実装（要事業判断が確定してから着手）。
+eBay出品/注文系モデル（`EbayListing`等）は未実装（Phase 3〜4）。
 
 | モデル / テーブル | 役割 | 主なカラム・ポイント |
 |------------------|------|---------------------|
@@ -73,6 +76,8 @@ SubmissionCalendarDay … 提出予約カレンダーの日付設定（独立）
 | 申込番号 | `APP-YYYYMMDD-####` | APP-20260618-0001 |
 | カード番号 | `CARD-YYYYMMDD-####` | CARD-20260618-0001 |
 | PSA提出グループ | `PSG-YYYYMMDD-###` | PSG-20260618-001 |
+| 買取契約番号 | `PUR-YYYYMMDD-####` | PUR-20260816-0001 |
+| 買取番号 | `PCH-YYYYMMDD-####` | PCH-20260816-0001 |
 
 その日の同prefix件数+1で連番（日次リセット）。
 

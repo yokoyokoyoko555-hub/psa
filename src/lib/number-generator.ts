@@ -5,7 +5,7 @@ import { format } from "date-fns";
 // $transaction内のループで呼ぶ場合、グローバルprismaは同一トランザクション内の
 // 未コミットの作成分が見えず、count()が同じ値を返して採番が重複する。
 // トランザクションの`tx`を渡せるよう、db引数（既定=グローバルprisma）を受け取る。
-type Db = Pick<PrismaClient, "application" | "card" | "customer" | "psaSubmissionGroup">;
+type Db = Pick<PrismaClient, "application" | "card" | "customer" | "psaSubmissionGroup" | "purchaseAgreement" | "cardPurchase">;
 
 // 種別で接頭辞を変える: 自己入力(CUSTOMER)=APP- / 代理入力(STORE)=DAI-。接頭辞ごとに独立採番。
 export async function generateApplicationNo(
@@ -42,4 +42,24 @@ export async function generateGroupNo(db: Db = prisma): Promise<string> {
     where: { groupNo: { startsWith: prefix } },
   });
   return `${prefix}${String(count + 1).padStart(3, "0")}`;
+}
+
+/** 条件付買取契約番号（ADR-0087）。PUR-YYYYMMDD-#### */
+export async function generateAgreementNo(db: Db = prisma): Promise<string> {
+  const today = format(new Date(), "yyyyMMdd");
+  const prefix = `PUR-${today}-`;
+  const count = await db.purchaseAgreement.count({
+    where: { agreementNo: { startsWith: prefix } },
+  });
+  return `${prefix}${String(count + 1).padStart(4, "0")}`;
+}
+
+/** 買取番号（ADR-0087）。PCH-YYYYMMDD-#### */
+export async function generatePurchaseNo(db: Db = prisma): Promise<string> {
+  const today = format(new Date(), "yyyyMMdd");
+  const prefix = `PCH-${today}-`;
+  const count = await db.cardPurchase.count({
+    where: { purchaseNo: { startsWith: prefix } },
+  });
+  return `${prefix}${String(count + 1).padStart(4, "0")}`;
 }

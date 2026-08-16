@@ -12,12 +12,15 @@ export default function AdminEbayDashboardPage() {
       <h1 className="text-xl font-bold text-gray-900">販売（eBay委託販売）</h1>
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
         <p className="text-sm text-gray-600">
-          委託販売契約・出品・注文精算・発送の管理画面はPhase 2以降に順次実装します。実装状況は{" "}
+          出品・注文精算・発送の管理画面はPhase 3以降に順次実装します。実装状況は{" "}
           <span className="font-mono text-xs bg-gray-50 rounded px-1.5 py-0.5">docs/EBAY_CONSIGNMENT_SALES_SPEC.md</span>{" "}
           を参照してください。
         </p>
-        <Link href="/admin/ebay/settings" className="inline-block text-sm text-brand-600 hover:underline">
-          手数料率テーブルを設定する →
+        <Link href="/admin/ebay/agreements" className="block text-sm text-brand-600 hover:underline">
+          委託契約の申請を確認する →
+        </Link>
+        <Link href="/admin/ebay/settings" className="block text-sm text-brand-600 hover:underline">
+          手数料率テーブル・委託期間パターンを設定する →
         </Link>
       </div>
     </div>

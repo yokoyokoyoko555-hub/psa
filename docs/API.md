@@ -67,6 +67,15 @@
 #### `deletePaymentMethod(methodId)`（payment.ts）
 - 認証: 顧客セッション（本人のカードのみ）。Stripe detach → DB削除
 
+#### 本人確認（`identity-verification.ts`）。仕様書§5.2/§15、[ADR-0087](DECISIONS.md)
+- `getMyIdentityVerificationStatus()`: 本人確認の現在状態（`identityVerifiedAt`と最新申請）を返す
+- `submitIdentityVerification({documentType, frontImageKey, backImageKey?})`: 本人確認申請。審査中の申請が既にある場合はエラー
+
+#### eBay買取（`purchase.ts`）。仕様書§5.3、[ADR-0087](DECISIONS.md)
+- `getPurchaseEligibility(cardId)`: 買取可能条件（仕様書§6）の判定結果を返す。本人確認未了の場合は理由に含める
+- `requestPurchase({cardId, customerDesiredPriceUsdMinor, listingDurationOptionId})`: 買取申請（`status=UNDER_REVIEW`で作成）。本人確認未完了だとエラー
+- `agreePurchaseAgreement(agreementId)`: 電子同意。`status=ACTIVE`へ遷移し`CardOwnership.status`を`PURCHASE_RESERVED`に変更
+
 ### 管理者向け（`src/actions/admin.ts`）
 
 認可ヘルパ: `requireAdmin`(ログイン必須) / `requireAdminOrStaff`(role∈{ADMIN,STAFF})。
@@ -84,8 +93,14 @@
 | `cancelSubmissionBookingByAdmin(id)` | ADMIN/STAFF | 提出予約をキャンセル |
 | `upsertSubmissionCalendarDay(input)` | ADMIN/STAFF | 予約受付不可日・発送日を設定 |
 | `registerCardGrade(cardId, units[])`（card-grading.ts） | ADMIN/STAFF | PSAグレード登録＋個体分割。実返却数分の個体Card（quantity=1・psaCertNo/psaGrade/画像キー）を生成し、元行に`gradingSplitCompletedAt`を設定。[ADR-0077](DECISIONS.md) |
-| `getCommissionRateTiers()`（ebay-settings.ts） | 閲覧はADMIN/STAFF | 手数料率テーブル一覧取得 |
-| `saveCommissionRateTiers(tiers[])`（ebay-settings.ts） | ADMINのみ | 手数料率テーブルを全置換保存（`ShippingInsuranceRate`と同じdelete-all-recreate方式）。[ADR-0078](DECISIONS.md)/[ADR-0079](DECISIONS.md) |
+| `getCommissionRateTiers(platform?)`（ebay-settings.ts） | 閲覧はADMIN/STAFF | 手数料率テーブル一覧取得 |
+| `saveCommissionRateTiers({platform,tiers[]})`（ebay-settings.ts） | ADMINのみ | 指定プラットフォームの手数料率テーブルを全置換保存（`ShippingInsuranceRate`と同じdelete-all-recreate方式）。[ADR-0078](DECISIONS.md)/[ADR-0080](DECISIONS.md) |
+| `getListingDurationOptions(platform?)`（ebay-settings.ts） | 閲覧はADMIN/STAFF | 買取契約の有効期限パターン一覧取得 |
+| `saveListingDurationOption(input)`/`deleteListingDurationOption(id)`（ebay-settings.ts） | ADMINのみ | 有効期限パターンの追加・編集・削除。[ADR-0081](DECISIONS.md) |
+| `getPendingIdentityVerifications()`（identity-verification.ts） | ADMIN/STAFF | 審査待ちの本人確認一覧取得 |
+| `reviewIdentityVerification({verificationId,approve,rejectionReason?})`（identity-verification.ts） | ADMIN/STAFF | 本人確認を承認/却下。承認時に`Customer.identityVerifiedAt`を更新。[ADR-0087](DECISIONS.md) |
+| `getAllPurchaseAgreements()`（purchase.ts） | ADMIN/STAFF | 買取契約の一覧取得 |
+| `reviewPurchaseAgreement({agreementId,startingPriceUsdMinor,reservePriceUsdMinor})`（purchase.ts） | ADMIN/STAFF | 開始価格・予約価格を確定し`status=AWAITING_CUSTOMER_AGREEMENT`へ。[ADR-0087](DECISIONS.md) |
 
 料金設定の更新は `PUT /api/admin/service-prices`（**ADMINのみ**）。
 
